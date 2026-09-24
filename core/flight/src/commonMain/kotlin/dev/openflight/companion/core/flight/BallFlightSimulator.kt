@@ -1,0 +1,275 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+package dev.openflight.companion.core.flight
+
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.sin
+
+/**
+ * RK4 ball-flight integrator, ported from `ios/OpenFlight/DrivingRange/BallFlightSimulator.swift`.
+ * Every physical constant below is copied verbatim from the reference.
+ */
+class BallFlightSimulator(
+    private val configuration: Configuration = Configuration.standard,
+) {
+    /**
+     * Tunable physics knobs, ported from `BallFlightSimulator.Configuration`. [standard] mirrors
+     * OpenFlight air; [vacuum] strips out drag and lift, used as an independent closed-form
+     * oracle in tests.
+     */
+    data class Configuration(
+        val timeStep: Double = DEFAULT_TIME_STEP,
+        val outputFramesPerSecond: Double = DEFAULT_OUTPUT_FRAMES_PER_SECOND,
+        val gravity: Double = DEFAULT_GRAVITY,
+        val airDensity: Double = DEFAULT_AIR_DENSITY,
+        val dragCoefficient: Double = DEFAULT_DRAG_COEFFICIENT,
+        val liftSlope: Double = DEFAULT_LIFT_SLOPE,
+        val maximumLiftCoefficient: Double = DEFAULT_MAXIMUM_LIFT_COEFFICIENT,
+        val constrainToTargetCarry: Boolean = true,
+    ) {
+        companion object {
+            private const val DEFAULT_TIME_STEP = 1.0 / 120.0
+            private const val DEFAULT_OUTPUT_FRAMES_PER_SECOND = 60.0
+            private const val DEFAULT_GRAVITY = 9.80665
+            private const val DEFAULT_AIR_DENSITY = 1.204
+            private const val DEFAULT_DRAG_COEFFICIENT = 0.24
+            private const val DEFAULT_LIFT_SLOPE = 0.60
+            private const val DEFAULT_MAXIMUM_LIFT_COEFFICIENT = 0.34
+
+            val standard = Configuration()
+
+            val vacuum =
+                Configuration(
+                    airDensity = 0.0,
+                    dragCoefficient = 0.0,
+                    liftSlope = 0.0,
+                    maximumLiftCoefficient = 0.0,
+                    constrainToTargetCarry = false,
+                )
+        }
+    }
+
+    private data class State(
+        val position: Vec3,
+        val velocity: Vec3,
+    )
+
+    private data class Derivative(
+        val position: Vec3,
+        val velocity: Vec3,
+    )
+
+    fun simulate(input: FlightInput): FlightTrajectory {
+        val vertical = input.launchAngleDegrees * DEGREES_TO_RADIANS
+        val horizontal = input.horizontalLaunchDegrees * DEGREES_TO_RADIANS
+        val horizontalSpeed = input.ballSpeedMetersPerSecond * cos(vertical)
+        var state =
+            State(
+                position = Vec3.ZERO,
+                velocity =
+                    Vec3(
+                        horizontalSpeed * sin(horizontal),
+                        input.ballSpeedMetersPerSecond * sin(vertical),
+                        horizontalSpeed * cos(horizontal),
+                    ),
+            )
+
+        var time = 0.0
+        val integrated =
+            mutableListOf(
+                FlightPoint(time = 0.0, positionMeters = state.position, velocityMetersPerSecond = state.velocity),
+            )
+
+        while (time < MAXIMUM_FLIGHT_TIME_SECONDS) {
+            val previous = state
+            val previousTime = time
+            state = rk4(state, input, configuration.timeStep)
+            time += configuration.timeStep
+
+            if (state.position.y <= 0 && time > configuration.timeStep * LANDING_GUARD_STEP_COUNT) {
+                val denominator = previous.position.y - state.position.y
+                val fraction = if (denominator > 0) previous.position.y / denominator else 1.0
+                val landingTime = previousTime + configuration.timeStep * fraction
+                val landingPosition = previous.position + (state.position - previous.position) * fraction
+                val landingVelocity = previous.velocity + (state.velocity - previous.velocity) * fraction
+                integrated.add(
+                    FlightPoint(
+                        time = landingTime,
+                        positionMeters = Vec3(landingPosition.x, 0.0, landingPosition.z),
+                        velocityMetersPerSecond = landingVelocity,
+                    ),
+                )
+                break
+            }
+
+            integrated.add(
+                FlightPoint(time = time, positionMeters = state.position, velocityMetersPerSecond = state.velocity),
+            )
+        }
+
+        val constrained = constrain(integrated, input.targetCarryMeters)
+        val compact = resample(constrained)
+        return FlightTrajectory(eventId = input.eventId, points = compact, provenance = input.provenance)
+    }
+
+    private fun acceleration(
+        state: State,
+        input: FlightInput,
+    ): Vec3 {
+        val relativeVelocity = state.velocity - input.windMetersPerSecond
+        val speed = relativeVelocity.length()
+        if (speed <= MINIMUM_SPEED_FOR_AERODYNAMICS) {
+            return Vec3(0.0, -configuration.gravity, 0.0)
+        }
+
+        val area = PI * BALL_RADIUS_METERS * BALL_RADIUS_METERS
+        val aerodynamicScale = AERODYNAMIC_SCALE_FACTOR * configuration.airDensity * area / BALL_MASS_KILOGRAMS
+        val drag = relativeVelocity * (-aerodynamicScale * configuration.dragCoefficient * speed)
+
+        val spinRadiansPerSecond = input.spinRpm * RPM_TO_RADIANS_PER_SECOND
+        val spinAxis = input.spinAxisDegrees * DEGREES_TO_RADIANS
+        val angularVelocity =
+            Vec3(
+                -cos(spinAxis) * spinRadiansPerSecond,
+                sin(spinAxis) * spinRadiansPerSecond,
+                0.0,
+            )
+        val spinParameter = spinRadiansPerSecond * BALL_RADIUS_METERS / speed
+        val liftCoefficient =
+            (configuration.liftSlope * spinParameter).coerceIn(0.0, configuration.maximumLiftCoefficient)
+        val liftDirectionVector = angularVelocity cross relativeVelocity
+        val liftDirectionLength = liftDirectionVector.length()
+        val lift =
+            if (liftDirectionLength > MINIMUM_LIFT_DIRECTION_LENGTH) {
+                liftDirectionVector * (aerodynamicScale * liftCoefficient * speed * speed / liftDirectionLength)
+            } else {
+                Vec3.ZERO
+            }
+
+        return drag + lift + Vec3(0.0, -configuration.gravity, 0.0)
+    }
+
+    private fun rk4(
+        state: State,
+        input: FlightInput,
+        step: Double,
+    ): State {
+        val first = derivative(state, input)
+        val second = derivative(offset(state, first, step / RK4_HALF_STEP_DIVISOR), input)
+        val third = derivative(offset(state, second, step / RK4_HALF_STEP_DIVISOR), input)
+        val fourth = derivative(offset(state, third, step), input)
+
+        return State(
+            position =
+                state.position +
+                    (
+                        first.position + second.position * RK4_MIDDLE_WEIGHT +
+                            third.position * RK4_MIDDLE_WEIGHT + fourth.position
+                    ) * (step / RK4_WEIGHT_DIVISOR),
+            velocity =
+                state.velocity +
+                    (
+                        first.velocity + second.velocity * RK4_MIDDLE_WEIGHT +
+                            third.velocity * RK4_MIDDLE_WEIGHT + fourth.velocity
+                    ) * (step / RK4_WEIGHT_DIVISOR),
+        )
+    }
+
+    private fun derivative(
+        state: State,
+        input: FlightInput,
+    ): Derivative = Derivative(position = state.velocity, velocity = acceleration(state, input))
+
+    private fun offset(
+        state: State,
+        derivative: Derivative,
+        scale: Double,
+    ): State =
+        State(
+            position = state.position + derivative.position * scale,
+            velocity = state.velocity + derivative.velocity * scale,
+        )
+
+    private fun constrain(
+        points: List<FlightPoint>,
+        targetCarry: Double,
+    ): List<FlightPoint> {
+        val rawCarry = points.lastOrNull()?.positionMeters?.z ?: return points
+        return if (canConstrainCarry(rawCarry, targetCarry)) {
+            val scaleFactor = targetCarry / rawCarry
+            points.map { point -> scalePoint(point, scaleFactor) }
+        } else {
+            points
+        }
+    }
+
+    private fun canConstrainCarry(
+        rawCarry: Double,
+        targetCarry: Double,
+    ): Boolean = configuration.constrainToTargetCarry && rawCarry > MINIMUM_CARRY_FOR_SCALING_METERS && targetCarry > 0
+
+    private fun scalePoint(
+        point: FlightPoint,
+        factor: Double,
+    ): FlightPoint =
+        FlightPoint(
+            time = point.time,
+            positionMeters =
+                Vec3(point.positionMeters.x * factor, point.positionMeters.y, point.positionMeters.z * factor),
+            velocityMetersPerSecond =
+                Vec3(
+                    point.velocityMetersPerSecond.x * factor,
+                    point.velocityMetersPerSecond.y,
+                    point.velocityMetersPerSecond.z * factor,
+                ),
+        )
+
+    private fun resample(points: List<FlightPoint>): List<FlightPoint> {
+        val last = points.lastOrNull()
+        if (last == null || points.size <= 1 || configuration.outputFramesPerSecond <= 0) {
+            return points
+        }
+        val interval = 1.0 / configuration.outputFramesPerSecond
+        val result = mutableListOf<FlightPoint>()
+        var sourceIndex = 0
+        var time = 0.0
+
+        while (time < last.time) {
+            while (sourceIndex + 1 < points.size && points[sourceIndex + 1].time < time) {
+                sourceIndex += 1
+            }
+            val start = points[sourceIndex]
+            val end = points[minOf(sourceIndex + 1, points.size - 1)]
+            val span = end.time - start.time
+            val progress = if (span > 0) (time - start.time) / span else 0.0
+            result.add(
+                FlightPoint(
+                    time = time,
+                    positionMeters = start.positionMeters + (end.positionMeters - start.positionMeters) * progress,
+                    velocityMetersPerSecond =
+                        start.velocityMetersPerSecond +
+                            (end.velocityMetersPerSecond - start.velocityMetersPerSecond) * progress,
+                ),
+            )
+            time += interval
+        }
+        result.add(last)
+        return result
+    }
+
+    private companion object {
+        const val BALL_MASS_KILOGRAMS = 0.04593
+        const val BALL_RADIUS_METERS = 0.02135
+        const val MAXIMUM_FLIGHT_TIME_SECONDS = 20.0
+        const val DEGREES_TO_RADIANS = PI / 180.0
+        const val RPM_TO_RADIANS_PER_SECOND = 2.0 * PI / 60.0
+        const val AERODYNAMIC_SCALE_FACTOR = 0.5
+        const val MINIMUM_SPEED_FOR_AERODYNAMICS = 0.01
+        const val MINIMUM_LIFT_DIRECTION_LENGTH = 0.0001
+        const val MINIMUM_CARRY_FOR_SCALING_METERS = 0.5
+        const val LANDING_GUARD_STEP_COUNT = 2
+        const val RK4_HALF_STEP_DIVISOR = 2.0
+        const val RK4_MIDDLE_WEIGHT = 2.0
+        const val RK4_WEIGHT_DIVISOR = 6.0
+    }
+}
