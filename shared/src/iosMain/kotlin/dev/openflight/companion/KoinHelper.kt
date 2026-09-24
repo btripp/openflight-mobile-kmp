@@ -2,9 +2,12 @@
 package dev.openflight.companion
 
 import dev.openflight.companion.feature.calibration.CalibrationViewModel
+import dev.openflight.companion.feature.camera.CameraViewModel
 import dev.openflight.companion.feature.dashboard.DashboardViewModel
 import dev.openflight.companion.feature.range.DrivingRangeViewModel
 import dev.openflight.companion.feature.session.SessionViewModel
+import dev.openflight.companion.feature.settings.SettingsViewModel
+import dev.openflight.companion.feature.training.TrainingViewModel
 import kotlinx.coroutines.runBlocking
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.get
@@ -44,4 +47,10 @@ class KoinHelper : KoinComponent {
 
     /** The debug [LaunchOptions] applied at launch (defaults in release builds). */
     fun launchOptions(): LaunchOptions = getKoin().launchOptions()
+
+    fun trainingViewModel(): TrainingViewModel = get()
+
+    fun cameraViewModel(): CameraViewModel = get()
+
+    fun settingsViewModel(): SettingsViewModel = get()
 }

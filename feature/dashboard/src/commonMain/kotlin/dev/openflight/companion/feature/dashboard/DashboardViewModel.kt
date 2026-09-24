@@ -3,12 +3,16 @@ package dev.openflight.companion.feature.dashboard
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import dev.openflight.companion.core.data.PiSessionRepository
 import dev.openflight.companion.core.data.SettingsRepository
 import dev.openflight.companion.core.data.ShotRepository
 import dev.openflight.companion.core.data.TransportType
+import dev.openflight.companion.core.insights.ShotEnrichment
 import dev.openflight.companion.core.insights.computeClubChips
 import dev.openflight.companion.core.insights.computeClubStats
 import dev.openflight.companion.core.model.GolfClub
+import dev.openflight.companion.core.model.ShotEvent
+import dev.openflight.companion.core.model.pi.ShotDetail
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
@@ -25,7 +29,8 @@ import kotlinx.coroutines.launch
 
 /**
  * The dashboard's state holder (ContentView.swift). It reads [ShotRepository] and
- * [SettingsRepository] and exposes one [DashboardUiState]; the only local state is the unsubmitted
+ * [SettingsRepository], plus [PiSessionRepository]'s shot details to enrich shots on Wi-Fi (plan
+ * R6b), and exposes one [DashboardUiState]; the only local state is the unsubmitted
  * host text and the in-flight club request.
  *
  * Starting and stopping the transport is the app shell's job (foreground/background), not this
@@ -34,6 +39,7 @@ import kotlinx.coroutines.launch
 class DashboardViewModel(
     private val shots: ShotRepository,
     private val settings: SettingsRepository,
+    private val piSession: PiSessionRepository,
 ) : ViewModel() {
     /** The host field's text while the user edits it; `null` shows the saved host. */
     private val hostDraft = MutableStateFlow<String?>(null)
@@ -55,7 +61,7 @@ class DashboardViewModel(
         }
 
     val uiState: StateFlow<DashboardUiState> =
-        combine(panel, shots.history, settings.units) { connection, history, units ->
+        combine(panel, shots.history, settings.units, piSession.shotDetails) { connection, history, units, details ->
             val stats = computeClubStats(history)
             val chips = computeClubChips(history)
             val latest = history.firstOrNull()
@@ -69,6 +75,7 @@ class DashboardViewModel(
                     units = units,
                     clubStats = stats,
                     clubChips = chips,
+                    enrichments = enrichments(history, details),
                 )
             }
         }.stateIn(
@@ -156,6 +163,19 @@ class DashboardViewModel(
                     failure.message ?: CLUB_CHANGE_FAILED
                 }
             clubRequest.value = ClubRequest(inFlight = false, error = error)
+        }
+    }
+
+    /** Joins the history to the Pi's session rows on the timestamp (plan R6a/R6b: the only shared key). */
+    private fun enrichments(
+        history: List<ShotEvent>,
+        details: Map<String, ShotDetail>,
+    ): Map<String, ShotEnrichment> {
+        if (details.isEmpty()) return emptyMap()
+        return buildMap {
+            for (shot in history) {
+                details[shot.timestamp]?.let { put(shot.eventId, ShotEnrichment.from(it)) }
+            }
         }
     }
 

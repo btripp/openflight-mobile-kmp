@@ -16,5 +16,8 @@ kotlin {
             api(libs.koin.core)
             implementation(libs.koin.core.viewmodel)
         }
+        commonTest.dependencies {
+            implementation(projects.core.testing)
+        }
     }
 }

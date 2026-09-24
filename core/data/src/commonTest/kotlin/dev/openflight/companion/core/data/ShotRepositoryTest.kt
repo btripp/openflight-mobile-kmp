@@ -5,6 +5,7 @@ import app.cash.turbine.test
 import assertk.assertFailure
 import assertk.assertThat
 import assertk.assertions.containsExactly
+import assertk.assertions.hasSize
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
@@ -13,11 +14,16 @@ import assertk.assertions.isTrue
 import dev.openflight.companion.core.model.ClubSelection
 import dev.openflight.companion.core.model.ConnectionState
 import dev.openflight.companion.core.model.GolfClub
+import dev.openflight.companion.core.model.ShotEvent
+import dev.openflight.companion.core.model.pi.PiLinkState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
 import kotlin.test.Test
 import kotlin.test.assertFailsWith
 
@@ -33,6 +39,14 @@ class ShotRepositoryTest {
         val ble = FakeShotTransport("ble", events)
         val wifiTransports = mutableListOf<Pair<String, FakeShotTransport>>()
         val logs = mutableListOf<String>()
+        val sockets = mutableListOf<FakePiSocket>()
+        val piSession =
+            DefaultPiSessionRepository(
+                settings = settings,
+                socketFactory = { socketHost, _ -> FakePiSocket(socketHost).also { sockets += it } },
+                cameraSource = { emptyFlow() },
+                scope = scope,
+            )
         val repository =
             DefaultShotRepository(
                 settings = settings,
@@ -42,10 +56,18 @@ class ShotRepositoryTest {
                 },
                 scope = scope,
                 piControl = fakePiControlClient(),
+                piSession = piSession,
                 log = { logs += it },
             )
 
         val wifi: FakeShotTransport get() = wifiTransports.last().second
+
+        /** The Pi's Socket.IO link, connected, with the automatic on-connect requests forgotten. */
+        fun piConnected(): FakePiSocket =
+            sockets.last().apply {
+                serverAcks()
+                emitted.clear()
+            }
     }
 
     private fun runRepositoryTest(
@@ -473,4 +495,115 @@ class ShotRepositoryTest {
         }
 
     // endregion
+
+    // region Pi session integration (plan R6b)
+
+    @Test
+    fun startAndStopDriveThePiSessionOnWifiWithTheSameHost() =
+        runRepositoryTest(transport = TransportType.WIFI, host = "pi.local:8091") { h ->
+            assertThat(h.sockets.map { it.host }).containsExactly("pi.local:8091")
+            h.piConnected()
+            assertThat(h.piSession.linkState.value).isEqualTo(PiLinkState.Connected)
+
+            h.repository.stop()
+
+            assertThat(h.sockets.single().disconnectCount).isEqualTo(1)
+            assertThat(h.piSession.linkState.value).isEqualTo(PiLinkState.Idle)
+
+            h.repository.start()
+
+            assertThat(h.sockets).hasSize(2)
+        }
+
+    @Test
+    fun onBluetoothThePiSessionStaysWifiOnlyWithoutASocket() =
+        runRepositoryTest { h ->
+            assertThat(h.sockets).isEmpty()
+            assertThat(h.piSession.linkState.value).isEqualTo(PiLinkState.WifiOnly)
+        }
+
+    @Test
+    fun whileThePiIsConnectedDeleteShotAlsoDeletesItOnThePiByTimestamp() =
+        runRepositoryTest(transport = TransportType.WIFI) { h ->
+            val socket = h.piConnected()
+            h.wifi.shots.emit(timedShot(1, "2026-09-24T15:38:33.264795"))
+            h.wifi.shots.emit(timedShot(2, "2026-09-24T15:39:00.000001"))
+
+            h.repository.deleteShot(shotId(1))
+
+            assertThat(
+                h.repository.history.value
+                    .map { it.eventId },
+            ).containsExactly(shotId(2))
+            assertThat(socket.emitted).containsExactly(
+                "delete_shot" to buildJsonObject { put("timestamp", JsonPrimitive("2026-09-24T15:38:33.264795")) },
+            )
+        }
+
+    @Test
+    fun deleteShotByTimestampDeletesOnThePiAndTheMatchingLocalShot() =
+        runRepositoryTest(transport = TransportType.WIFI) { h ->
+            val socket = h.piConnected()
+            h.wifi.shots.emit(timedShot(1, "2026-09-24T15:38:33.264795"))
+            h.wifi.shots.emit(timedShot(2, "2026-09-24T15:39:00.000001"))
+
+            h.repository.deleteShotByTimestamp("2026-09-24T15:39:00.000001")
+            h.repository.deleteShotByTimestamp("2026-09-24T10:00:00") // Only on the Pi: no local shot has it.
+
+            assertThat(
+                h.repository.history.value
+                    .map { it.eventId },
+            ).containsExactly(shotId(1))
+            assertThat(socket.emittedNames).containsExactly("delete_shot", "delete_shot")
+        }
+
+    @Test
+    fun whileThePiIsConnectedClearHistoryAlsoClearsThePiSession() =
+        runRepositoryTest(transport = TransportType.WIFI) { h ->
+            val socket = h.piConnected()
+            h.wifi.shots.emit(shot(1))
+
+            h.repository.clearHistory()
+
+            assertThat(h.repository.history.value).isEmpty()
+            assertThat(socket.emittedNames).containsExactly("clear_session")
+        }
+
+    @Test
+    fun whileThePiIsNotConnectedDeleteAndClearAreLocalOnly() =
+        runRepositoryTest(transport = TransportType.WIFI) { h ->
+            val socket = h.sockets.single() // Connecting, never acknowledged.
+            h.wifi.shots.emit(shot(1))
+            h.wifi.shots.emit(shot(2))
+
+            h.repository.deleteShot(shotId(1))
+            h.repository.deleteShotByTimestamp("2026-09-24T10:00:00")
+            h.repository.clearHistory()
+
+            assertThat(h.repository.history.value).isEmpty()
+            assertThat(socket.emitted).isEmpty()
+            assertThat(h.logs).isEmpty()
+        }
+
+    @Test
+    fun onBluetoothDeleteAndClearAreLocalOnly() =
+        runRepositoryTest { h ->
+            h.ble.shots.emit(shot(1))
+            h.ble.shots.emit(shot(2))
+
+            h.repository.deleteShot(shotId(2))
+
+            assertThat(
+                h.repository.history.value
+                    .map { it.eventId },
+            ).containsExactly(shotId(1))
+            assertThat(h.sockets).isEmpty()
+        }
+
+    // endregion
 }
+
+private fun timedShot(
+    number: Int,
+    timestamp: String,
+): ShotEvent = shot(number).copy(timestamp = timestamp)

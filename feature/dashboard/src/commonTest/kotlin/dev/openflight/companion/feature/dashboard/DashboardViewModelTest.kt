@@ -5,6 +5,7 @@ import app.cash.turbine.ReceiveTurbine
 import app.cash.turbine.test
 import assertk.assertThat
 import assertk.assertions.containsExactly
+import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isInstanceOf
@@ -12,10 +13,15 @@ import assertk.assertions.isNull
 import assertk.assertions.isTrue
 import dev.openflight.companion.core.data.TransportType
 import dev.openflight.companion.core.insights.ClubChip
+import dev.openflight.companion.core.insights.ConfidenceLevel
+import dev.openflight.companion.core.insights.SpinSource
 import dev.openflight.companion.core.insights.UnitSystem
 import dev.openflight.companion.core.model.ClubSelection
 import dev.openflight.companion.core.model.ConnectionState
 import dev.openflight.companion.core.model.GolfClub
+import dev.openflight.companion.core.model.pi.PiLinkState
+import dev.openflight.companion.core.model.pi.ShotDetail
+import dev.openflight.companion.core.testing.FakePiSessionRepository
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -32,12 +38,13 @@ import kotlin.test.Test
 class DashboardViewModelTest {
     private val settings = FakeSettingsRepository(transport = TransportType.WIFI, host = "pi.local:8080")
     private val shots = FakeShotRepository(settings)
+    private val piSession = FakePiSessionRepository()
     private lateinit var viewModel: DashboardViewModel
 
     @BeforeTest
     fun setUp() {
         Dispatchers.setMain(UnconfinedTestDispatcher())
-        viewModel = DashboardViewModel(shots, settings)
+        viewModel = DashboardViewModel(shots, settings, piSession)
     }
 
     @AfterTest
@@ -243,7 +250,7 @@ class DashboardViewModelTest {
             val preSeededSettings = FakeSettingsRepository()
             val preSeededShots = FakeShotRepository(preSeededSettings)
             preSeededShots.history.value = listOf(shot(1))
-            val freshViewModel = DashboardViewModel(preSeededShots, preSeededSettings)
+            val freshViewModel = DashboardViewModel(preSeededShots, preSeededSettings, FakePiSessionRepository())
 
             freshViewModel.effects.test {
                 expectNoEvents()
@@ -263,6 +270,78 @@ class DashboardViewModelTest {
                 expectNoEvents()
             }
         }
+
+    // region Pi enrichment (plan R6b)
+
+    @Test
+    fun shotsTheSessionKnowsAreEnrichedByTimestamp() =
+        runTest {
+            val latest = shot(2).copy(timestamp = "2026-09-24T15:38:33.264795")
+            val previous = shot(1).copy(timestamp = "2026-09-24T15:30:00.000001")
+            piSession.setSession(
+                listOf(
+                    ShotDetail(
+                        timestamp = latest.timestamp,
+                        launchAngleVertical = 15.4,
+                        launchAngleConfidence = 0.72,
+                        spinRpm = 2836.0,
+                        spinQuality = "medium",
+                        spinSource = "calculated",
+                        carryRange = listOf(231.0, 255.0),
+                        carrySpinAdjusted = 248.0,
+                        playerName = "Ann",
+                    ),
+                ),
+            )
+
+            viewModel.uiState.testIgnoringRest {
+                shots.history.value = listOf(latest, previous)
+                val state = awaitUntil { it is DashboardUiState.Live } as DashboardUiState.Live
+
+                val enrichment = state.latestEnrichment!!
+                assertThat(enrichment.launchAngleConfidence).isEqualTo(ConfidenceLevel.HIGH)
+                assertThat(enrichment.launchAngleConfidence?.filledDots).isEqualTo(3)
+                assertThat(enrichment.spinQuality).isEqualTo(ConfidenceLevel.MEDIUM)
+                assertThat(enrichment.spinSource).isEqualTo(SpinSource.ESTIMATED)
+                assertThat(enrichment.carryRangeText(UnitSystem.IMPERIAL)).isEqualTo("231-255 yds")
+                assertThat(enrichment.carrySpinAdjustedYards).isEqualTo(248.0)
+                assertThat(enrichment.playerName).isEqualTo("Ann")
+                // The Pi never reported the previous shot: no detail for that row.
+                assertThat(state.enrichmentFor(previous)).isNull()
+            }
+        }
+
+    @Test
+    fun detailArrivingLaterEnrichesTheShotAlreadyShown() =
+        runTest {
+            val latest = shot(1).copy(timestamp = "2026-09-24T15:38:33.264795")
+            viewModel.uiState.testIgnoringRest {
+                shots.history.value = listOf(latest)
+                awaitUntil { it is DashboardUiState.Live && it.latestEnrichment == null }
+
+                piSession.setSession(listOf(ShotDetail(timestamp = latest.timestamp, playerName = "Ann")))
+
+                val state = awaitUntil { (it as? DashboardUiState.Live)?.latestEnrichment != null }
+                assertThat((state as DashboardUiState.Live).latestEnrichment?.playerName).isEqualTo("Ann")
+            }
+        }
+
+    @Test
+    fun withoutPiDetailTheShotsHaveNoEnrichment() =
+        runTest {
+            val bluetooth = FakePiSessionRepository(PiLinkState.WifiOnly)
+            val bleViewModel = DashboardViewModel(shots, settings, bluetooth)
+
+            bleViewModel.uiState.testIgnoringRest {
+                shots.history.value = listOf(shot(2), shot(1))
+                val state = awaitUntil { it is DashboardUiState.Live } as DashboardUiState.Live
+
+                assertThat(state.enrichments).isEmpty()
+                assertThat(state.latestEnrichment).isNull()
+            }
+        }
+
+    // endregion
 
     /** Like `test`, but tolerates the extra intermediate states `combine` may emit after the assertions. */
     private suspend fun <T> Flow<T>.testIgnoringRest(block: suspend ReceiveTurbine<T>.() -> Unit) =

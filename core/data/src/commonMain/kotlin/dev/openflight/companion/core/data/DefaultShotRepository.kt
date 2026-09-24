@@ -8,6 +8,7 @@ import dev.openflight.companion.core.model.GolfClub
 import dev.openflight.companion.core.model.PhoneOrientationMeasurement
 import dev.openflight.companion.core.model.ShotEvent
 import dev.openflight.companion.core.model.ShotHistory
+import dev.openflight.companion.core.model.pi.PiLinkState
 import dev.openflight.companion.core.network.PiControlClient
 import dev.openflight.companion.core.protocol.ShotTransport
 import kotlinx.coroutines.CancellationException
@@ -51,6 +52,10 @@ internal fun interface WifiTransportFactory {
  *   failure is logged and leaves the connection state alone.
  * - Control calls are serialized, because the BLE transport rejects a second in-flight command
  *   with `busy` and the sync-on-connect must not race a user's club change.
+ *
+ * Plan R6b: [start]/[stop] also start and stop [piSession] (it follows the same settings and is
+ * active only on Wi-Fi, on the same host), and [deleteShot]/[deleteShotByTimestamp]/[clearHistory]
+ * also go to the Pi's session, by timestamp, while its link is connected.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 @Suppress("TooManyFunctions") // The ShotRepository surface (9) plus the session helpers.
@@ -60,6 +65,7 @@ internal class DefaultShotRepository(
     private val wifiTransportFactory: WifiTransportFactory,
     private val scope: CoroutineScope,
     private val piControl: PiControlClient,
+    private val piSession: PiSessionRepository? = null,
     private val log: (String) -> Unit = {},
 ) : ShotRepository {
     private val mutableConnectionState = MutableStateFlow<ConnectionState>(ConnectionState.Idle)
@@ -93,11 +99,13 @@ internal class DefaultShotRepository(
                     .flatMapLatest(::session)
                     .collect()
             }
+        piSession?.start()
     }
 
     override fun stop() {
         sessionJob?.cancel()
         sessionJob = null
+        piSession?.stop()
     }
 
     override fun retry() {
@@ -127,15 +135,49 @@ internal class DefaultShotRepository(
     }
 
     override fun deleteShot(eventId: String) {
-        shotHistory = shotHistory.copy(shots = shotHistory.shots.filterNot { it.eventId == eventId })
-        mutableHistory.value = shotHistory.shots
-        mutableLatestShot.value = shotHistory.latestShot
+        val timestamp = shotHistory.shots.firstOrNull { it.eventId == eventId }?.timestamp ?: return
+        removeLocally { it.eventId == eventId }
+        onConnectedPi("delete_shot") { deleteShot(timestamp) }
+    }
+
+    override fun deleteShotByTimestamp(timestamp: String) {
+        removeLocally { it.timestamp == timestamp }
+        onConnectedPi("delete_shot") { deleteShot(timestamp) }
     }
 
     override fun clearHistory() {
         shotHistory = ShotHistory(maximumCount = shotHistory.maximumCount)
         mutableHistory.value = shotHistory.shots
         mutableLatestShot.value = shotHistory.latestShot
+        onConnectedPi("clear_session") { clearSession() }
+    }
+
+    private fun removeLocally(predicate: (ShotEvent) -> Boolean) {
+        shotHistory = shotHistory.copy(shots = shotHistory.shots.filterNot(predicate))
+        mutableHistory.value = shotHistory.shots
+        mutableLatestShot.value = shotHistory.latestShot
+    }
+
+    /**
+     * Runs [command] on [piSession] only while its link is connected; a failure (e.g. the link
+     * dropping in between) is logged, and the Pi reports a missing shot through its notices.
+     */
+    @Suppress("TooGenericExceptionCaught") // The local change already happened; a Pi failure is only logged.
+    private fun onConnectedPi(
+        name: String,
+        command: suspend PiSessionRepository.() -> Unit,
+    ) {
+        val pi = piSession ?: return
+        if (pi.linkState.value != PiLinkState.Connected) return
+        scope.launch {
+            try {
+                pi.command()
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (error: Exception) {
+                log("Pi $name failed: ${error.message ?: error}")
+            }
+        }
     }
 
     override suspend fun shutdownPi() {

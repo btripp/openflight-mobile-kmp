@@ -15,5 +15,5 @@ import org.koin.dsl.module
  */
 val sessionModule: Module =
     module {
-        viewModel { SessionViewModel(shots = get(), settings = get()) }
+        viewModel { SessionViewModel(shots = get(), settings = get(), piSession = get()) }
     }
