@@ -14,6 +14,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 
@@ -22,6 +26,11 @@ import androidx.compose.ui.unit.dp
  * reference dashboard's status row. Feature code passes a plain [label] string (for
  * example `ConnectionState.description`) and the [tone] it maps to, so this
  * component has no dependency on `core:model`.
+ *
+ * The dot and the two text lines merge into one TalkBack/VoiceOver stop (`mergeDescendants`),
+ * and [androidx.compose.ui.semantics.liveRegion] makes a screen reader announce the state on
+ * its own whenever [label]/[detail] change (for example idle → scanning → connected), instead
+ * of requiring the user to move focus back to the chip to hear the update.
  */
 @Composable
 fun OfStatusChip(
@@ -31,7 +40,15 @@ fun OfStatusChip(
     detail: String? = null,
 ) {
     val color = tone.color()
-    Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
+    Row(
+        modifier =
+            modifier
+                .semantics(mergeDescendants = true) {
+                    contentDescription = if (detail != null) "$label, $detail" else label
+                    liveRegion = LiveRegionMode.Polite
+                },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         Box(
             modifier =
                 Modifier
