@@ -27,6 +27,7 @@ protocol SharedViewModel: Lifecycle_viewmodelViewModel {
 }
 
 extension DashboardViewModel: SharedViewModel {}
+extension CalibrationViewModel: SharedViewModel {}
 
 /// Owns one shared Kotlin ViewModel for one SwiftUI screen, the way an Android
 /// `ViewModelStoreOwner` does:

@@ -24,8 +24,7 @@ struct AppRoot: View {
             DashboardView()
                 .navigationDestination(for: AppRoute.self) { route in
                     switch route {
-                    // R3a replaces only the next line with its CalibrationView.
-                    case .calibration: PlaceholderScreen(title: "Calibrate TI Radar", identifier: "calibration.placeholder")
+                    case .calibration: CalibrationView()
                     // R3b replaces only the next line with its DrivingRangeView (launchOptions.previewFlight).
                     case .range: PlaceholderScreen(title: "Driving Range", identifier: "range.placeholder")
                     }
