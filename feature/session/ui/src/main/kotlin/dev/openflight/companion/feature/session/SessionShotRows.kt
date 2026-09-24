@@ -1,0 +1,156 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+package dev.openflight.companion.feature.session
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
+import dev.openflight.companion.core.designsystem.OfColorTokens
+import dev.openflight.companion.core.designsystem.OfSpacing
+import dev.openflight.companion.core.designsystem.OfSwipeToDelete
+import dev.openflight.companion.core.designsystem.OfText
+import dev.openflight.companion.core.designsystem.OfTextRole
+import dev.openflight.companion.core.designsystem.OfTheme
+import dev.openflight.companion.core.insights.ClubChip
+import dev.openflight.companion.core.insights.UnitSystem
+import dev.openflight.companion.core.insights.convertDistanceFromYards
+import dev.openflight.companion.core.insights.distanceUnitLabel
+import dev.openflight.companion.core.insights.speedUnitLabel
+import dev.openflight.companion.core.model.GolfClub
+import dev.openflight.companion.core.model.ShotMetricFormatter
+import dev.openflight.companion.core.model.pi.PiFeatureAvailability
+
+private const val CLOCK_LENGTH = 8
+
+/** One `ShotList.tsx` row, deleted by an end-to-start swipe (or TalkBack's "Delete" action). */
+@Composable
+internal fun SessionShotRowItem(
+    shot: SessionShotRow,
+    units: UnitSystem,
+    onDelete: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    OfSwipeToDelete(onDelete = onDelete, modifier = modifier.testTag(SessionTestTags.shot(shot.id))) {
+        Row(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .background(OfColorTokens.BgCard, RoundedCornerShape(12.dp))
+                    .padding(horizontal = OfSpacing.Lg, vertical = OfSpacing.Md),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(OfSpacing.Md),
+        ) {
+            OfText(text = "#${shot.shotNumber}", role = OfTextRole.Label, color = OfColorTokens.Gold)
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                OfText(text = shot.implementLabel ?: clubLabel(shot.club), role = OfTextRole.TitleSmall, maxLines = 1)
+                OfText(
+                    text = listOfNotNull(clockTime(shot.timestamp), shot.playerName).joinToString(" · "),
+                    role = OfTextRole.BodySmall,
+                    color = OfColorTokens.CreamDim,
+                    maxLines = 1,
+                )
+            }
+            if (shot.isSwingSpeed) {
+                RowMetric(shot.swingSpeedMph?.let { speedValue(it, units) } ?: ShotMetricFormatter.MISSING, "SWING")
+            } else {
+                RowMetric(
+                    shot.ballSpeedMph?.let {
+                        speedValue(it, units)
+                    } ?: ShotMetricFormatter.MISSING,
+                    speedUnitLabel(units).uppercase(),
+                )
+                RowMetric(
+                    ShotMetricFormatter.number(shot.carryYards?.let { convertDistanceFromYards(it, units) }, 0),
+                    distanceUnitLabel(units).uppercase(),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun RowMetric(
+    value: String,
+    unit: String,
+) {
+    Column(modifier = Modifier.widthIn(min = 56.dp), horizontalAlignment = Alignment.End) {
+        OfText(text = value, role = OfTextRole.TitleSmall, maxLines = 1)
+        OfText(text = unit, role = OfTextRole.Label, color = OfColorTokens.CreamDim)
+    }
+}
+
+/** `"2026-07-29T19:42:10.123456"` → `"19:42:10"`; `null` when it isn't an ISO timestamp. */
+internal fun clockTime(timestamp: String): String? =
+    timestamp.substringAfter('T', missingDelimiterValue = "").take(CLOCK_LENGTH).ifEmpty { null }
+
+/** A wire club value's display name ("7-iron" → "7-Iron"), or the raw value for an unknown club. */
+internal fun clubLabel(wire: String): String = GolfClub.fromWireValue(wire)?.displayName ?: wire.ifEmpty { "Unknown" }
+
+internal val previewRows =
+    listOf(
+        previewRow("B0D91F0A-7950-4D7E-9DD5-AF9777C190E2", 2, "7-iron", 118.2, 165.0),
+        previewRow("B0D91F0A-7950-4D7E-9DD5-AF9777C190E1", 1, "driver", 151.4, 264.0),
+    )
+
+internal fun previewRow(
+    id: String,
+    number: Int,
+    club: String,
+    ballSpeed: Double,
+    carry: Double,
+): SessionShotRow =
+    SessionShotRow(
+        id = id,
+        shotNumber = number,
+        timestamp = "2026-07-29T19:42:1$number.000000",
+        club = club,
+        playerName = null,
+        ballSpeedMph = ballSpeed,
+        clubSpeedMph = null,
+        launchAngleVerticalDeg = 12.0,
+        spinRpm = 2400.0,
+        carryYards = carry,
+        isSwingSpeed = false,
+        swingSpeedMph = null,
+        readingCount = null,
+        triggerSpeedMph = null,
+        durationMs = null,
+        implementLabel = null,
+        enrichment = null,
+    )
+
+@Preview
+@Composable
+private fun SessionScreenPreview() {
+    OfTheme {
+        SessionScreen(
+            uiState =
+                SessionUiState(
+                    source = SessionSource.PI,
+                    allCount = 2,
+                    clubChips = listOf(ClubChip("driver", 1), ClubChip("7-iron", 1)),
+                    shots = previewRows,
+                    showSimulateShot = true,
+                    simulateAvailability = PiFeatureAvailability.Available,
+                ),
+            onEvent = {},
+            onBack = {},
+        )
+    }
+}
+
+@Preview
+@Composable
+private fun SessionEmptyPreview() {
+    OfTheme { SessionScreen(uiState = SessionUiState(), onEvent = {}, onBack = {}) }
+}
