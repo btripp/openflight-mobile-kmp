@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 package dev.openflight.companion.core.data
 
+import dev.openflight.companion.core.insights.UnitSystem
 import dev.openflight.companion.core.model.GolfClub
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 
 /** Which transport the app streams shots over. Mirrors the reference's `ShotTransport` enum. */
 enum class TransportType(
@@ -31,6 +33,13 @@ interface SettingsRepository {
 
     val selectedClub: Flow<GolfClub>
 
+    /**
+     * The user's unit preference (plan R5a), defaulting to [UnitSystem.IMPERIAL] like the web UI's
+     * `useUnitPreferenceStore`. A default getter keeps every existing [SettingsRepository]
+     * implementation (fakes in other feature modules) source-compatible without overriding it.
+     */
+    val units: Flow<UnitSystem> get() = flowOf(DEFAULT_UNITS)
+
     suspend fun setTransport(transport: TransportType)
 
     /** Call on submit, not per keystroke: every distinct value builds a new Wi-Fi transport. */
@@ -38,9 +47,13 @@ interface SettingsRepository {
 
     suspend fun setSelectedClub(club: GolfClub)
 
+    /** Default no-op so existing implementations don't need to override it (see [units]). */
+    suspend fun setUnits(units: UnitSystem) {}
+
     companion object {
         val DEFAULT_TRANSPORT: TransportType = TransportType.BLUETOOTH
         const val DEFAULT_HOST: String = "raspberrypi.local:8080"
         val DEFAULT_CLUB: GolfClub = GolfClub.DRIVER
+        val DEFAULT_UNITS: UnitSystem = UnitSystem.IMPERIAL
     }
 }

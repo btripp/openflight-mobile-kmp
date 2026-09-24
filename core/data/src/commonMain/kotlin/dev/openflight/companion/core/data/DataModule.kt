@@ -2,6 +2,7 @@
 package dev.openflight.companion.core.data
 
 import dev.openflight.companion.core.ble.BleShotTransport
+import dev.openflight.companion.core.network.PiControlClient
 import dev.openflight.companion.core.network.WifiShotTransport
 import dev.openflight.companion.core.network.openFlightHttpClient
 import io.ktor.client.HttpClient
@@ -34,6 +35,7 @@ val dataModule: Module =
             val httpClient = get<HttpClient>()
             WifiTransportFactory { host -> WifiShotTransport(host = host, httpClient = httpClient) }
         }
+        single { PiControlClient(httpClient = get()) }
         single<SettingsRepository> { DataStoreSettingsRepository(dataStore = get()) }
         single<ShotRepository> {
             DefaultShotRepository(
@@ -41,6 +43,7 @@ val dataModule: Module =
                 bluetoothTransport = get<BleShotTransport>(),
                 wifiTransportFactory = get(),
                 scope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
+                piControl = get(),
             )
         }
     }

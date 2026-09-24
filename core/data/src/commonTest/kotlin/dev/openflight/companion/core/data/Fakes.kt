@@ -1,13 +1,23 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 package dev.openflight.companion.core.data
 
+import dev.openflight.companion.core.insights.UnitSystem
 import dev.openflight.companion.core.model.CalibrationResult
 import dev.openflight.companion.core.model.ClubSelection
 import dev.openflight.companion.core.model.ConnectionState
 import dev.openflight.companion.core.model.GolfClub
 import dev.openflight.companion.core.model.PhoneOrientationMeasurement
 import dev.openflight.companion.core.model.ShotEvent
+import dev.openflight.companion.core.network.PiControlClient
 import dev.openflight.companion.core.protocol.ShotTransport
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.mock.MockEngine
+import io.ktor.client.engine.mock.respond
+import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpStatusCode
+import io.ktor.http.headersOf
+import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -72,10 +82,12 @@ internal class FakeSettingsRepository(
     transport: TransportType = SettingsRepository.DEFAULT_TRANSPORT,
     host: String = SettingsRepository.DEFAULT_HOST,
     club: GolfClub = SettingsRepository.DEFAULT_CLUB,
+    units: UnitSystem = SettingsRepository.DEFAULT_UNITS,
 ) : SettingsRepository {
     val transportState = MutableStateFlow(transport)
     val hostState = MutableStateFlow(host)
     val clubState = MutableStateFlow(club)
+    val unitsState = MutableStateFlow(units)
 
     /** Every club written, in order, so tests can assert "persisted exactly once". */
     val clubWrites = mutableListOf<GolfClub>()
@@ -83,6 +95,7 @@ internal class FakeSettingsRepository(
     override val transport: Flow<TransportType> = transportState
     override val host: Flow<String> = hostState
     override val selectedClub: Flow<GolfClub> = clubState
+    override val units: Flow<UnitSystem> = unitsState
 
     override suspend fun setTransport(transport: TransportType) {
         transportState.value = transport
@@ -96,6 +109,27 @@ internal class FakeSettingsRepository(
         clubWrites += club
         clubState.value = club
     }
+
+    override suspend fun setUnits(units: UnitSystem) {
+        unitsState.value = units
+    }
+}
+
+/** A [PiControlClient] whose `shutdown` always answers the given [status] (default: success). */
+internal fun fakePiControlClient(status: String = "shutting_down"): PiControlClient {
+    val engine =
+        MockEngine {
+            respond(
+                content = """{"status":"$status"}""",
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json"),
+            )
+        }
+    val client =
+        HttpClient(engine) {
+            install(ContentNegotiation) { json() }
+        }
+    return PiControlClient(client)
 }
 
 /** A valid UUID event id that encodes [number], so assertions stay readable. */

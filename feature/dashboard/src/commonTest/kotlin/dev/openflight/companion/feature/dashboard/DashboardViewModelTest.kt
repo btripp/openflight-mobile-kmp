@@ -11,6 +11,8 @@ import assertk.assertions.isInstanceOf
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
 import dev.openflight.companion.core.data.TransportType
+import dev.openflight.companion.core.insights.ClubChip
+import dev.openflight.companion.core.insights.UnitSystem
 import dev.openflight.companion.core.model.ClubSelection
 import dev.openflight.companion.core.model.ConnectionState
 import dev.openflight.companion.core.model.GolfClub
@@ -198,6 +200,67 @@ class DashboardViewModelTest {
                 settings.selectedClub.value = GolfClub.PITCHING_WEDGE
                 assertThat(awaitUntil { it.connection.club == GolfClub.PITCHING_WEDGE }.connection.club)
                     .isEqualTo(GolfClub.PITCHING_WEDGE)
+            }
+        }
+
+    @Test
+    fun theUiStateCarriesTheSavedUnitPreference() =
+        runTest {
+            settings.units.value = UnitSystem.METRIC
+            viewModel.uiState.testIgnoringRest {
+                assertThat(awaitUntil { it.units == UnitSystem.METRIC }.units).isEqualTo(UnitSystem.METRIC)
+            }
+        }
+
+    @Test
+    fun clubStatsAndChipsAreComputedOverTheFullHistory() =
+        runTest {
+            viewModel.uiState.testIgnoringRest {
+                shots.history.value = listOf(shot(1, club = "7-iron"), shot(2, club = "driver"))
+                val state = awaitUntil { it.clubStats.shotCount == 2 }
+                assertThat(state.clubStats.shotCount).isEqualTo(2)
+                assertThat(state.clubChips).containsExactly(ClubChip("7-iron", 1), ClubChip("driver", 1))
+            }
+        }
+
+    @Test
+    fun aFreshShotFiresTheNewShotEffect() =
+        runTest {
+            viewModel.effects.test {
+                shots.history.value = listOf(shot(1))
+                assertThat(awaitItem()).isEqualTo(DashboardEffect.NewShot)
+
+                shots.history.value = listOf(shot(2), shot(1))
+                assertThat(awaitItem()).isEqualTo(DashboardEffect.NewShot)
+
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
+    fun historyAlreadyPresentWhenTheViewModelStartsDoesNotFireTheEffect() =
+        runTest {
+            val preSeededSettings = FakeSettingsRepository()
+            val preSeededShots = FakeShotRepository(preSeededSettings)
+            preSeededShots.history.value = listOf(shot(1))
+            val freshViewModel = DashboardViewModel(preSeededShots, preSeededSettings)
+
+            freshViewModel.effects.test {
+                expectNoEvents()
+            }
+        }
+
+    @Test
+    fun aReplayedShotDoesNotFireTheEffectBecauseHistoryDoesNotChange() =
+        runTest {
+            viewModel.effects.test {
+                shots.history.value = listOf(shot(1))
+                assertThat(awaitItem()).isEqualTo(DashboardEffect.NewShot)
+
+                // The repository's eventId-deduplicated history is unchanged by a replay (plan §0.3):
+                // setting it to an equal list emits no new StateFlow value, so no second effect fires.
+                shots.history.value = listOf(shot(1))
+                expectNoEvents()
             }
         }
 

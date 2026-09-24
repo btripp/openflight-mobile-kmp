@@ -8,6 +8,7 @@ import dev.openflight.companion.core.model.GolfClub
 import dev.openflight.companion.core.model.PhoneOrientationMeasurement
 import dev.openflight.companion.core.model.ShotEvent
 import dev.openflight.companion.core.model.ShotHistory
+import dev.openflight.companion.core.network.PiControlClient
 import dev.openflight.companion.core.protocol.ShotTransport
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -22,6 +23,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
@@ -57,6 +59,7 @@ internal class DefaultShotRepository(
     private val bluetoothTransport: ShotTransport,
     private val wifiTransportFactory: WifiTransportFactory,
     private val scope: CoroutineScope,
+    private val piControl: PiControlClient,
     private val log: (String) -> Unit = {},
 ) : ShotRepository {
     private val mutableConnectionState = MutableStateFlow<ConnectionState>(ConnectionState.Idle)
@@ -74,6 +77,9 @@ internal class DefaultShotRepository(
     // Only the current session's shot collector writes this, and sessions never overlap.
     private var shotHistory = ShotHistory()
     private val activeTransport = MutableStateFlow<ShotTransport?>(null)
+
+    /** The active transport's kind, so [shutdownPi] can refuse to run over Bluetooth. */
+    private val activeTransportType = MutableStateFlow<TransportType?>(null)
     private val controlMutex = Mutex()
     private var sessionJob: Job? = null
 
@@ -120,6 +126,24 @@ internal class DefaultShotRepository(
         return controlMutex.withLock { transport.submitCalibration(measurement) }
     }
 
+    override fun deleteShot(eventId: String) {
+        shotHistory = shotHistory.copy(shots = shotHistory.shots.filterNot { it.eventId == eventId })
+        mutableHistory.value = shotHistory.shots
+        mutableLatestShot.value = shotHistory.latestShot
+    }
+
+    override fun clearHistory() {
+        shotHistory = ShotHistory(maximumCount = shotHistory.maximumCount)
+        mutableHistory.value = shotHistory.shots
+        mutableLatestShot.value = shotHistory.latestShot
+    }
+
+    override suspend fun shutdownPi() {
+        if (activeTransportType.value != TransportType.WIFI) throw PiShutdownUnsupportedException()
+        val host = settings.host.first()
+        piControl.shutdown(host)
+    }
+
     /** One transport's lifetime: mirror its flows until cancelled, then disconnect it. */
     private fun session(key: TransportKey): Flow<Nothing> =
         flow {
@@ -129,6 +153,7 @@ internal class DefaultShotRepository(
                     TransportType.WIFI -> wifiTransportFactory.create(key.host.orEmpty())
                 }
             activeTransport.value = transport
+            activeTransportType.value = key.type
             try {
                 coroutineScope {
                     // Subscribe before start() so no shot or state change is missed.
@@ -151,6 +176,7 @@ internal class DefaultShotRepository(
             } finally {
                 transport.disconnect()
                 activeTransport.value = null
+                activeTransportType.value = null
                 mutableConnectionState.value = ConnectionState.Idle
                 mutableSupportsControls.value = false
                 mutableActiveClub.value = null

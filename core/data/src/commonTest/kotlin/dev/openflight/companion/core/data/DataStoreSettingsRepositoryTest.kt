@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import assertk.assertThat
 import assertk.assertions.isEqualTo
+import dev.openflight.companion.core.insights.UnitSystem
 import dev.openflight.companion.core.model.GolfClub
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -42,6 +43,7 @@ class DataStoreSettingsRepositoryTest {
             assertThat(settings.transport.first()).isEqualTo(TransportType.BLUETOOTH)
             assertThat(settings.host.first()).isEqualTo("raspberrypi.local:8080")
             assertThat(settings.selectedClub.first()).isEqualTo(GolfClub.DRIVER)
+            assertThat(settings.units.first()).isEqualTo(UnitSystem.IMPERIAL)
         }
 
     @Test
@@ -52,10 +54,12 @@ class DataStoreSettingsRepositoryTest {
             settings.setTransport(TransportType.WIFI)
             settings.setHost("192.168.1.20:8080")
             settings.setSelectedClub(GolfClub.PITCHING_WEDGE)
+            settings.setUnits(UnitSystem.METRIC)
 
             assertThat(settings.transport.first()).isEqualTo(TransportType.WIFI)
             assertThat(settings.host.first()).isEqualTo("192.168.1.20:8080")
             assertThat(settings.selectedClub.first()).isEqualTo(GolfClub.PITCHING_WEDGE)
+            assertThat(settings.units.first()).isEqualTo(UnitSystem.METRIC)
         }
 
     @Test
@@ -66,10 +70,12 @@ class DataStoreSettingsRepositoryTest {
 
             settings.setTransport(TransportType.WIFI)
             settings.setSelectedClub(GolfClub.IRON_7)
+            settings.setUnits(UnitSystem.METRIC)
 
             val stored = dataStore.data.first()
             assertThat(stored[stringPreferencesKey("shotTransport")]).isEqualTo("wifi")
             assertThat(stored[stringPreferencesKey("selectedClub")]).isEqualTo("7-iron")
+            assertThat(stored[stringPreferencesKey("unitSystem")]).isEqualTo("metric")
         }
 
     @Test
@@ -79,10 +85,12 @@ class DataStoreSettingsRepositoryTest {
             dataStore.edit {
                 it[stringPreferencesKey("shotTransport")] = "carrier-pigeon"
                 it[stringPreferencesKey("selectedClub")] = "putter"
+                it[stringPreferencesKey("unitSystem")] = "furlongs-per-fortnight"
             }
             val settings = DataStoreSettingsRepository(dataStore)
 
             assertThat(settings.transport.first()).isEqualTo(TransportType.BLUETOOTH)
             assertThat(settings.selectedClub.first()).isEqualTo(GolfClub.DRIVER)
+            assertThat(settings.units.first()).isEqualTo(UnitSystem.IMPERIAL)
         }
 }
