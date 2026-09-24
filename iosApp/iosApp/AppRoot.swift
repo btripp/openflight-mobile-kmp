@@ -27,7 +27,7 @@ struct AppRoot: View {
                     // R3a replaces only the next line with its CalibrationView.
                     case .calibration: PlaceholderScreen(title: "Calibrate TI Radar", identifier: "calibration.placeholder")
                     // R3b replaces only the next line with its DrivingRangeView (launchOptions.previewFlight).
-                    case .range: PlaceholderScreen(title: "Driving Range", identifier: "range.placeholder")
+                    case .range: DrivingRangeView(autoplay: launchOptions.previewFlight)
                     }
                 }
         }

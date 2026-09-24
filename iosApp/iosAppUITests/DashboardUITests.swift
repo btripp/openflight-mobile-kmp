@@ -64,8 +64,9 @@ final class DashboardUITests: XCTestCase {
         let range = app.buttons["dashboard.range"]
         XCTAssertTrue(range.waitForExistence(timeout: 5))
         range.tap()
-        XCTAssertTrue(app.navigationBars.buttons.firstMatch.waitForExistence(timeout: 5))
-        app.navigationBars.buttons.firstMatch.tap()
+        // The range is full screen (no navigation bar), like the reference; Exit goes back.
+        XCTAssertTrue(app.buttons["range.exit"].waitForExistence(timeout: 5))
+        app.buttons["range.exit"].tap()
         XCTAssertTrue(range.waitForExistence(timeout: 5))
     }
 

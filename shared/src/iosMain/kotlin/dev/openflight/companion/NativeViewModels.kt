@@ -6,6 +6,8 @@ import com.rickclephas.kmp.nativecoroutines.NativeCoroutinesState
 import dev.openflight.companion.feature.dashboard.DashboardEffect
 import dev.openflight.companion.feature.dashboard.DashboardUiState
 import dev.openflight.companion.feature.dashboard.DashboardViewModel
+import dev.openflight.companion.feature.range.DrivingRangeUiState
+import dev.openflight.companion.feature.range.DrivingRangeViewModel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 
@@ -29,3 +31,8 @@ val DashboardViewModel.state: StateFlow<DashboardUiState>
 @NativeCoroutines
 val DashboardViewModel.sideEffects: Flow<DashboardEffect>
     get() = effects
+
+/** The range has no one-shot effects: its flight, replay and dwell are all in the state. */
+@NativeCoroutinesState
+val DrivingRangeViewModel.state: StateFlow<DrivingRangeUiState>
+    get() = uiState
