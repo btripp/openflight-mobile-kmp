@@ -1045,3 +1045,9 @@ invariants hold.
   - exact club display names
   - human-gated criteria marked
   **Status: FINAL (ready for execution).**
+
+## Execution Log
+- S1 ✅ merged (4bbfa73). Versions: Kotlin 2.4.20, AGP 9.3.3, CMP 1.12.1, Kable 0.45.0, Ktor 3.6.0. Local git only (user decision); CI never run. Port 8080 on dev Mac is occupied → mock server on 8091.
+- S3 ✅ merged. ForbiddenImport bans all `androidx.compose.material3.*` outside core/designsystem; orchestrator added OfText/OfTextRole, OfIcon, OfDivider, OfLinearProgress, OfSpinner (0e2bd18).
+- S2 ✅ merged (c29d2a4). ShotHistory is immutable (`record()` returns new). ControlCodec decodes ByteArray only.
+- S8b ✅ merged. Android→CoreMotion `-v/9.80665` doc-verified; device check BLOCKED-ON-HARDWARE (→ S10, incl. roll sign). **Follow-up for S6:** port the Wi-Fi request halves of PhoneOrientationTests (`CalibrationURLRejectsUnsupportedHost`, `WiFiClubRequestUsesClubEndpoint`, `WiFiCurrentClubRequestReadsClubEndpoint`, URL/method/header half of calibration request test) against core:network.
