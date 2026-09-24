@@ -8,7 +8,11 @@ import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.text.ExperimentalTextApi
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontVariation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
@@ -57,21 +61,57 @@ private val OfLightColorScheme =
         onError = OfColorTokens.Cream,
     )
 
+/**
+ * The web UI's type pairing (`index.css`: `--font-display` / `--font-body`), bundled as OFL font
+ * resources (licenses in `assets/licenses/`): **DM Serif Display** for headings and large values,
+ * **Outfit** (a variable font, weight axis 100..900) for everything else.
+ */
+private val DmSerifDisplay = FontFamily(Font(R.font.dm_serif_display_regular, FontWeight.Normal))
+
+@OptIn(ExperimentalTextApi::class)
+private fun outfit(weight: FontWeight): Font =
+    Font(
+        R.font.outfit_variable,
+        weight = weight,
+        variationSettings = FontVariation.Settings(FontVariation.weight(weight.weight)),
+    )
+
+@OptIn(ExperimentalTextApi::class)
+private val Outfit =
+    FontFamily(
+        outfit(FontWeight.Light),
+        outfit(FontWeight.Normal),
+        outfit(FontWeight.Medium),
+        outfit(FontWeight.SemiBold),
+        outfit(FontWeight.Bold),
+    )
+
+private fun TextStyle.display(): TextStyle = copy(fontFamily = DmSerifDisplay, fontWeight = FontWeight.Normal)
+
+private fun TextStyle.body(weight: FontWeight? = fontWeight): TextStyle = copy(fontFamily = Outfit, fontWeight = weight)
+
 private val OfTypography =
     Typography().let { base ->
         base.copy(
-            displayMedium = base.displayMedium.copy(fontWeight = FontWeight.Bold),
-            headlineMedium = base.headlineMedium.copy(fontWeight = FontWeight.Bold),
-            titleLarge = base.titleLarge.copy(fontWeight = FontWeight.Bold),
-            titleMedium = base.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+            displayLarge = base.displayLarge.display(),
+            displayMedium = base.displayMedium.display(),
+            displaySmall = base.displaySmall.display(),
+            headlineLarge = base.headlineLarge.display(),
+            headlineMedium = base.headlineMedium.display(),
+            headlineSmall = base.headlineSmall.display(),
+            titleLarge = base.titleLarge.display(),
+            titleMedium = base.titleMedium.body(FontWeight.SemiBold),
+            titleSmall = base.titleSmall.body(FontWeight.Medium),
+            bodyLarge = base.bodyLarge.body(FontWeight.Normal),
+            bodyMedium = base.bodyMedium.body(FontWeight.Normal),
+            bodySmall = base.bodySmall.body(FontWeight.Normal),
+            labelLarge = base.labelLarge.body(FontWeight.Medium),
             labelSmall =
-                base.labelSmall.copy(
-                    fontWeight = FontWeight.Bold,
+                base.labelSmall.body(FontWeight.Bold).copy(
                     letterSpacing = 0.14.em,
                 ),
             labelMedium =
-                base.labelMedium.copy(
-                    fontWeight = FontWeight.Bold,
+                base.labelMedium.body(FontWeight.Bold).copy(
                     letterSpacing = 0.1.em,
                 ),
         )

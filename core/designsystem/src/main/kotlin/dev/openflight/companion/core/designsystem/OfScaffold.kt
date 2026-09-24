@@ -2,13 +2,24 @@
 package dev.openflight.companion.core.designsystem
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Snackbar
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Stable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -18,11 +29,16 @@ import androidx.compose.ui.tooling.preview.Preview
  * The app-wide screen container: the dark background gradient plus a
  * [Scaffold] with a transparent container, so every screen (dashboard,
  * calibration, range) gets the same backdrop without repeating it.
+ *
+ * @param bottomBar for example the dashboard's [OfBottomBar].
+ * @param messages where [OfMessageHostState.show] messages (snackbars) appear.
  */
 @Composable
 fun OfScaffold(
     modifier: Modifier = Modifier,
     topBar: @Composable () -> Unit = {},
+    bottomBar: @Composable () -> Unit = {},
+    messages: OfMessageHostState? = null,
     content: @Composable (PaddingValues) -> Unit,
 ) {
     Box(
@@ -38,12 +54,63 @@ fun OfScaffold(
         Scaffold(
             modifier = Modifier.fillMaxSize(),
             topBar = topBar,
+            bottomBar = bottomBar,
+            snackbarHost = {
+                if (messages != null) {
+                    SnackbarHost(messages.snackbarHostState) { data ->
+                        Snackbar(
+                            snackbarData = data,
+                            containerColor = OfColorTokens.BgHover,
+                            contentColor = OfColorTokens.Cream,
+                        )
+                    }
+                }
+            },
             containerColor = Color.Transparent,
             contentColor = OfColorTokens.Cream,
         ) { padding ->
             content(padding)
         }
     }
+}
+
+/**
+ * Transient messages for an [OfScaffold], for example a Pi error such as "Shot not found". Create
+ * it with [rememberOfMessageHostState] and pass it to the scaffold's `messages`.
+ */
+@Stable
+class OfMessageHostState internal constructor(
+    internal val snackbarHostState: SnackbarHostState,
+) {
+    /** Shows [text] and suspends until it's dismissed or times out. */
+    suspend fun show(text: String) {
+        snackbarHostState.showSnackbar(text)
+    }
+}
+
+@Composable
+fun rememberOfMessageHostState(): OfMessageHostState = remember { OfMessageHostState(SnackbarHostState()) }
+
+/**
+ * A compact bottom bar of text entries, for example the dashboard's Session / Training / Camera /
+ * Settings row. Pads itself above the system navigation bar.
+ */
+@Composable
+fun OfBottomBar(
+    modifier: Modifier = Modifier,
+    content: @Composable RowScope.() -> Unit,
+) {
+    Row(
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .background(OfColorTokens.BgCard)
+                .navigationBarsPadding()
+                .padding(horizontal = OfSpacing.Sm, vertical = OfSpacing.Xs),
+        horizontalArrangement = Arrangement.SpaceEvenly,
+        verticalAlignment = Alignment.CenterVertically,
+        content = content,
+    )
 }
 
 @Preview

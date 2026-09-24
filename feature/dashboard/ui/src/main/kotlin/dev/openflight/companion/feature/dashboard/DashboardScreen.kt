@@ -3,6 +3,7 @@ package dev.openflight.companion.feature.dashboard
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -26,6 +27,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import dev.openflight.companion.core.data.TransportType
+import dev.openflight.companion.core.designsystem.OfBottomBar
 import dev.openflight.companion.core.designsystem.OfCard
 import dev.openflight.companion.core.designsystem.OfColorTokens
 import dev.openflight.companion.core.designsystem.OfDivider
@@ -39,11 +41,16 @@ import dev.openflight.companion.core.designsystem.OfSpacing
 import dev.openflight.companion.core.designsystem.OfSpinner
 import dev.openflight.companion.core.designsystem.OfStatusChip
 import dev.openflight.companion.core.designsystem.OfText
+import dev.openflight.companion.core.designsystem.OfTextButton
 import dev.openflight.companion.core.designsystem.OfTextField
 import dev.openflight.companion.core.designsystem.OfTextRole
 import dev.openflight.companion.core.designsystem.OfTheme
 import dev.openflight.companion.core.designsystem.OfTopBar
 import dev.openflight.companion.core.designsystem.StatusTone
+import dev.openflight.companion.core.insights.ClubChip
+import dev.openflight.companion.core.insights.ConfidenceLevel
+import dev.openflight.companion.core.insights.ShotEnrichment
+import dev.openflight.companion.core.insights.SpinSource
 import dev.openflight.companion.core.model.ConnectionState
 import dev.openflight.companion.core.model.GolfClub
 import dev.openflight.companion.core.model.ShotEvent
@@ -53,6 +60,10 @@ import dev.openflight.companion.core.model.ShotMetricFormatter
  * The dashboard (ContentView.swift): header with the Range entry, the connection card, and either
  * the latest shot with previous shots or the "Waiting for a shot" state. Stateless: everything comes
  * from [uiState] and every interaction goes out through [onEvent] or a navigation callback.
+ *
+ * Plans R5b/R6c add the bottom bar to Session, Training, Camera and Settings ([navigation]), the
+ * per-club chips, units, the Pi's confidence badges/carry range/player, and the gold shot-flash,
+ * which replays whenever [shotFlashes] changes (the route bumps it on `DashboardEffect.NewShot`).
  */
 @Composable
 fun DashboardScreen(
@@ -61,9 +72,12 @@ fun DashboardScreen(
     onOpenCalibration: () -> Unit,
     onOpenRange: () -> Unit,
     modifier: Modifier = Modifier,
+    navigation: DashboardNavigation = DashboardNavigation(),
+    shotFlashes: Int = 0,
 ) {
     OfScaffold(
         modifier = modifier,
+        bottomBar = { DashboardBottomBar(navigation) },
         topBar = {
             OfTopBar(
                 title = "Launch Monitor",
@@ -94,11 +108,49 @@ fun DashboardScreen(
                 }
 
                 is DashboardUiState.Live -> {
-                    ShotCard(uiState.latest)
-                    if (uiState.previous.isNotEmpty()) ShotHistoryCard(uiState.previous)
+                    Box {
+                        ShotCard(uiState.latest, uiState.units, uiState.latestEnrichment)
+                        ShotFlash(trigger = shotFlashes, modifier = Modifier.matchParentSize())
+                    }
+                    if (uiState.clubChips.isNotEmpty()) ClubChipsCard(uiState.clubChips)
+                    if (uiState.previous.isNotEmpty()) ShotHistoryCard(uiState.previous, uiState.units)
                 }
             }
         }
+    }
+}
+
+/** Where the dashboard's bottom bar goes: the Wi-Fi-parity screens (plans R5b/R6c). */
+data class DashboardNavigation(
+    val onOpenSession: () -> Unit = {},
+    val onOpenTraining: () -> Unit = {},
+    val onOpenCamera: () -> Unit = {},
+    val onOpenSettings: () -> Unit = {},
+)
+
+@Composable
+private fun DashboardBottomBar(navigation: DashboardNavigation) {
+    OfBottomBar {
+        OfTextButton(
+            text = "Session",
+            onClick = navigation.onOpenSession,
+            modifier = Modifier.testTag(DashboardUiTags.SESSION),
+        )
+        OfTextButton(
+            text = "Training",
+            onClick = navigation.onOpenTraining,
+            modifier = Modifier.testTag(DashboardUiTags.TRAINING),
+        )
+        OfTextButton(
+            text = "Camera",
+            onClick = navigation.onOpenCamera,
+            modifier = Modifier.testTag(DashboardUiTags.CAMERA),
+        )
+        OfTextButton(
+            text = "Settings",
+            onClick = navigation.onOpenSettings,
+            modifier = Modifier.testTag(DashboardUiTags.SETTINGS),
+        )
     }
 }
 
@@ -265,6 +317,21 @@ private fun DashboardLivePreview() {
                         ),
                     latest = shot,
                     previous = listOf(shot.copy(eventId = "B0D91F0A-7950-4D7E-9DD5-AF9777C190E2", club = "7-iron")),
+                    clubChips = listOf(ClubChip("driver", 1), ClubChip("7-iron", 1)),
+                    enrichments =
+                        mapOf(
+                            shot.eventId to
+                                ShotEnrichment(
+                                    launchAngleConfidence = ConfidenceLevel.HIGH,
+                                    angleSource = "radar",
+                                    spinQuality = ConfidenceLevel.MEDIUM,
+                                    spinSource = SpinSource.ESTIMATED,
+                                    carryRangeLowYards = 251.0,
+                                    carryRangeHighYards = 277.0,
+                                    carrySpinAdjustedYards = null,
+                                    playerName = "Alex",
+                                ),
+                        ),
                 ),
             onEvent = {},
             onOpenCalibration = {},
