@@ -5,6 +5,7 @@ import dev.openflight.companion.core.data.SettingsRepository
 import dev.openflight.companion.core.data.TransportType
 import dev.openflight.companion.core.insights.ClubChip
 import dev.openflight.companion.core.insights.ClubStats
+import dev.openflight.companion.core.insights.ShotEnrichment
 import dev.openflight.companion.core.insights.UnitSystem
 import dev.openflight.companion.core.model.ConnectionState
 import dev.openflight.companion.core.model.GolfClub
@@ -34,7 +35,15 @@ sealed interface DashboardUiState {
         override val clubChips: List<ClubChip> = emptyList(),
     ) : DashboardUiState
 
-    /** At least one shot: the latest shot card, plus the previous shots (newest first) when there are any. */
+    /**
+     * At least one shot: the latest shot card, plus the previous shots (newest first) when there
+     * are any.
+     *
+     * @property enrichments the Pi's Socket.IO detail (plan R6b) for [latest] and [previous], keyed
+     *   by [ShotEvent.eventId]: confidence badges, carry range, spin-adjusted carry, spin source and
+     *   player. A shot without one (Bluetooth, no Socket.IO link, or a shot the Pi never reported)
+     *   has no entry; read it with [enrichmentFor] or [latestEnrichment].
+     */
     data class Live(
         override val connection: ConnectionPanelState,
         val latest: ShotEvent,
@@ -42,7 +51,12 @@ sealed interface DashboardUiState {
         override val units: UnitSystem = SettingsRepository.DEFAULT_UNITS,
         override val clubStats: ClubStats = ClubStats.EMPTY,
         override val clubChips: List<ClubChip> = emptyList(),
-    ) : DashboardUiState
+        val enrichments: Map<String, ShotEnrichment> = emptyMap(),
+    ) : DashboardUiState {
+        val latestEnrichment: ShotEnrichment? get() = enrichments[latest.eventId]
+
+        fun enrichmentFor(shot: ShotEvent): ShotEnrichment? = enrichments[shot.eventId]
+    }
 }
 
 /** A one-shot signal for haptics and the shot-flash (plan R5a), never re-delivered for a replayed shot. */

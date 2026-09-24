@@ -45,54 +45,6 @@ import kotlin.test.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class PiSessionRepositoryTest {
-    private class FakePiSocket(
-        val host: String,
-    ) : PiSocket {
-        override val state = MutableStateFlow<SocketConnectionState>(SocketConnectionState.Idle)
-        override val events = MutableSharedFlow<SocketEvent>(extraBufferCapacity = 64)
-        val emitted = mutableListOf<Pair<String, JsonElement?>>()
-        var connectCount = 0
-            private set
-        var disconnectCount = 0
-            private set
-
-        override fun connect() {
-            connectCount++
-            state.value = SocketConnectionState.Connecting(1)
-        }
-
-        override fun disconnect() {
-            disconnectCount++
-            state.value = SocketConnectionState.Idle
-        }
-
-        override suspend fun emit(
-            event: String,
-            data: JsonElement?,
-        ) {
-            if (state.value !is SocketConnectionState.Connected) throw SocketNotConnectedException()
-            emitted += event to data
-        }
-
-        fun serverAcks() {
-            state.value = SocketConnectionState.Connected("sid")
-        }
-
-        /** Pushes a captured `42[...]` frame. */
-        fun serverFrame(frame: String) {
-            events.tryEmit(PiFixtures.event(frame))
-        }
-
-        fun server(
-            name: String,
-            payload: String? = null,
-        ) {
-            events.tryEmit(SocketEvent(name, listOfNotNull(payload?.let(PiJson::parseToJsonElement))))
-        }
-
-        val emittedNames: List<String> get() = emitted.map { it.first }
-    }
-
     private class Harness(
         scope: CoroutineScope,
         transport: TransportType,

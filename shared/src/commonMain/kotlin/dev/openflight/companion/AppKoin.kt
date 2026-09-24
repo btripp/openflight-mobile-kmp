@@ -6,9 +6,12 @@ import dev.openflight.companion.core.data.SettingsRepository
 import dev.openflight.companion.core.data.ShotRepository
 import dev.openflight.companion.core.data.dataModule
 import dev.openflight.companion.feature.calibration.calibrationModule
+import dev.openflight.companion.feature.camera.cameraModule
 import dev.openflight.companion.feature.dashboard.dashboardModule
 import dev.openflight.companion.feature.range.rangeModule
 import dev.openflight.companion.feature.session.sessionModule
+import dev.openflight.companion.feature.settings.settingsModule
+import dev.openflight.companion.feature.training.trainingModule
 import org.koin.core.Koin
 import org.koin.core.context.startKoin
 import org.koin.core.module.Module
@@ -18,7 +21,16 @@ import org.koin.mp.KoinPlatform
 
 /** Every module the app graph needs. Android adds `androidContext(...)` when it starts Koin. */
 val appModules: List<Module> =
-    listOf(dataModule, dashboardModule, calibrationModule, rangeModule, sessionModule)
+    listOf(
+        dataModule,
+        dashboardModule,
+        calibrationModule,
+        rangeModule,
+        sessionModule,
+        trainingModule,
+        cameraModule,
+        settingsModule,
+    )
 
 /**
  * Starts the app's Koin graph ([appModules] then [extraModules], so an extra module can override a

@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.StateFlow
  * Lifecycle methods ([start], [stop], [retry], [disconnect]) must be called from one thread (the
  * main thread), like a ViewModel's.
  */
+@Suppress("TooManyFunctions") // Lifecycle, club/calibration control, and history editing (R5a/R6b).
 interface ShotRepository {
     /** The active transport's state; [ConnectionState.Idle] while stopped or between transports. */
     val connectionState: StateFlow<ConnectionState>
@@ -36,10 +37,14 @@ interface ShotRepository {
     /** Whether the active transport can send control commands (BLE: once the control characteristic is found). */
     val supportsControls: StateFlow<Boolean>
 
-    /** App foreground: start following settings and connect the selected transport. Idempotent. */
+    /**
+     * App foreground: start following settings and connect the selected transport. Idempotent.
+     * Also starts the Wi-Fi-only [PiSessionRepository] (plan R6b), which connects to the same
+     * host only while the transport is Wi-Fi, so both platforms keep calling just this.
+     */
     fun start()
 
-    /** App background: disconnect the active transport and stop following settings. */
+    /** App background: disconnect the active transport (and the [PiSessionRepository]) and stop following settings. */
     fun stop()
 
     /** Reconnect the active transport (after an error, or after the Bluetooth permission grant); starts if stopped. */
@@ -62,8 +67,11 @@ interface ShotRepository {
     suspend fun submitCalibration(measurement: PhoneOrientationMeasurement): CalibrationResult
 
     /**
-     * Removes one shot from [history] locally only (plan R5a); the web UI does this over
-     * Socket.IO instead, which this app has no equivalent of. A no-op if [eventId] isn't present.
+     * Removes one shot from [history]. While the Pi's Socket.IO link is
+     * [connected][dev.openflight.companion.core.model.pi.PiLinkState.Connected] it also deletes the
+     * shot from the Pi's session, **by timestamp** (`delete_shot`; the SSE/BLE `event_id` is a
+     * per-publish UUID the Pi doesn't know). Otherwise it's local only (plan R5a/R6b). A no-op if
+     * [eventId] isn't in [history].
      *
      * Default no-op so every existing [ShotRepository] implementation (fakes in other feature
      * modules, [dev.openflight.companion.PreviewShotRepository]) stays source-compatible without
@@ -71,7 +79,18 @@ interface ShotRepository {
      */
     fun deleteShot(eventId: String) {}
 
-    /** Clears [history] locally only (plan R5a). See [deleteShot] for why this has a default body. */
+    /**
+     * Deletes the shot with this [timestamp] (the Pi's session key) like [deleteShot]: from the
+     * Pi's session while its link is connected, and from [history] when a shot there has it. Used
+     * for a Pi session row the phone may never have received over SSE/BLE. Default no-op, see
+     * [deleteShot].
+     */
+    fun deleteShotByTimestamp(timestamp: String) {}
+
+    /**
+     * Clears [history], and the Pi's session too (`clear_session`) while its link is connected
+     * (plan R6b). See [deleteShot] for why this has a default body.
+     */
     fun clearHistory() {}
 
     /**

@@ -23,8 +23,9 @@ import org.koin.dsl.module
 expect val platformDataModule: Module
 
 /**
- * Everything `core:data` provides: [SettingsRepository] and [ShotRepository] (both singletons),
- * plus the transports and the one shared [HttpClient] behind them. Includes [platformDataModule],
+ * Everything `core:data` provides: [SettingsRepository], [ShotRepository] and
+ * [PiSessionRepository] (all singletons; [ShotRepository.start]/[ShotRepository.stop] drive the
+ * Pi session too), plus the transports and the one shared [HttpClient] behind them. Includes [platformDataModule],
  * so an app only lists `dataModule`.
  */
 val dataModule: Module =
@@ -45,6 +46,8 @@ val dataModule: Module =
                 wifiTransportFactory = get(),
                 scope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
                 piControl = get(),
+                // R6b: started/stopped with the shot stream; delete/clear reach the Pi through it.
+                piSession = get(),
             )
         }
         // R6a: the Wi-Fi-only Socket.IO session API, sharing the HttpClient's engine.

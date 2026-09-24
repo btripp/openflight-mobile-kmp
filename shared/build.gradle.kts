@@ -23,6 +23,9 @@ kotlin {
             export(projects.feature.calibration)
             export(projects.feature.range)
             export(projects.feature.session)
+            export(projects.feature.training)
+            export(projects.feature.camera)
+            export(projects.feature.settings)
         }
     }
 
@@ -38,6 +41,9 @@ kotlin {
             api(projects.feature.calibration)
             api(projects.feature.range)
             api(projects.feature.session)
+            api(projects.feature.training)
+            api(projects.feature.camera)
+            api(projects.feature.settings)
             implementation(libs.kotlinx.coroutines.core)
             api(project.dependencies.platform(libs.koin.bom))
             api(libs.koin.core)
