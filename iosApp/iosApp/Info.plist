@@ -16,6 +16,13 @@
 	<string>OpenFlight connects to your Raspberry Pi on this network to receive shot data over Wi-Fi.</string>
 	<key>NSMotionUsageDescription</key>
 	<string>OpenFlight uses motion sensors to measure and calibrate the TI radar mount angle.</string>
+	<!-- DM Serif Display (headings) and Outfit (body), the same OFL fonts as Android's
+	     core:designsystem; the license texts sit next to them in Fonts/. -->
+	<key>UIAppFonts</key>
+	<array>
+		<string>DMSerifDisplay-Regular.ttf</string>
+		<string>Outfit-Variable.ttf</string>
+	</array>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>OpenFlight connects to your launch monitor over Bluetooth to receive shots and change clubs.</string>
 </dict>
