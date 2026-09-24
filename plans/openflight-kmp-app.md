@@ -1144,7 +1144,7 @@ HTTP, are in scope.
 - Fonts: DM Serif Display for headings and Outfit for body text (OFL), bundled on both
   platforms.
 
-**Out of scope (needs Pi/server changes; list them in the README):**
+**~~Out of scope~~ → now covered by R6 (Socket.IO, Wi-Fi only), except none:**
 - confidence badges (`launch_angle_confidence`, `spin_quality`, `spin_source`,
   `carry_range`)
 - a session backfill on connect (`GET /api/session`)
@@ -1155,6 +1155,53 @@ HTTP, are in scope.
 - simulator (GSPro) status
 - the radar debug panel
 - FlightWeb cloud sync
+
+### R6: "Add all of them": full Wi-Fi mode over the Pi's Socket.IO API (no server changes)
+
+User decision (2026-09-24): add **every** web-UI feature. The Pi already exposes all of them to
+the web UI over **Socket.IO** (Flask-SocketIO, python-socketio 5, Engine.IO v4), so the phone
+speaks that same protocol on Wi-Fi.
+- BLE keeps the core features (§0.1).
+- Features that need Socket.IO are Wi-Fi only, and the UI hides or disables them on BLE with
+  an explanation.
+- This supersedes the "out of scope" list in R5.
+
+**R6a: `core:socketio` + `PiSessionRepository` (KMP; model: strongest)**
+- A minimal **Engine.IO v4 / Socket.IO v5 client** on Ktor:
+  - WebSocket transport, with long-polling fallback if the server's threading mode doesn't
+    accept WebSocket. Verify this live.
+  - The open handshake, ping/pong, `40` connect, `42` events, reconnect with backoff, and a
+    typed event flow.
+  - Tests use a fake transport, plus a live check against `openflight-server --mock`.
+- A `ShotDetail` model covering the full `shot_to_dict` payload (server.py ~893): confidence
+  fields (`launch_angle_confidence`, `spin_quality`, `spin_source`, `carry_range`,
+  `carry_spin_adjusted`), `player_name`, the sim fields, and so on. It stays tolerant of
+  unknown or missing keys.
+- `PiSessionRepository`, Wi-Fi only:
+  - The session backfill (`get_session` → `session_state`) and server `stats`.
+  - Server-side `delete_shot` and `clear_session`.
+  - `simulate_shot`.
+  - `set_player` / `player_changed`.
+  - `set_training_implement`, `swing_speed` and the trigger-status mode.
+  - Camera: `toggle_camera`, `toggle_camera_stream`, `camera_status` and `ball_detection`.
+  - `sim_status`, `sim_shot`, `sim_send_failed` and `sim_shot_dropped`.
+  - Debug and radar: `get/set_radar_config`, `toggle_debug`, `trigger_status`,
+    `trigger_diagnostic`, `debug_reading` and `debug_shot`.
+  - Cloud: `upload_cloud` → `cloud_upload_status`.
+  - `shutdown` → `shutdown_ack`, or `POST /api/shutdown`.
+  - All of these follow the exact payloads in `server.py` and `ui/src/services/socketService.ts`.
+- An **MJPEG** multipart parser (common) for `GET /camera/stream`. Each platform decodes the
+  JPEG frames itself.
+- Integration with `ShotRepository`: on Wi-Fi, shots from Socket.IO **enrich** the SSE shots
+  by `event_id`/timestamp. Delete and clear go to the server when Socket.IO is connected, and
+  are local otherwise.
+
+**R6b: shared VMs (KMP)**
+- Screens: Session (server-backed stats and history), Training (swing speed), Camera, Players,
+  Simulators, Radar/Debug, and Cloud.
+- Dashboard additions: confidence indicators, the carry range, and the spin source.
+
+**R6c: native UI for R6b** on both platforms, after R2/R3, together with R5b.
 
 ### R4: App icons, docs, release tag (model: default)
 
