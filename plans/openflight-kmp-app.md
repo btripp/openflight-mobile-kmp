@@ -1051,3 +1051,4 @@ invariants hold.
 - S3 ✅ merged. ForbiddenImport bans all `androidx.compose.material3.*` outside core/designsystem; orchestrator added OfText/OfTextRole, OfIcon, OfDivider, OfLinearProgress, OfSpinner (0e2bd18).
 - S2 ✅ merged (c29d2a4). ShotHistory is immutable (`record()` returns new). ControlCodec decodes ByteArray only.
 - S8b ✅ merged. Android→CoreMotion `-v/9.80665` doc-verified; device check BLOCKED-ON-HARDWARE (→ S10, incl. roll sign). **Follow-up for S6:** port the Wi-Fi request halves of PhoneOrientationTests (`CalibrationURLRejectsUnsupportedHost`, `WiFiClubRequestUsesClubEndpoint`, `WiFiCurrentClubRequestReadsClubEndpoint`, URL/method/header half of calibration request test) against core:network.
+- S8a ✅ merged. FlightTrajectory.id = eventId; RangeQualityProfile.current (memory-based) not ported — S9 picks BALANCED unless expect/actual added; Double not Float.
