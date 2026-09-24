@@ -1240,6 +1240,37 @@ speaks that same protocol on Wi-Fi.
 
 **R6c: native UI for R6b** on both platforms, after R2/R3, together with R5b.
 
+### R7: Follow-ball camera for the driving range (user request, 2026-09-24)
+
+The request: "a mode that follows the ball to see where it lands." This is read as the
+**range view's camera**. The Pi's physical camera is fixed at the tee.
+
+**R7a: shared + Android (can run in parallel with R3b and R6c)**
+- `core:flight` adds `FollowCameraPlanner`: a pure function from `(FlightTrajectory, t)` to a
+  `RangeCameraPose` (position, target, and optionally the FOV).
+  - It chases the ball from behind and above, smoothed with critically damped springs or an
+    exponential ease; there must be no jitter.
+  - It frames the ball and the landing area in the last ~20% of the flight.
+  - After landing it settles into a raised view looking down at the landing spot, with the
+    nearest yardage marker in frame, held for the landed dwell.
+  - Test it with pure unit tests: continuity (no jump larger than ε between frames), the
+    camera never below the ground, the target reaching the landing point, and determinism.
+- The `DrivingRangeViewModel`/UiState gains `cameraMode: FIXED | FOLLOW`, persisted in
+  `SettingsRepository` (default FOLLOW or FIXED, to be decided in the step), with a
+  `ToggleCameraMode` event.
+  - The fixed mode keeps today's `RangeCameraPlanner` pose.
+  - Reduced motion forces FIXED.
+- Android `feature/range/ui`: the Canvas projection takes the per-frame pose from the planner,
+  and the overlay gets a camera-mode toggle.
+  - The scene (markers, trees, ground grid) must re-project each frame, so precompute it in
+    world space and project it per frame without allocating.
+  - Add device UI tests for the toggle.
+
+**R7b: iOS (after R3b merges)**
+- The RealityKit camera entity follows the same `FollowCameraPlanner` poses. Sample them per
+  frame from Kotlin, or precompute an array per flight.
+- Add an overlay toggle and an XCUITest for it.
+
 ### R4: App icons, docs, release tag (model: default)
 
 1. Build the app icons from the official OpenFlight logo, which the user approved.
