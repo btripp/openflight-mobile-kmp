@@ -159,7 +159,7 @@ the iOS contributor. Don't relicense.
 
 | Decision | Choice | Why / alternative rejected |
 |---|---|---|
-| Shared UI | **Compose Multiplatform** on both Android and iOS | One UI codebase. The native SwiftUI app already exists for anyone who wants pure native |
+| Shared UI | ~~Compose Multiplatform~~ **Superseded by ADR 0001 (§8): Jetpack Compose on Android, SwiftUI on iOS, shared KMP ViewModels** | One UI codebase. The native SwiftUI app already exists for anyone who wants pure native |
 | BLE | **Kable** (`com.juul.kable`), hidden behind our own `BleCentral` interface | Kable is a mature KMP BLE library covering Android and iOS. The interface makes transports testable with fakes |
 | HTTP/SSE | **Ktor client**: the OkHttp engine on Android, Darwin on iOS, and the SSE plugin *or* a hand-rolled byte-level parser | We port `SSEEventParser` either way. Use the Ktor SSE plugin only if it reliably handles comment heartbeats and CRLF. Step 4 decides using tests |
 | JSON | kotlinx.serialization with **`encodeDefaults=true`** (otherwise `schema_version=1` defaults are left out and the server rejects the payload), `ignoreUnknownKeys=true`, and `explicitNulls=true` (the default) | Forward compatibility with new server fields |
@@ -1022,6 +1022,104 @@ invariants hold.
 - A watchOS or Wear OS app.
 
 ---
+
+## 8. Re-scope R: native UI per platform (2026-09-24, see `docs/adr/0001-native-ui-shared-viewmodels.md`)
+
+**User decisions:**
+- Android uses **Jetpack Compose**, iOS uses **SwiftUI**, and ViewModels stay **shared in
+  KMP**.
+- The OpenFlight logo may be used for the app icon.
+- There's **no Raspberry Pi**, so all verification runs on simulators and emulators against
+  `openflight-server --mock --web-port 8091`. The hardware matrix stays open.
+
+The R steps supersede the UI parts of S3, S7, S8c, S9 and S10. The `core:*` modules and the
+ViewModels are kept as they are.
+
+```
+R1 Android: CMP → Jetpack Compose, VMs isolated in commonMain ──> R2 iOS interop + SwiftUI shell + Dashboard
+                                                                   ├─> R3a SwiftUI Calibration ─┐
+                                                                   └─> R3b SwiftUI Range (RealityKit) ┴─> R4 icons, XCUITests, docs, v0.1.0-sim
+```
+
+### R1: Android on Jetpack Compose; shared presentation isolated (model: strongest)
+
+1. Remove the Compose Multiplatform plugin and dependencies everywhere.
+2. **Feature modules** (`feature:dashboard|calibration|range`):
+   - `commonMain` keeps only the ViewModel, `UiState`, events, formatters and projection
+     math, with no Compose imports. The KMP `androidx.lifecycle:lifecycle-viewmodel` is fine.
+   - The Compose screens move to `androidMain` as Jetpack Compose.
+   - Device UI tests stay in `androidDeviceTest`.
+   - The Canvas renderer for the range moves to androidMain. Its pure projection math stays
+     common.
+3. `core:designsystem` becomes an Android-only Jetpack Compose library, keeping the same
+   `Of*` API. ForbiddenImport still bans `androidx.compose.material3.*` outside it.
+4. `composeApp` becomes **`shared`**:
+   - an iOS umbrella framework `Shared` that exports `core:model`, `core:data` and the feature
+     VM packages
+   - common Koin bootstrap and launch options
+   - The Android nav host, permission request and launch-option handling move into
+     `androidApp` (Jetpack `navigation-compose`).
+   - Remove `MainViewController`, `DesignSystemGallery` and the CMP `App()`.
+5. The iOS app is temporarily a minimal SwiftUI placeholder that links `Shared` and calls a
+   trivial exported function, so the iOS build stays green.
+
+**Exit criteria:**
+- The verification from invariants 1–3 passes, with the framework task renamed.
+- Every existing Android device UI test passes on `Pixel_10_Pro_XL`.
+- A live mock run on the Android emulator shows shots, the range flight and the calibration
+  409, the same as before.
+- `grep -r "org.jetbrains.compose" --include=*.kts` is empty.
+
+### R2: iOS interop foundation + SwiftUI app shell + Dashboard (model: strongest)
+
+1. Choose the interop layer:
+   - Check whether **SKIE** supports Kotlin 2.4.20. If not, use **KMP-NativeCoroutines**. If
+     neither supports it, use hand-written `FlowCollector` wrappers exported from `shared`.
+   - Record the choice in the ADR.
+2. Swift ViewModel bridge:
+   - A generic `@Observable`/`ObservableObject` wrapper owns a Kotlin VM, collects its
+     `uiState` on the main actor, forwards events, and calls `onCleared` / clears a
+     `ViewModelStore` when released.
+   - Koin starts once in the `App` init.
+3. SwiftUI `DashboardView` renders the shared `DashboardUiState` and ports the layout and copy
+   of the reference `ContentView.swift`. It covers the transport picker, host field with
+   submit, status and Retry, metrics, club menu, history, and entry points to Calibration and
+   Range as `NavigationStack` destinations.
+4. Launch arguments `--ui-testing`, `--preview-shot`, `--range-mode` and `--preview-flight`
+   are handled through the shared `LaunchOptions`.
+5. Add an **XCUITest** target with a dashboard smoke test run on the simulator: preview shot
+   visible, club menu present.
+
+**Exit criteria:**
+- `xcodebuild test` passes on the simulator.
+- A live mock run on the iOS simulator (`localhost:8091`) shows streamed shots.
+- A club change **driven by XCUITest taps** reaches the server; confirm with `GET /api/club`.
+
+### R3a: SwiftUI Calibration (parallel with R3b)
+
+- Port `RadarCalibrationView.swift`, rendering the shared `CalibrationUiState`.
+- Add XCUITests for "Motion unavailable" on the simulator.
+- Live run: on the simulator no motion data arrives, so the screen shows "Motion unavailable".
+
+### R3b: SwiftUI Driving Range with RealityKit (parallel with R3a)
+
+- Port `DrivingRangeView`, `RangeSceneController`, `RangeSceneView` and
+  `RangeMetricsOverlay` from the reference, rendering the shared `DrivingRangeUiState`. The
+  trajectory points come from `core:flight` through the VM.
+- Port `DrivingRangeUITests` (dashboard → range → exit) as an XCUITest.
+- Live run: newest-wins, and carry matches the server.
+
+### R4: App icons, docs, release tag (model: default)
+
+1. Build the app icons from the official OpenFlight logo, which the user approved.
+   - Source it from the upstream repo or openflight.dev. The upstream repo has
+     `cad/logo/MainLogo.DXF`; prefer an existing raster or SVG from the web UI or site.
+   - Android: an adaptive icon. iOS: an `AppIcon` asset catalog.
+2. Update the README and CLAUDE.md for the new architecture.
+3. Mark the hardware matrix as pending until a Pi is available.
+4. Tag `v0.1.0-sim`, which is simulator- and emulator-verified. `v0.1.0` waits for the
+   hardware matrix.
+
 
 ## Review Log
 - 2026-09-24: Draft created from reference commit `b053194`.
