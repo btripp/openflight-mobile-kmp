@@ -153,6 +153,43 @@ The upstream project is **AGPL-3.0-or-later**. Porting its Swift logic makes thi
 derivative work, so this repo is AGPL-3.0-or-later and must credit the upstream project and
 the iOS contributor. Don't relicense.
 
+### 0.6 Takeaways from reference commit `b053194` ("Updated readme for iOS app build": the `ios/README.md` setup and troubleshooting guide)
+
+These were reviewed at the user's request on 2026-09-24. The commit changes documentation only
+and leaves the protocol unchanged. Apply these points in R2 and R4:
+- **Permissions.** Each one is prompted only by the feature that needs it:
+  - Bluetooth for BLE
+  - **Local Network** for Wi-Fi (`NSLocalNetworkUsageDescription`,
+    `NSAllowsLocalNetworking`)
+  - **Motion & Fitness** for calibration (`NSMotionUsageDescription`)
+
+  The SwiftUI app (R2) must keep all three plist keys. A denied permission must show
+  guidance to re-enable it in Settings.
+- **`--ui-testing` suppresses the automatic connection** in UI tests. Keep that semantic in
+  both apps.
+- **Simulator names aren't portable.** Scripts and CI must pick a simulator **UUID** from
+  `xcrun simctl list devices available`, never a hard-coded name. Document
+  `-only-testing:` for unit-only runs.
+- **Signing.** Contributors must choose their own team and a unique bundle ID. Keep personal
+  signing values out of commits. Our bundle ID is `dev.openflight.companion`.
+- **"Verify the app" checklist**, to reuse in `docs/hardware-test-matrix.md` and the README:
+  1. reach Connected
+  2. a shot appears
+  3. the Driving Range shows the trajectory
+  4. a club change is accepted
+  5. calibration on a device with an IWR6843
+- **The replay on connect is intended.** A fresh install shows the latest shot without
+  waiting.
+- **Troubleshooting entries to port** into our README (R4), adapted to both platforms:
+  - the Pi kernel `6.18.34+rpt-rpi-2712` BLE regression; check `uname -r` first
+  - "Looking for OpenFlight" (`--ble`, `bluetoothctl show`, stay in the foreground)
+  - Wi-Fi not connecting (`curl -N …/api/shots/stream`, an IP instead of `.local`, VPNs and
+    client isolation, the Local Network permission)
+  - the 8-client limit returning 503
+  - calibration unavailable in the simulator
+  - the harmless App Intents build warning
+  - `CoreSimulatorService connection became invalid` (fix it with `xcrun simctl shutdown all`)
+
 ---
 
 ## 1. Architecture decisions (locked unless a step's exit criteria prove one wrong)
