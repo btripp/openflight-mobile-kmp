@@ -13,6 +13,7 @@ kotlin {
 
     sourceSets {
         commonMain.dependencies {
+            implementation(projects.core.designsystem)
             implementation(libs.jetbrains.lifecycle.viewmodelCompose)
             implementation(libs.jetbrains.lifecycle.runtimeCompose)
         }
