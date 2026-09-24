@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 package dev.openflight.companion
 
+import dev.openflight.companion.core.data.ShotRepository
 import dev.openflight.companion.feature.calibration.CalibrationViewModel
 import dev.openflight.companion.feature.dashboard.DashboardViewModel
 import dev.openflight.companion.feature.range.DrivingRangeViewModel
@@ -41,6 +42,12 @@ class KoinHelper : KoinComponent {
     fun drivingRangeViewModel(): DrivingRangeViewModel = get()
 
     fun sessionViewModel(): SessionViewModel = get()
+
+    /**
+     * The app-wide shot stream. The SwiftUI shell calls `start()` when the scene becomes active
+     * and `stop()` when it leaves the foreground, like Android's `LifecycleStartEffect`.
+     */
+    fun shotRepository(): ShotRepository = get()
 
     /** The debug [LaunchOptions] applied at launch (defaults in release builds). */
     fun launchOptions(): LaunchOptions = getKoin().launchOptions()

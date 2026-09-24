@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 package dev.openflight.companion
 
+import com.rickclephas.kmp.nativecoroutines.NativeCoroutinesIgnore
 import dev.openflight.companion.core.data.SettingsRepository
 import dev.openflight.companion.core.data.ShotRepository
 import dev.openflight.companion.core.data.dataModule
@@ -44,6 +45,7 @@ fun initKoin(
  * host reads them through [launchOptions]). Callers gate this on a debug build and call it once
  * per process.
  */
+@NativeCoroutinesIgnore // Kotlin-only: iOS applies the options inside startKoinForIos().
 suspend fun Koin.applyLaunchOptions(options: LaunchOptions) {
     loadModules(listOf(module { single { options } }), allowOverride = true)
     if (options.usesFakeRepository) {

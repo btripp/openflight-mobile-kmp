@@ -50,3 +50,39 @@ Multiplatform.
   ViewModel lifecycle and `onCleared` driven from SwiftUI.
 - With no Raspberry Pi available, all verification runs on simulators and emulators against
   `openflight-server --mock`. `docs/hardware-test-matrix.md` stays open for later.
+
+## Decision (R2): Kotlin↔Swift interop is KMP-NativeCoroutines 1.0.6
+
+Checked on 2026-09-24:
+
+- **SKIE: not usable.** Its docs (`skie.touchlab.co/intro`) say "compatible with Kotlin versions
+  from 2.0.0 up to 2.4.10". The newest release, 0.10.14 (Maven Central, 2026-07-27), adds
+  "Support for Kotlin 2.4.10". Nothing supports 2.4.20, and SKIE is a compiler plugin that needs
+  an exact Kotlin match.
+- **KMP-NativeCoroutines: usable.** Release v1.0.6 (Gradle plugin portal + Maven Central,
+  2026-09-07) says "Updated Kotlin to 2.4.20". It runs as a compiler plugin with no KSP. The Swift
+  package tag `1.0.6` matches it.
+
+How it's wired:
+
+- The Gradle plugin `com.rickclephas.kmp.nativecoroutines` is applied to `shared` only. The
+  version is in `libs.versions.toml` and must stay in step with the Swift package pinned in
+  `iosApp.xcodeproj`.
+- `feature:*` stays free of interop annotations. `shared/src/iosMain/.../NativeViewModels.kt`
+  declares one annotated extension per ViewModel, and every ViewModel uses the same names:
+  - `@NativeCoroutinesState val XViewModel.state` becomes Swift `state` (the current value) and
+    `stateFlow`.
+  - `@NativeCoroutines val XViewModel.sideEffects` exposes the one-shot effects.
+- `ViewModelStoreHolder` (iosMain) registers a ViewModel in a `ViewModelStore`. Clearing the
+  store runs the protected `onCleared()` and cancels `viewModelScope`.
+- Swift: `ViewModelHost<VM: SharedViewModel>` (`iosApp/iosApp/Bridge/ViewModelHost.swift`)
+  owns a ViewModel.
+  - It collects `stateFlow` as an `AsyncSequence` (`KMPNativeCoroutinesAsync`) on the main
+    actor into `@Published state`.
+  - `send(_:)` forwards events.
+  - `collect(_:perform:)` handles effects from a view's `.task`.
+  - It clears the store on `deinit`.
+- Sealed types have no `onEnum(of:)` (that's a SKIE feature), so Swift uses `is`/`as?` checks
+  on the exported classes.
+
+Revisit this choice when SKIE supports the project's Kotlin version.

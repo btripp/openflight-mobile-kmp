@@ -2,6 +2,8 @@ plugins {
     // No Compose (ADR 0001): the common app bootstrap for both platforms, and the iOS umbrella
     // framework `Shared` that the SwiftUI app links.
     alias(libs.plugins.openflight.kmp.library)
+    // Swift interop for Flow/suspend (ADR 0001, "Decision (R2)"): @NativeCoroutines* in iosMain.
+    alias(libs.plugins.kmp.nativecoroutines)
 }
 
 kotlin {
@@ -25,6 +27,7 @@ kotlin {
     }
 
     sourceSets {
+        all { languageSettings.optIn("kotlin.experimental.ExperimentalObjCName") }
         commonMain.dependencies {
             // `api`: the Android app starts Koin with these modules, and the iOS framework
             // exports them (export() needs an api dependency).
