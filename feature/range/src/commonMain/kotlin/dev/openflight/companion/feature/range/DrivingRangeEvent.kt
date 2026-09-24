@@ -14,4 +14,15 @@ sealed interface DrivingRangeEvent {
     data class ClubSelected(
         val club: GolfClub,
     ) : DrivingRangeEvent
+
+    /** The overlay's camera button: switch between the follow and the fixed camera (plan R7a). */
+    data object ToggleCameraMode : DrivingRangeEvent
+
+    /**
+     * The platform's reduced-motion setting, sent by the screen when it opens and whenever it
+     * changes. While it is on, the camera is fixed and the toggle is locked.
+     */
+    data class ReduceMotionChanged(
+        val enabled: Boolean,
+    ) : DrivingRangeEvent
 }

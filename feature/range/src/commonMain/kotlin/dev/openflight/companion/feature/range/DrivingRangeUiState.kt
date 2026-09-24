@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 package dev.openflight.companion.feature.range
 
+import dev.openflight.companion.core.data.RangeCameraMode
 import dev.openflight.companion.core.data.SettingsRepository
 import dev.openflight.companion.core.flight.FlightTrajectory
 import dev.openflight.companion.core.model.GolfClub
@@ -63,16 +64,36 @@ data class RangeClubState(
     val error: String? = null,
 )
 
+/**
+ * The range's virtual camera (plan R7a).
+ *
+ * @property mode the camera to render with: the user's choice, or [RangeCameraMode.FIXED] while
+ *   reduced motion is on. Renderers get the pose for it from [RangeCameraRig].
+ * @property locked reduced motion is on, so the camera is fixed and the toggle is disabled.
+ */
+data class RangeCameraState(
+    val mode: RangeCameraMode = SettingsRepository.DEFAULT_RANGE_CAMERA_MODE,
+    val locked: Boolean = false,
+)
+
 /** What the range renders. */
 sealed interface DrivingRangeUiState {
     val phase: RangePhase
     val displayedShot: ShotEvent?
     val activeFlight: ActiveFlight?
     val club: RangeClubState
+    val camera: RangeCameraState
+
+    /** The camera to render with; see [RangeCameraState.mode]. */
+    val cameraMode: RangeCameraMode get() = camera.mode
+
+    /** Reduced motion has fixed the camera; see [RangeCameraState.locked]. */
+    val cameraModeLocked: Boolean get() = camera.locked
 
     /** No shot yet: the "Driving Range Ready" card. */
     data class Ready(
         override val club: RangeClubState = RangeClubState(),
+        override val camera: RangeCameraState = RangeCameraState(),
     ) : DrivingRangeUiState {
         override val phase: RangePhase get() = RangePhase.Waiting
         override val displayedShot: ShotEvent? get() = null
@@ -85,6 +106,7 @@ sealed interface DrivingRangeUiState {
         override val phase: RangePhase,
         override val activeFlight: ActiveFlight?,
         override val club: RangeClubState = RangeClubState(),
+        override val camera: RangeCameraState = RangeCameraState(),
     ) : DrivingRangeUiState {
         override val displayedShot: ShotEvent get() = shot
     }

@@ -15,17 +15,22 @@ import org.koin.androidx.compose.koinViewModel
  * leaves the foreground or the screen goes away, and Exit suspends before leaving.
  *
  * @param autoplay fly the displayed shot when the range opens: the `--preview-flight` launch hook.
+ * @param reduceMotion the platform's reduced-motion setting, which also fixes the camera. A
+ *   parameter so device tests don't depend on the emulator's animation scale.
  */
 @Composable
 fun DrivingRangeRoute(
     onExit: () -> Unit,
     autoplay: Boolean = false,
     viewModel: DrivingRangeViewModel = koinViewModel(),
+    reduceMotion: Boolean = rememberReduceMotionEnabled(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val reduceMotion = rememberReduceMotionEnabled()
     LifecycleResumeEffect(viewModel) {
         onPauseOrDispose { viewModel.suspend() }
+    }
+    LaunchedEffect(viewModel, reduceMotion) {
+        viewModel.onEvent(DrivingRangeEvent.ReduceMotionChanged(reduceMotion))
     }
     LaunchedEffect(viewModel, autoplay) {
         if (autoplay) viewModel.onEvent(DrivingRangeEvent.Replay)

@@ -7,11 +7,13 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -20,10 +22,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import dev.openflight.companion.core.data.RangeCameraMode
 import dev.openflight.companion.core.designsystem.OfColorTokens
+import dev.openflight.companion.core.designsystem.OfIcon
+import dev.openflight.companion.core.designsystem.OfIcons
 import dev.openflight.companion.core.designsystem.OfOutlinedButton
 import dev.openflight.companion.core.designsystem.OfSpacing
 import dev.openflight.companion.core.designsystem.OfStatusChip
@@ -51,6 +58,7 @@ fun DrivingRangeScreen(
         val isLandscape = maxWidth > maxHeight
         RangeCanvas(
             flight = uiState.activeFlight,
+            cameraMode = uiState.cameraMode,
             reduceMotion = reduceMotion,
             onFlightCompleted = { onEvent(DrivingRangeEvent.FlightCompleted) },
             modifier = Modifier.fillMaxSize(),
@@ -66,6 +74,7 @@ fun DrivingRangeScreen(
                 Controls(
                     uiState = uiState,
                     onReplay = { onEvent(DrivingRangeEvent.Replay) },
+                    onToggleCamera = { onEvent(DrivingRangeEvent.ToggleCameraMode) },
                     onExit = onExit,
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
                 )
@@ -87,6 +96,7 @@ fun DrivingRangeScreen(
 private fun Controls(
     uiState: DrivingRangeUiState,
     onReplay: () -> Unit,
+    onToggleCamera: () -> Unit,
     onExit: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -112,6 +122,11 @@ private fun Controls(
                         .testTag(RangeTestTags.STATUS),
             )
         }
+        CameraModeToggle(
+            mode = uiState.cameraMode,
+            locked = uiState.cameraModeLocked,
+            onToggle = onToggleCamera,
+        )
         if (uiState.canReplay) {
             OfOutlinedButton(
                 text = "Replay",
@@ -120,6 +135,43 @@ private fun Controls(
             )
         }
     }
+}
+
+/**
+ * The camera-mode button (plan R7a): shows the camera in use, "Follow" or "Fixed", and switches to
+ * the other one. Disabled (and fixed) while the system asks for reduced motion.
+ */
+@Composable
+private fun CameraModeToggle(
+    mode: RangeCameraMode,
+    locked: Boolean,
+    onToggle: () -> Unit,
+) {
+    val label =
+        when (mode) {
+            RangeCameraMode.FOLLOW -> "Follow"
+            RangeCameraMode.FIXED -> "Fixed"
+        }
+    OfOutlinedButton(
+        text = label,
+        onClick = onToggle,
+        enabled = !locked,
+        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+        leadingContent = {
+            OfIcon(
+                imageVector = OfIcons.Camera,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp).padding(end = 2.dp),
+                tint = if (locked) OfColorTokens.CreamDim else OfColorTokens.Gold,
+            )
+        },
+        modifier =
+            Modifier
+                .background(ControlBackground, PillShape)
+                .semantics {
+                    stateDescription = if (locked) "$label camera, fixed by reduced motion" else "$label camera"
+                }.testTag(RangeTestTags.CAMERA_MODE),
+    )
 }
 
 @Composable

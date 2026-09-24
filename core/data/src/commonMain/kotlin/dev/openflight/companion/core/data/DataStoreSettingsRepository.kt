@@ -47,6 +47,13 @@ internal class DataStoreSettingsRepository(
             .map { prefs -> prefs[UNITS_KEY]?.let(::unitSystemFromStorageValue) ?: SettingsRepository.DEFAULT_UNITS }
             .distinctUntilChanged()
 
+    override val rangeCameraMode: Flow<RangeCameraMode> =
+        preferences
+            .map { prefs ->
+                RangeCameraMode.fromStorageValue(prefs[RANGE_CAMERA_KEY])
+                    ?: SettingsRepository.DEFAULT_RANGE_CAMERA_MODE
+            }.distinctUntilChanged()
+
     override suspend fun setTransport(transport: TransportType) {
         dataStore.edit { it[TRANSPORT_KEY] = transport.storageValue }
     }
@@ -63,6 +70,10 @@ internal class DataStoreSettingsRepository(
         dataStore.edit { it[UNITS_KEY] = units.storageValue() }
     }
 
+    override suspend fun setRangeCameraMode(mode: RangeCameraMode) {
+        dataStore.edit { it[RANGE_CAMERA_KEY] = mode.storageValue }
+    }
+
     companion object {
         /** DataStore requires the `.preferences_pb` extension for preferences files. */
         const val FILE_NAME = "openflight.preferences_pb"
@@ -74,6 +85,9 @@ internal class DataStoreSettingsRepository(
 
         // Mirrors the web UI's UnitSystem raw values ('imperial'/'metric', useUnitPreferenceStore).
         private val UNITS_KEY = stringPreferencesKey("unitSystem")
+
+        // Plan R7a: the range's follow/fixed camera.
+        private val RANGE_CAMERA_KEY = stringPreferencesKey("rangeCameraMode")
     }
 }
 
