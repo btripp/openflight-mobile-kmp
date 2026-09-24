@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- FileProvider roots: only the CSV exports in the cache dir are ever shared. -->
+<paths>
+    <cache-path
+        name="exports"
+        path="exports/" />
+</paths>

@@ -10,11 +10,8 @@ import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import dev.openflight.companion.core.data.SettingsRepository
-import dev.openflight.companion.core.data.TransportType
-import dev.openflight.companion.core.model.GolfClub
 import dev.openflight.companion.feature.dashboard.DashboardTestTags
 import dev.openflight.companion.feature.range.RangeTestTags
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Before
@@ -22,6 +19,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.koin.android.ext.koin.androidContext
+import org.koin.compose.KoinContext
 import org.koin.core.context.stopKoin
 import org.koin.dsl.module
 
@@ -50,6 +48,7 @@ class DrivingRangeFlowTest {
         }
     }
 
+    @Suppress("DEPRECATION") // KoinContext: see below.
     private fun launch(options: LaunchOptions) {
         // OpenFlightApplication already started the real graph in this process; replace it.
         stopKoin()
@@ -59,7 +58,11 @@ class DrivingRangeFlowTest {
                 androidContext(context)
             }
         runBlocking { koin.applyLaunchOptions(options) }
-        composeRule.setContent { OpenFlightApp() }
+        // koin-compose caches the first Koin it sees for the whole process, so without this the
+        // composables would keep resolving from an earlier test's (stopped) graph and options.
+        // KoinContext is deprecated as "not needed with startKoin", which is untrue for a graph
+        // restarted inside one process, like here.
+        composeRule.setContent { KoinContext(koin) { OpenFlightApp() } }
     }
 
     @After
@@ -95,23 +98,5 @@ class DrivingRangeFlowTest {
 
     private companion object {
         const val API_LOCAL_NETWORK_PERMISSION = 37
-    }
-
-    private class InMemorySettingsRepository : SettingsRepository {
-        override val transport = MutableStateFlow(TransportType.WIFI)
-        override val host = MutableStateFlow(SettingsRepository.DEFAULT_HOST)
-        override val selectedClub = MutableStateFlow(GolfClub.DRIVER)
-
-        override suspend fun setTransport(transport: TransportType) {
-            this.transport.value = transport
-        }
-
-        override suspend fun setHost(host: String) {
-            this.host.value = host
-        }
-
-        override suspend fun setSelectedClub(club: GolfClub) {
-            selectedClub.value = club
-        }
     }
 }

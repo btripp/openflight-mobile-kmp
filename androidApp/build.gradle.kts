@@ -30,10 +30,16 @@ dependencies {
     implementation(projects.feature.dashboard.ui)
     implementation(projects.feature.calibration.ui)
     implementation(projects.feature.range.ui)
+    implementation(projects.feature.session.ui)
+    implementation(projects.feature.training.ui)
+    implementation(projects.feature.camera.ui)
+    implementation(projects.feature.settings.ui)
     implementation(projects.core.designsystem)
     // requiredBluetoothPermissions for the runtime permission prompt.
     implementation(projects.core.ble)
     implementation(libs.androidx.activity.compose)
+    // FileProvider: the CSV export is shared from the cache dir (R5b).
+    implementation(libs.androidx.core)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.navigation.compose)
     implementation(libs.kotlinx.serialization.json)
