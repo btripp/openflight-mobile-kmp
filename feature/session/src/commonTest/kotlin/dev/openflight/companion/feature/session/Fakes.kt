@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-package dev.openflight.companion.feature.dashboard
+package dev.openflight.companion.feature.session
 
 import dev.openflight.companion.core.data.SettingsRepository
 import dev.openflight.companion.core.data.ShotRepository
@@ -14,23 +14,21 @@ import dev.openflight.companion.core.model.ShotEvent
 import kotlinx.coroutines.flow.MutableStateFlow
 
 internal class FakeSettingsRepository(
-    transport: TransportType = TransportType.WIFI,
+    transport: TransportType = SettingsRepository.DEFAULT_TRANSPORT,
     host: String = SettingsRepository.DEFAULT_HOST,
-    club: GolfClub = GolfClub.DRIVER,
+    club: GolfClub = SettingsRepository.DEFAULT_CLUB,
     units: UnitSystem = SettingsRepository.DEFAULT_UNITS,
 ) : SettingsRepository {
     override val transport = MutableStateFlow(transport)
     override val host = MutableStateFlow(host)
     override val selectedClub = MutableStateFlow(club)
     override val units = MutableStateFlow(units)
-    val hostWrites = mutableListOf<String>()
 
     override suspend fun setTransport(transport: TransportType) {
         this.transport.value = transport
     }
 
     override suspend fun setHost(host: String) {
-        hostWrites += host
         this.host.value = host
     }
 
@@ -43,58 +41,59 @@ internal class FakeSettingsRepository(
     }
 }
 
-/** Mirrors the real repository's club rule: persist only the Pi's confirmed answer. */
-internal class FakeShotRepository(
-    private val settings: FakeSettingsRepository,
-) : ShotRepository {
+/** Tracks [deleteShotCalls]/[clearHistoryCalls] locally, mirroring the real `DefaultShotRepository`. */
+internal class FakeShotRepository : ShotRepository {
     override val connectionState = MutableStateFlow<ConnectionState>(ConnectionState.Idle)
     override val history = MutableStateFlow(emptyList<ShotEvent>())
     override val latestShot = MutableStateFlow<ShotEvent?>(null)
     override val activeClub = MutableStateFlow<GolfClub?>(null)
     override val supportsControls = MutableStateFlow(false)
 
-    var retryCount = 0
+    val deleteShotCalls = mutableListOf<String>()
+    var clearHistoryCalls = 0
         private set
-    val setClubCalls = mutableListOf<GolfClub>()
-
-    /** Replaced by tests to suspend or fail. */
-    var setClubResponse: suspend (GolfClub) -> ClubSelection = { ClubSelection(status = "ok", club = it) }
 
     override fun start() = Unit
 
     override fun stop() = Unit
 
-    override fun retry() {
-        retryCount++
-    }
+    override fun retry() = Unit
 
     override fun disconnect() = Unit
 
-    override suspend fun setClub(club: GolfClub): ClubSelection {
-        setClubCalls += club
-        val selection = setClubResponse(club)
-        settings.setSelectedClub(selection.club)
-        return selection
-    }
+    override suspend fun setClub(club: GolfClub): ClubSelection = ClubSelection(status = "ok", club = club)
 
-    override suspend fun currentClub(): ClubSelection = ClubSelection(status = "ok", club = settings.selectedClub.value)
+    override suspend fun currentClub(): ClubSelection = error("not used by the session screen")
 
     override suspend fun submitCalibration(measurement: PhoneOrientationMeasurement): CalibrationResult =
-        error("not used by the dashboard")
+        error("not used by the session screen")
+
+    override fun deleteShot(eventId: String) {
+        deleteShotCalls += eventId
+        history.value = history.value.filterNot { it.eventId == eventId }
+        latestShot.value = history.value.firstOrNull()
+    }
+
+    override fun clearHistory() {
+        clearHistoryCalls++
+        history.value = emptyList()
+        latestShot.value = null
+    }
 }
 
+/** A valid UUID event id that encodes [number], so assertions stay readable. */
+internal fun shotId(number: Int): String = "00000000-0000-4000-8000-" + number.toString().padStart(12, '0')
+
 internal fun shot(
-    id: Int,
+    number: Int,
     club: String = "driver",
-    ballSpeedMph: Double = 151.4,
+    ballSpeedMph: Double = 140.0,
 ): ShotEvent =
     ShotEvent(
         schemaVersion = 1,
-        eventId = "B0D91F0A-7950-4D7E-9DD5-AF9777C19%03d".format3(id),
-        timestamp = "2026-07-29T19:42:10",
+        eventId = shotId(number),
+        timestamp = "2026-08-05T23:54:00",
         club = club,
         ballSpeedMph = ballSpeedMph,
-        estimatedCarryYards = 264.0,
+        estimatedCarryYards = 250.0,
     )
-
-private fun String.format3(id: Int): String = replace("%03d", id.toString().padStart(3, '0'))

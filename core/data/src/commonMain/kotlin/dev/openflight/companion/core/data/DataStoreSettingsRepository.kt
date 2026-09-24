@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.stringPreferencesKey
+import dev.openflight.companion.core.insights.UnitSystem
 import dev.openflight.companion.core.model.GolfClub
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
@@ -41,6 +42,11 @@ internal class DataStoreSettingsRepository(
             .map { prefs -> prefs[CLUB_KEY]?.let(GolfClub::fromWireValue) ?: SettingsRepository.DEFAULT_CLUB }
             .distinctUntilChanged()
 
+    override val units: Flow<UnitSystem> =
+        preferences
+            .map { prefs -> prefs[UNITS_KEY]?.let(::unitSystemFromStorageValue) ?: SettingsRepository.DEFAULT_UNITS }
+            .distinctUntilChanged()
+
     override suspend fun setTransport(transport: TransportType) {
         dataStore.edit { it[TRANSPORT_KEY] = transport.storageValue }
     }
@@ -53,6 +59,10 @@ internal class DataStoreSettingsRepository(
         dataStore.edit { it[CLUB_KEY] = club.wireValue }
     }
 
+    override suspend fun setUnits(units: UnitSystem) {
+        dataStore.edit { it[UNITS_KEY] = units.storageValue() }
+    }
+
     companion object {
         /** DataStore requires the `.preferences_pb` extension for preferences files. */
         const val FILE_NAME = "openflight.preferences_pb"
@@ -61,8 +71,23 @@ internal class DataStoreSettingsRepository(
         private val TRANSPORT_KEY = stringPreferencesKey("shotTransport")
         private val HOST_KEY = stringPreferencesKey("piHost")
         private val CLUB_KEY = stringPreferencesKey("selectedClub")
+
+        // Mirrors the web UI's UnitSystem raw values ('imperial'/'metric', useUnitPreferenceStore).
+        private val UNITS_KEY = stringPreferencesKey("unitSystem")
     }
 }
+
+private fun UnitSystem.storageValue(): String =
+    when (this) {
+        UnitSystem.IMPERIAL -> "imperial"
+        UnitSystem.METRIC -> "metric"
+    }
+
+private fun unitSystemFromStorageValue(value: String): UnitSystem =
+    when (value) {
+        "metric" -> UnitSystem.METRIC
+        else -> UnitSystem.IMPERIAL
+    }
 
 /**
  * Builds the preferences DataStore at [path] (an absolute file path ending in

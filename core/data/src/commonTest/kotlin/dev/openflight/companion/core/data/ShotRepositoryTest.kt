@@ -19,6 +19,7 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
+import kotlin.test.assertFailsWith
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ShotRepositoryTest {
@@ -40,6 +41,7 @@ class ShotRepositoryTest {
                     FakeShotTransport("wifi($host)", events).also { wifiTransports += host to it }
                 },
                 scope = scope,
+                piControl = fakePiControlClient(),
                 log = { logs += it },
             )
 
@@ -381,6 +383,93 @@ class ShotRepositoryTest {
             assertThat(h.repository.connectionState.value).isEqualTo(ConnectionState.Connected)
             assertThat(h.settings.clubWrites).isEmpty()
             assertThat(h.logs.size).isEqualTo(1)
+        }
+
+    // endregion
+
+    // region local history edits (plan R5a)
+
+    @Test
+    fun deleteShotRemovesOnlyThatShot() =
+        runRepositoryTest { h ->
+            h.ble.shots.emit(shot(1))
+            h.ble.shots.emit(shot(2))
+            h.ble.shots.emit(shot(3))
+
+            h.repository.deleteShot(shotId(2))
+
+            assertThat(
+                h.repository.history.value
+                    .map { it.eventId },
+            ).containsExactly(shotId(3), shotId(1))
+            assertThat(
+                h.repository.latestShot.value
+                    ?.eventId,
+            ).isEqualTo(shotId(3))
+        }
+
+    @Test
+    fun deletingAnAbsentShotIsANoOp() =
+        runRepositoryTest { h ->
+            h.ble.shots.emit(shot(1))
+
+            h.repository.deleteShot(shotId(99))
+
+            assertThat(
+                h.repository.history.value
+                    .map { it.eventId },
+            ).containsExactly(shotId(1))
+        }
+
+    @Test
+    fun deletingTheLatestShotUpdatesLatestShot() =
+        runRepositoryTest { h ->
+            h.ble.shots.emit(shot(1))
+            h.ble.shots.emit(shot(2))
+
+            h.repository.deleteShot(shotId(2))
+
+            assertThat(
+                h.repository.latestShot.value
+                    ?.eventId,
+            ).isEqualTo(shotId(1))
+        }
+
+    @Test
+    fun clearHistoryEmptiesTheHistoryAndLatestShot() =
+        runRepositoryTest { h ->
+            h.ble.shots.emit(shot(1))
+            h.ble.shots.emit(shot(2))
+
+            h.repository.clearHistory()
+
+            assertThat(h.repository.history.value).isEmpty()
+            assertThat(h.repository.latestShot.value).isNull()
+        }
+
+    // endregion
+
+    // region Pi shutdown (plan R5a)
+
+    @Test
+    fun shutdownPiCallsTheControlClientOverWifi() =
+        runRepositoryTest(transport = TransportType.WIFI, host = "pi.local:8091") { h ->
+            h.repository.shutdownPi()
+            // No exception: the fake control client answered 200 "shutting_down".
+        }
+
+    @Test
+    fun shutdownPiOverBluetoothFailsWithoutCallingTheServer() =
+        runRepositoryTest { h ->
+            assertFailsWith<PiShutdownUnsupportedException> { h.repository.shutdownPi() }
+        }
+
+    @Test
+    fun shutdownPiWhileStoppedFails() =
+        runRepositoryTest(transport = TransportType.WIFI) { h ->
+            h.repository.stop()
+
+            assertFailsWith<PiShutdownUnsupportedException> { h.repository.shutdownPi() }
         }
 
     // endregion

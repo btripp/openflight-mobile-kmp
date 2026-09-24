@@ -60,7 +60,32 @@ interface ShotRepository {
     suspend fun currentClub(): ClubSelection
 
     suspend fun submitCalibration(measurement: PhoneOrientationMeasurement): CalibrationResult
+
+    /**
+     * Removes one shot from [history] locally only (plan R5a); the web UI does this over
+     * Socket.IO instead, which this app has no equivalent of. A no-op if [eventId] isn't present.
+     *
+     * Default no-op so every existing [ShotRepository] implementation (fakes in other feature
+     * modules, [dev.openflight.companion.PreviewShotRepository]) stays source-compatible without
+     * overriding it; [DefaultShotRepository] is the real implementation.
+     */
+    fun deleteShot(eventId: String) {}
+
+    /** Clears [history] locally only (plan R5a). See [deleteShot] for why this has a default body. */
+    fun clearHistory() {}
+
+    /**
+     * Asks the Pi to shut itself down (`POST /api/shutdown`, plan R5a), only while the active
+     * transport is Wi-Fi -- Bluetooth has no equivalent endpoint.
+     *
+     * @throws PiShutdownUnsupportedException when the active transport isn't Wi-Fi, or the
+     *   repository isn't started.
+     */
+    suspend fun shutdownPi(): Unit = throw PiShutdownUnsupportedException()
 }
 
 /** A control call was made while no transport is active (the repository is stopped). */
 class NoActiveTransportException : IllegalStateException("Not connected to OpenFlight.")
+
+/** [ShotRepository.shutdownPi] was called while the active transport isn't Wi-Fi. */
+class PiShutdownUnsupportedException : IllegalStateException("Pi shutdown needs the Wi-Fi transport.")

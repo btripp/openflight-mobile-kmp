@@ -3,6 +3,9 @@ package dev.openflight.companion.feature.dashboard
 
 import dev.openflight.companion.core.data.SettingsRepository
 import dev.openflight.companion.core.data.TransportType
+import dev.openflight.companion.core.insights.ClubChip
+import dev.openflight.companion.core.insights.ClubStats
+import dev.openflight.companion.core.insights.UnitSystem
 import dev.openflight.companion.core.model.ConnectionState
 import dev.openflight.companion.core.model.GolfClub
 import dev.openflight.companion.core.model.ShotEvent
@@ -11,13 +14,24 @@ import dev.openflight.companion.core.model.ShotEvent
  * What the dashboard renders. The connection card ([connection]) is on screen in every state;
  * the rest depends on whether a shot has arrived yet (ContentView.swift: `shotCard` +
  * `shotHistoryCard` versus `emptyState`).
+ *
+ * [units], [clubStats] and [clubChips] are the web-UI-parity additions from plan R5a: the unit
+ * preference, the session stats and the per-club shot counts, both computed over the full
+ * history (`core:insights`'s `computeClubStats`/`computeClubChips`). They default so every
+ * existing call site (the Compose preview, VM tests) stays source-compatible.
  */
 sealed interface DashboardUiState {
     val connection: ConnectionPanelState
+    val units: UnitSystem
+    val clubStats: ClubStats
+    val clubChips: List<ClubChip>
 
     /** No shot yet: "Waiting for a shot". */
     data class Waiting(
         override val connection: ConnectionPanelState,
+        override val units: UnitSystem = SettingsRepository.DEFAULT_UNITS,
+        override val clubStats: ClubStats = ClubStats.EMPTY,
+        override val clubChips: List<ClubChip> = emptyList(),
     ) : DashboardUiState
 
     /** At least one shot: the latest shot card, plus the previous shots (newest first) when there are any. */
@@ -25,7 +39,15 @@ sealed interface DashboardUiState {
         override val connection: ConnectionPanelState,
         val latest: ShotEvent,
         val previous: List<ShotEvent>,
+        override val units: UnitSystem = SettingsRepository.DEFAULT_UNITS,
+        override val clubStats: ClubStats = ClubStats.EMPTY,
+        override val clubChips: List<ClubChip> = emptyList(),
     ) : DashboardUiState
+}
+
+/** A one-shot signal for haptics and the shot-flash (plan R5a), never re-delivered for a replayed shot. */
+sealed interface DashboardEffect {
+    data object NewShot : DashboardEffect
 }
 
 /**

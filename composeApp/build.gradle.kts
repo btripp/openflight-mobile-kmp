@@ -20,6 +20,7 @@ kotlin {
             api(projects.feature.dashboard)
             api(projects.feature.calibration)
             api(projects.feature.range)
+            api(projects.feature.session)
             implementation(projects.core.designsystem)
             implementation(projects.core.model)
             implementation(libs.kotlinx.coroutines.core)

@@ -7,12 +7,14 @@ import dev.openflight.companion.core.data.dataModule
 import dev.openflight.companion.feature.calibration.calibrationModule
 import dev.openflight.companion.feature.dashboard.dashboardModule
 import dev.openflight.companion.feature.range.rangeModule
+import dev.openflight.companion.feature.session.sessionModule
 import org.koin.core.Koin
 import org.koin.core.module.Module
 import org.koin.dsl.module
 
 /** Every module the app graph needs. Android adds `androidContext(...)` when it starts Koin. */
-val appModules: List<Module> = listOf(dataModule, dashboardModule, calibrationModule, rangeModule)
+val appModules: List<Module> =
+    listOf(dataModule, dashboardModule, calibrationModule, rangeModule, sessionModule)
 
 /**
  * Applies the debug [LaunchOptions] to a started Koin graph, before any UI resolves the

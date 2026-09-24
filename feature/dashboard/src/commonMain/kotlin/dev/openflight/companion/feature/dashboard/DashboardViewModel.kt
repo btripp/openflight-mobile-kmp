@@ -6,14 +6,19 @@ import androidx.lifecycle.viewModelScope
 import dev.openflight.companion.core.data.SettingsRepository
 import dev.openflight.companion.core.data.ShotRepository
 import dev.openflight.companion.core.data.TransportType
+import dev.openflight.companion.core.insights.computeClubChips
+import dev.openflight.companion.core.insights.computeClubStats
 import dev.openflight.companion.core.model.GolfClub
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -50,18 +55,53 @@ class DashboardViewModel(
         }
 
     val uiState: StateFlow<DashboardUiState> =
-        combine(panel, shots.history) { connection, history ->
+        combine(panel, shots.history, settings.units) { connection, history, units ->
+            val stats = computeClubStats(history)
+            val chips = computeClubChips(history)
             val latest = history.firstOrNull()
             if (latest == null) {
-                DashboardUiState.Waiting(connection)
+                DashboardUiState.Waiting(connection, units = units, clubStats = stats, clubChips = chips)
             } else {
-                DashboardUiState.Live(connection, latest = latest, previous = history.drop(1))
+                DashboardUiState.Live(
+                    connection = connection,
+                    latest = latest,
+                    previous = history.drop(1),
+                    units = units,
+                    clubStats = stats,
+                    clubChips = chips,
+                )
             }
         }.stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
             initialValue = DashboardUiState.Waiting(ConnectionPanelState()),
         )
+
+    private val newShotEffects = Channel<DashboardEffect>(Channel.BUFFERED)
+
+    /**
+     * One-shot signals for haptics and the shot-flash (plan R5a). Fires only when
+     * [ShotRepository.history]'s newest shot changes to an id not seen before by this ViewModel:
+     * never for the current value a fresh collector sees (already-present history, including a
+     * `--preview-shot`), and never for a replayed shot, because [ShotRepository]'s
+     * eventId-deduplicated history simply doesn't emit a new value for a duplicate (plan §0.3).
+     */
+    val effects: Flow<DashboardEffect> = newShotEffects.receiveAsFlow()
+
+    init {
+        viewModelScope.launch {
+            var lastEventId: String? = null
+            var seenFirstHistory = false
+            shots.history.collect { history ->
+                val latestId = history.firstOrNull()?.eventId
+                if (seenFirstHistory && latestId != null && latestId != lastEventId) {
+                    newShotEffects.send(DashboardEffect.NewShot)
+                }
+                lastEventId = latestId
+                seenFirstHistory = true
+            }
+        }
+    }
 
     /**
      * The saved transport, or `null` until settings load, so the route never asks for a transport's
