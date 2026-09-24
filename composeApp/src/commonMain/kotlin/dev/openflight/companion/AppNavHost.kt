@@ -6,6 +6,7 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import dev.openflight.companion.feature.calibration.CalibrationRoute
 import dev.openflight.companion.feature.dashboard.DashboardRoute
 import kotlinx.serialization.Serializable
 
@@ -41,7 +42,7 @@ fun AppNavHost(navController: NavHostController = rememberNavController()) {
                 },
             )
         }
-        composable<Calibration> { PlaceholderScreen(title = "Calibrate TI Radar", onBack = onBack) }
+        composable<Calibration> { CalibrationRoute(onBack = onBack) }
         composable<Range> { PlaceholderScreen(title = "Driving Range", onBack = onBack) }
     }
 }
