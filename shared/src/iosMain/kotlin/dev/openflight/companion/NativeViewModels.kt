@@ -3,6 +3,8 @@ package dev.openflight.companion
 
 import com.rickclephas.kmp.nativecoroutines.NativeCoroutines
 import com.rickclephas.kmp.nativecoroutines.NativeCoroutinesState
+import dev.openflight.companion.feature.calibration.CalibrationUiState
+import dev.openflight.companion.feature.calibration.CalibrationViewModel
 import dev.openflight.companion.feature.dashboard.DashboardEffect
 import dev.openflight.companion.feature.dashboard.DashboardUiState
 import dev.openflight.companion.feature.dashboard.DashboardViewModel
@@ -35,4 +37,9 @@ val DashboardViewModel.sideEffects: Flow<DashboardEffect>
 /** The range has no one-shot effects: its flight, replay and dwell are all in the state. */
 @NativeCoroutinesState
 val DrivingRangeViewModel.state: StateFlow<DrivingRangeUiState>
+    get() = uiState
+
+/** [CalibrationViewModel] has no one-shot effects, so only `state` is bridged. */
+@NativeCoroutinesState
+val CalibrationViewModel.state: StateFlow<CalibrationUiState>
     get() = uiState
