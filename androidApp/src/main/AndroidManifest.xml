@@ -4,6 +4,8 @@
 
     <!-- Wi-Fi transport: plain HTTP/SSE to the Pi on the LAN. -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Android 17+ (targetSdk 37): a runtime permission is needed to reach LAN hosts like the Pi. -->
+    <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
 
     <!-- BLE on API 31+. We never derive location from scan results. -->
     <uses-permission
@@ -28,6 +30,7 @@
         android:required="false" />
 
     <application
+        android:name=".OpenFlightApplication"
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"

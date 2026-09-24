@@ -1,5 +1,7 @@
 plugins {
     alias(libs.plugins.openflight.kmp.compose)
+    // Typed navigation routes are @Serializable objects.
+    alias(libs.plugins.kotlin.serialization)
 }
 
 kotlin {
@@ -13,9 +15,23 @@ kotlin {
 
     sourceSets {
         commonMain.dependencies {
+            // `api` so the Android app module can start Koin with these modules.
+            api(projects.core.data)
+            api(projects.feature.dashboard)
             implementation(projects.core.designsystem)
+            implementation(projects.core.model)
+            implementation(libs.kotlinx.coroutines.core)
+            implementation(libs.kotlinx.serialization.json)
             implementation(libs.jetbrains.lifecycle.viewmodelCompose)
             implementation(libs.jetbrains.lifecycle.runtimeCompose)
+            implementation(libs.jetbrains.navigation.compose)
+            implementation(project.dependencies.platform(libs.koin.bom))
+            implementation(libs.koin.compose)
+        }
+        androidMain.dependencies {
+            // requiredBluetoothPermissions for the runtime permission prompt.
+            implementation(projects.core.ble)
+            implementation(libs.androidx.activity.compose)
         }
     }
 }
