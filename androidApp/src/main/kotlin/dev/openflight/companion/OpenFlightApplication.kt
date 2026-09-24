@@ -3,7 +3,6 @@ package dev.openflight.companion
 
 import android.app.Application
 import org.koin.android.ext.koin.androidContext
-import org.koin.core.context.startKoin
 
 /**
  * Starts the Koin graph once per process. `core:data` builds the Bluetooth transport and the
@@ -12,9 +11,8 @@ import org.koin.core.context.startKoin
 class OpenFlightApplication : Application() {
     override fun onCreate() {
         super.onCreate()
-        startKoin {
+        initKoin {
             androidContext(this@OpenFlightApplication)
-            modules(appModules)
         }
     }
 }

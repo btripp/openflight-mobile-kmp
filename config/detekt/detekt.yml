@@ -12,7 +12,7 @@ naming:
 style:
   ForbiddenImport:
     active: true
-    # Invariant 5: feature UIs (and composeApp) use only the core:designsystem
+    # Invariant 5: feature UIs (and androidApp) use only the core:designsystem
     # wrappers (Of*), never raw Material3 components. core/designsystem itself is
     # where those wrappers are built, so it is exempt.
     imports:

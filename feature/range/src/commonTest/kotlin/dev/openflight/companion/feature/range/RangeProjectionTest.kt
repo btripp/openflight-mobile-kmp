@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 package dev.openflight.companion.feature.range
 
-import androidx.compose.ui.geometry.Offset
 import assertk.assertThat
 import assertk.assertions.isCloseTo
 import assertk.assertions.isEqualTo
+import assertk.assertions.isFalse
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isLessThan
 import dev.openflight.companion.core.flight.FlightInputProvenance
@@ -49,7 +49,10 @@ class RangeProjectionTest {
 
     @Test
     fun aPointBehindTheCameraIsNotDrawable() {
-        assertThat(projection.project(Vec3(0.0, 3.4, 9.0))).isEqualTo(Offset.Unspecified)
+        val behind = projection.project(Vec3(0.0, 3.4, 9.0))
+
+        assertThat(behind).isEqualTo(ScreenPoint.Unspecified)
+        assertThat(behind.isSpecified).isFalse()
     }
 
     @Test
@@ -81,7 +84,7 @@ class RangeProjectionTest {
     }
 
     private fun assertPoint(
-        point: Offset,
+        point: ScreenPoint,
         x: Double,
         y: Double,
     ) {

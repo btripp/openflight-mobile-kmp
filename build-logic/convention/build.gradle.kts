@@ -22,7 +22,6 @@ dependencies {
     // (`apply false`), so every module shares one copy.
     compileOnly(libs.android.gradlePlugin)
     compileOnly(libs.kotlin.gradlePlugin)
-    compileOnly(libs.compose.gradlePlugin)
     compileOnly(libs.kotlin.composeCompilerGradlePlugin)
     compileOnly(libs.spotless.gradlePlugin)
     compileOnly(libs.detekt.gradlePlugin)
@@ -44,13 +43,6 @@ gradlePlugin {
                     .pluginId
             implementationClass = "dev.openflight.buildlogic.KmpLibraryConventionPlugin"
         }
-        register("kmpCompose") {
-            id =
-                libs.plugins.openflight.kmp.compose
-                    .get()
-                    .pluginId
-            implementationClass = "dev.openflight.buildlogic.KmpComposeConventionPlugin"
-        }
         register("androidApplication") {
             id =
                 libs.plugins.openflight.android.application
@@ -71,6 +63,13 @@ gradlePlugin {
                     .get()
                     .pluginId
             implementationClass = "dev.openflight.buildlogic.DetektConventionPlugin"
+        }
+        register("androidLibraryCompose") {
+            id =
+                libs.plugins.openflight.android.library.compose
+                    .get()
+                    .pluginId
+            implementationClass = "dev.openflight.buildlogic.AndroidLibraryComposeConventionPlugin"
         }
     }
 }

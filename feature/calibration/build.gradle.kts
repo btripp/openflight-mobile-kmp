@@ -1,5 +1,5 @@
 plugins {
-    alias(libs.plugins.openflight.kmp.compose)
+    alias(libs.plugins.openflight.kmp.library)
 }
 
 kotlin {
@@ -7,15 +7,14 @@ kotlin {
         commonMain.dependencies {
             // A feature depends on core modules only, never on another feature.
             implementation(projects.core.data)
-            implementation(projects.core.designsystem)
             implementation(projects.core.model)
             implementation(projects.core.sensors)
             implementation(libs.kotlinx.coroutines.core)
-            implementation(libs.jetbrains.lifecycle.viewmodelCompose)
-            implementation(libs.jetbrains.lifecycle.runtimeCompose)
-            implementation(project.dependencies.platform(libs.koin.bom))
-            implementation(libs.koin.core)
-            implementation(libs.koin.compose.viewmodel)
+            // Shared presentation (ADR 0001): the KMP ViewModel base class, no Compose.
+            api(libs.androidx.lifecycle.viewmodel)
+            api(project.dependencies.platform(libs.koin.bom))
+            api(libs.koin.core)
+            implementation(libs.koin.core.viewmodel)
         }
         androidMain.dependencies {
             // platformCalibrationModule builds the Android GravitySensor from androidContext().

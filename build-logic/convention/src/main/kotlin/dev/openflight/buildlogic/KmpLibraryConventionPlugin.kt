@@ -16,6 +16,8 @@ import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension
  * - iOS targets `iosArm64` and `iosSimulatorArm64`.
  * - commonTest gets kotlin.test, assertk, Turbine and kotlinx-coroutines-test.
  * - Applies `openflight.spotless` and `openflight.detekt`.
+ * - `allTests`/`check` also run `verifyNoComposeInCommonMain` (ADR 0001: no Compose in
+ *   shared code; Android UI lives in `openflight.android.library.compose` modules).
  *
  * Namespace defaults to `dev.openflight.companion.<gradle path>`.
  */
@@ -52,6 +54,8 @@ class KmpLibraryConventionPlugin : Plugin<Project> {
                     implementation(libs.library("kotlinx-coroutines-test"))
                 }
             }
+
+            registerNoComposeInCommonMainCheck()
         }
     }
 }
