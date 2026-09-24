@@ -169,6 +169,8 @@ private struct RangeMetricValue: Identifiable {
     let unit: String
 
     var id: String { title }
+    var isDegrees: Bool { unit == "°" }
+    var isMissing: Bool { value == ShotMetricFormatter.shared.MISSING }
 }
 
 private struct RangePrimaryMetric: View {
@@ -218,11 +220,12 @@ private struct RangeDetailMetric: View {
                 .foregroundStyle(.white.opacity(0.62))
                 .lineLimit(1)
             HStack(alignment: .firstTextBaseline, spacing: 2) {
-                Text(metric.value)
+                // Degrees attach tight ("11.4°", like the shared formatDegrees); word units follow.
+                Text(metric.isDegrees && !metric.isMissing ? metric.value + "°" : metric.value)
                     .font(.subheadline.weight(.bold).monospacedDigit())
                     .lineLimit(1)
                     .minimumScaleFactor(0.65)
-                if !metric.unit.isEmpty, metric.value != ShotMetricFormatter.shared.MISSING {
+                if !metric.unit.isEmpty, !metric.isDegrees, !metric.isMissing {
                     Text(metric.unit)
                         .font(.system(size: 9, weight: .semibold))
                         .foregroundStyle(.white.opacity(0.62))

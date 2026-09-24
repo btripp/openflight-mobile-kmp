@@ -13,21 +13,40 @@ enum ShotFormat {
     }
 }
 
-/// The latest shot (ContentView.swift `shotCard`).
+/// The spoken form of a unit label, for VoiceOver.
+private func spoken(_ unit: String) -> String {
+    switch unit.lowercased() {
+    case "mph": "miles per hour"
+    case "km/h": "kilometers per hour"
+    case "yds": "yards"
+    case "m": "meters"
+    default: unit
+    }
+}
+
+/// The latest shot (ContentView.swift `shotCard`), plus the web UI's confidence badges, spin
+/// source, carry range and player (plans R5b/R6c). Values follow the unit preference.
 struct ShotCard: View {
     let shot: ShotEvent
+    var units: UnitSystem = .imperial
+    var enrichment: ShotEnrichment?
+
+    private static let spinAdjusted = "spin-adjusted"
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             HStack {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("LATEST SHOT")
-                        .font(.caption.weight(.bold))
-                        .tracking(1.7)
-                        .foregroundStyle(Theme.gold)
+                    Eyebrow("LATEST SHOT")
                     Text(shot.displayClub)
-                        .font(.title2.bold())
+                        .font(.ofDisplay(.title))
                         .accessibilityIdentifier("dashboard.latestShot.club")
+                    if let player = enrichment?.playerName {
+                        Text(player)
+                            .font(.of(.subheadline))
+                            .foregroundStyle(Theme.creamDim)
+                            .accessibilityIdentifier("dashboard.player")
+                    }
                 }
                 Spacer()
                 Image(systemName: "checkmark.circle.fill")
@@ -36,47 +55,40 @@ struct ShotCard: View {
                     .accessibilityHidden(true)
             }
 
-            GeometryReader { geometry in
-                let metricWidth = (geometry.size.width - 10) / 2
-
-                HStack(spacing: 10) {
-                    PrimaryMetric(
-                        title: "BALL SPEED",
-                        value: ShotFormat.number(shot.ballSpeedMph, decimals: 1),
-                        unit: "MPH",
-                        spokenUnit: "miles per hour"
-                    )
-                    .frame(width: metricWidth)
-                    .accessibilityIdentifier("dashboard.ballSpeed")
-                    PrimaryMetric(
-                        title: "CARRY",
-                        value: ShotFormat.number(shot.estimatedCarryYards, decimals: 0),
-                        unit: "YDS",
-                        spokenUnit: "yards"
-                    )
-                    .frame(width: metricWidth)
-                    .accessibilityIdentifier("dashboard.carry")
-                }
-            }
-            .frame(height: 108)
+            primaryMetrics
 
             Divider().overlay(Theme.cream.opacity(0.12))
 
             Grid(alignment: .leading, horizontalSpacing: 24, verticalSpacing: 16) {
                 GridRow {
-                    DetailMetric(title: "Club speed", value: ShotFormat.number(shot.clubSpeedMph, decimals: 1), unit: "mph")
+                    DetailMetric(
+                        title: "Club speed",
+                        value: Units.speed(shot.clubSpeedMph, units),
+                        unit: Units.speedUnit(units)
+                    )
                     DetailMetric(title: "Smash", value: ShotFormat.number(shot.smashFactor, decimals: 2))
                 }
                 GridRow {
-                    DetailMetric(title: "Launch", value: ShotFormat.number(shot.launchAngleVertical, decimals: 1), unit: "°")
-                    DetailMetric(title: "Direction", value: ShotFormat.number(shot.launchAngleHorizontal, decimals: 1), unit: "°")
+                    DetailMetric(
+                        title: "Launch",
+                        value: Units.degrees(shot.launchAngleVertical),
+                        isDegrees: true,
+                        confidence: enrichment?.launchAngleConfidence
+                    )
+                    DetailMetric(title: "Direction", value: Units.degrees(shot.launchAngleHorizontal), isDegrees: true)
                 }
                 GridRow {
-                    DetailMetric(title: "Spin", value: ShotFormat.number(shot.spinRpm, decimals: 0), unit: "rpm")
-                    DetailMetric(title: "Club path", value: ShotFormat.number(shot.clubPathDeg, decimals: 1), unit: "°")
+                    DetailMetric(
+                        title: "Spin",
+                        value: ShotFormat.number(shot.spinRpm, decimals: 0),
+                        unit: "rpm",
+                        confidence: enrichment?.spinQuality,
+                        subtext: enrichment?.spinSource?.label
+                    )
+                    DetailMetric(title: "Club path", value: Units.degrees(shot.clubPathDeg), isDegrees: true)
                 }
                 GridRow {
-                    DetailMetric(title: "Spin axis", value: ShotFormat.number(shot.spinAxisDeg, decimals: 1), unit: "°")
+                    DetailMetric(title: "Spin axis", value: Units.degrees(shot.spinAxisDeg), isDegrees: true)
                     Color.clear
                 }
             }
@@ -90,22 +102,80 @@ struct ShotCard: View {
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier(DashboardTestTags.shared.LATEST_SHOT)
     }
+
+    /// Ball speed and carry. Carry follows `ShotDisplay.tsx`: the spin-adjusted carry when the Pi
+    /// has one (subtext "spin-adjusted"), otherwise the estimate with the carry range as its subtext.
+    private var primaryMetrics: some View {
+        let spinAdjusted = enrichment?.carrySpinAdjustedYards?.doubleValue
+        let carryYards = spinAdjusted ?? shot.estimatedCarryYards
+        let carrySubtext = spinAdjusted != nil ? Self.spinAdjusted : enrichment?.carryRangeText(units: units)
+        return HStack(alignment: .top, spacing: 10) {
+            PrimaryMetric(
+                title: "BALL SPEED",
+                value: Units.speed(shot.ballSpeedMph, units),
+                unit: Units.speedUnit(units)
+            )
+            .accessibilityIdentifier("dashboard.ballSpeed")
+            PrimaryMetric(
+                title: "CARRY",
+                value: Units.distance(carryYards, units),
+                unit: Units.distanceUnit(units),
+                subtext: carrySubtext
+            )
+            .accessibilityIdentifier("dashboard.carry")
+        }
+    }
+}
+
+/// The per-club shot counts (`StatsView.tsx`'s club tabs, display-only here).
+struct ClubChipsCard: View {
+    let chips: [ClubChip]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline) {
+                Eyebrow("SESSION")
+                Spacer()
+                Text("\(chips.reduce(0) { $0 + Int($1.count) }) shots")
+                    .font(.of(.caption, weight: .semibold))
+                    .foregroundStyle(Theme.creamDim)
+            }
+            FlowLayout {
+                ForEach(chips, id: \.club) { chip in
+                    HStack(spacing: 6) {
+                        Text(Units.clubLabel(chip.club))
+                            .font(.of(.subheadline, weight: .semibold))
+                        Text("\(chip.count)")
+                            .font(.of(.caption, weight: .bold).monospacedDigit())
+                            .foregroundStyle(Theme.gold)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 7)
+                    .background(Theme.cream.opacity(0.06), in: Capsule())
+                    .overlay { Capsule().stroke(Theme.cream.opacity(0.14), lineWidth: 1) }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityIdentifier("dashboard.clubChip.\(chip.club)")
+                }
+            }
+        }
+        .card()
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("dashboard.clubChips")
+    }
 }
 
 /// The previous shots, newest first (ContentView.swift `shotHistoryCard`).
 struct ShotHistoryCard: View {
     let shots: [ShotEvent]
+    var units: UnitSystem = .imperial
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .firstTextBaseline) {
-                Text("PREVIOUS SHOTS")
-                    .font(.caption.weight(.bold))
-                    .tracking(1.7)
-                    .foregroundStyle(Theme.gold)
+                Eyebrow("PREVIOUS SHOTS")
                 Spacer()
                 Text(shots.count.formatted())
-                    .font(.caption.monospacedDigit())
+                    .font(.of(.caption, weight: .semibold).monospacedDigit())
                     .foregroundStyle(Theme.creamDim)
                     .accessibilityIdentifier("dashboard.previousShots.count")
             }
@@ -113,7 +183,7 @@ struct ShotHistoryCard: View {
 
             LazyVStack(spacing: 0) {
                 ForEach(Array(shots.enumerated()), id: \.element.eventId) { index, shot in
-                    PreviousShotRow(shot: shot)
+                    PreviousShotRow(shot: shot, units: units)
                         .transition(.opacity)
 
                     if index < shots.count - 1 {
@@ -139,27 +209,36 @@ private struct PrimaryMetric: View {
     let title: String
     let value: String
     let unit: String
-    let spokenUnit: String
+    var subtext: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
             Text(title)
-                .font(.caption2.weight(.bold))
+                .font(.of(.caption2, weight: .bold))
+                .tracking(1.2)
                 .foregroundStyle(Theme.creamDim)
                 .lineLimit(1)
             HStack(alignment: .firstTextBaseline, spacing: 4) {
                 Text(value)
-                    .font(.system(size: 36, weight: .bold, design: .rounded))
+                    .font(.ofDisplay(.largeTitle, size: 40))
                     .monospacedDigit()
                     .lineLimit(1)
                     .minimumScaleFactor(0.62)
                     .allowsTightening(true)
                     .layoutPriority(1)
-                Text(unit)
-                    .font(.caption2.weight(.bold))
+                Text(unit.uppercased())
+                    .font(.of(.caption2, weight: .bold))
                     .foregroundStyle(Theme.creamDim)
                     .lineLimit(1)
                     .fixedSize(horizontal: true, vertical: false)
+            }
+            if let subtext {
+                Text(subtext)
+                    .font(.of(.caption, weight: .medium))
+                    .foregroundStyle(Theme.creamDim)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                    .accessibilityIdentifier("dashboard.carry.subtext")
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -169,61 +248,96 @@ private struct PrimaryMetric: View {
         .background(.black.opacity(0.22), in: RoundedRectangle(cornerRadius: 16))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(title.capitalized)
-        .accessibilityValue(value == ShotMetricFormatter.shared.MISSING ? "not measured" : "\(value) \(spokenUnit)")
+        .accessibilityValue(
+            value == ShotMetricFormatter.shared.MISSING
+                ? "not measured"
+                : "\(value) \(spoken(unit))" + (subtext.map { ", \($0)" } ?? "")
+        )
     }
 }
 
-/// A detail metric. Degree units attach tight ("9.5°"), word units after a space ("2,380 rpm");
-/// a missing value shows "—" alone.
+/// A detail metric. Degrees come pre-formatted and tight ("9.5°", the shared `formatDegrees`),
+/// word units follow after a space ("2,380 rpm"); a missing value shows "—" alone. The web UI's
+/// confidence dots and subtext (spin source) sit underneath.
 private struct DetailMetric: View {
     let title: String
     let value: String
     var unit = ""
+    var isDegrees = false
+    var confidence: ConfidenceLevel?
+    var subtext: String?
 
     private var isMissing: Bool { value == ShotMetricFormatter.shared.MISSING }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(title)
-                .font(.callout)
+                .font(.of(.callout))
                 .foregroundStyle(Theme.creamDim)
-            HStack(alignment: .firstTextBaseline, spacing: unit == "°" ? 0 : 3) {
+            HStack(alignment: .firstTextBaseline, spacing: 3) {
                 Text(value)
-                    .font(.title3.weight(.semibold).monospacedDigit())
+                    .font(.of(.title3, weight: .semibold).monospacedDigit())
                     .lineLimit(1)
                 if !unit.isEmpty, !isMissing {
                     Text(unit)
-                        .font(unit == "°" ? .title3.weight(.semibold) : .callout)
+                        .font(.of(.callout))
                         .foregroundStyle(Theme.creamDim)
                         .lineLimit(1)
                 }
+            }
+            if let subtext {
+                Text(subtext)
+                    .font(.of(.caption, weight: .medium))
+                    .foregroundStyle(Theme.creamDim)
+                    .accessibilityIdentifier("dashboard.subtext.\(title)")
+            }
+            if let confidence {
+                ConfidenceDots(level: confidence)
+                    .accessibilityIdentifier("dashboard.confidence.\(title)")
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(title)
-        .accessibilityValue(isMissing ? "not measured" : "\(value)\(unit == "°" ? " degrees" : unit.isEmpty ? "" : " \(unit)")")
+        .accessibilityValue(accessibilityValue)
         .accessibilityIdentifier(DashboardTestTags.shared.metric(title: title))
+    }
+
+    private var accessibilityValue: String {
+        if isMissing { return "not measured" }
+        var text: String
+        if isDegrees {
+            text = "\(value.replacingOccurrences(of: "°", with: "")) degrees"
+        } else {
+            text = unit.isEmpty ? value : "\(value) \(unit)"
+        }
+        if let subtext { text += ", \(subtext)" }
+        if let confidence { text += ", \(confidence.label) confidence" }
+        return text
     }
 }
 
 private struct PreviousShotRow: View {
     let shot: ShotEvent
+    let units: UnitSystem
 
     var body: some View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(shot.displayClub)
-                    .font(.headline)
+                    .font(.of(.headline, weight: .semibold))
                     .lineLimit(1)
                 Text("Completed shot")
-                    .font(.caption)
+                    .font(.of(.caption))
                     .foregroundStyle(Theme.creamDim)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            HistoryMetric(value: ShotFormat.number(shot.ballSpeedMph, decimals: 1), unit: "MPH")
-            HistoryMetric(value: ShotFormat.number(shot.estimatedCarryYards, decimals: 0), unit: "YDS")
+            HistoryMetric(value: Units.speed(shot.ballSpeedMph, units), unit: Units.speedUnit(units).uppercased())
+            HistoryMetric(
+                value: Units.distance(shot.estimatedCarryYards, units),
+                unit: Units.distanceUnit(units).uppercased()
+            )
         }
         .padding(.vertical, 12)
         .accessibilityElement(children: .combine)
@@ -238,11 +352,11 @@ private struct HistoryMetric: View {
     var body: some View {
         VStack(alignment: .trailing, spacing: 2) {
             Text(value)
-                .font(.title3.weight(.bold).monospacedDigit())
+                .font(.of(.title3, weight: .bold).monospacedDigit())
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
             Text(unit)
-                .font(.caption2.weight(.semibold))
+                .font(.of(.caption2, weight: .semibold))
                 .foregroundStyle(Theme.creamDim)
         }
         .frame(minWidth: 62, alignment: .trailing)

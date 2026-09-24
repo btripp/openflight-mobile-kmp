@@ -18,6 +18,7 @@ struct iOSApp: App {
         let koin = KoinHelper()
         shots = koin.shotRepository()
         launchOptions = koin.launchOptions()
+        AppearanceSetup.apply()
     }
 
     var body: some Scene {
