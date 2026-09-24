@@ -29,7 +29,21 @@ data class RangeSceneDescription(
     val rangeDepthMeters: Double,
     val fairwayWidthMeters: Double,
 ) {
+    /**
+     * Where each of [markers] sits on the ground, in scene space (y up, downrange is −z): they
+     * alternate left and right of the target line, starting on the left (RangeSceneController.swift
+     * `addTargets`). The renderers draw them here and the follow camera frames the nearest one.
+     */
+    val markerScenePositions: List<Vec3> =
+        markers.mapIndexed { index, marker ->
+            val side = if (index % 2 == 0) -1.0 else 1.0
+            Vec3(side * MARKER_LATERAL_OFFSET_METERS, 0.0, -marker.yards * YARDS_TO_METERS)
+        }
+
     companion object {
+        /** The yardage markers' distance left or right of the target line. */
+        const val MARKER_LATERAL_OFFSET_METERS = 9.0
+        const val YARDS_TO_METERS = 0.9144
         private const val FIRST_MARKER_YARDS = 50
         private const val LAST_MARKER_YARDS = 350
         private const val MARKER_YARDS_STEP = 50

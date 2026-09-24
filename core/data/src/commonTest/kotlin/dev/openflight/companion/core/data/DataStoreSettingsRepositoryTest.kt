@@ -44,6 +44,31 @@ class DataStoreSettingsRepositoryTest {
             assertThat(settings.host.first()).isEqualTo("raspberrypi.local:8080")
             assertThat(settings.selectedClub.first()).isEqualTo(GolfClub.DRIVER)
             assertThat(settings.units.first()).isEqualTo(UnitSystem.IMPERIAL)
+            assertThat(settings.rangeCameraMode.first()).isEqualTo(RangeCameraMode.FOLLOW)
+        }
+
+    @Test
+    fun rangeCameraModeRoundTripsBothWays() =
+        runTest {
+            val settings = DataStoreSettingsRepository(backgroundScope.dataStore())
+
+            settings.setRangeCameraMode(RangeCameraMode.FIXED)
+            assertThat(settings.rangeCameraMode.first()).isEqualTo(RangeCameraMode.FIXED)
+
+            settings.setRangeCameraMode(RangeCameraMode.FOLLOW)
+            assertThat(settings.rangeCameraMode.first()).isEqualTo(RangeCameraMode.FOLLOW)
+        }
+
+    @Test
+    fun rangeCameraModeSurvivesANewRepositoryOnTheSameStore() =
+        runTest {
+            val dataStore = backgroundScope.dataStore()
+            DataStoreSettingsRepository(dataStore).setRangeCameraMode(RangeCameraMode.FIXED)
+
+            val reopened = DataStoreSettingsRepository(dataStore)
+
+            assertThat(reopened.rangeCameraMode.first()).isEqualTo(RangeCameraMode.FIXED)
+            assertThat(dataStore.data.first()[stringPreferencesKey("rangeCameraMode")]).isEqualTo("fixed")
         }
 
     @Test
@@ -86,11 +111,13 @@ class DataStoreSettingsRepositoryTest {
                 it[stringPreferencesKey("shotTransport")] = "carrier-pigeon"
                 it[stringPreferencesKey("selectedClub")] = "putter"
                 it[stringPreferencesKey("unitSystem")] = "furlongs-per-fortnight"
+                it[stringPreferencesKey("rangeCameraMode")] = "drone"
             }
             val settings = DataStoreSettingsRepository(dataStore)
 
             assertThat(settings.transport.first()).isEqualTo(TransportType.BLUETOOTH)
             assertThat(settings.selectedClub.first()).isEqualTo(GolfClub.DRIVER)
             assertThat(settings.units.first()).isEqualTo(UnitSystem.IMPERIAL)
+            assertThat(settings.rangeCameraMode.first()).isEqualTo(RangeCameraMode.FOLLOW)
         }
 }

@@ -13,4 +13,5 @@ object RangeTestTags {
     const val READY_CARD = "range.readyCard"
     const val STATUS = "range.status"
     const val SCENE = "range.scene"
+    const val CAMERA_MODE = "range.cameraMode"
 }

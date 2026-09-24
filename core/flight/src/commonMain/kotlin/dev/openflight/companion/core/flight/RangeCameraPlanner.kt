@@ -1,11 +1,22 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 package dev.openflight.companion.core.flight
 
-/** A camera position/target pair, ported from `RangeCameraPlanner.swift`'s `RangeCameraPose`. */
+/**
+ * A camera position/target pair in scene space (y up, downrange is −z), ported from
+ * `RangeCameraPlanner.swift`'s `RangeCameraPose`. [verticalFovDegrees] is the vertical field of
+ * view; the reference's fixed camera uses RealityKit's 58°, and the follow camera (R7a) widens it
+ * to frame the landing.
+ */
 data class RangeCameraPose(
     val position: Vec3,
     val target: Vec3,
-)
+    val verticalFovDegrees: Double = DEFAULT_VERTICAL_FOV_DEGREES,
+) {
+    companion object {
+        /** `camera.camera.fieldOfViewInDegrees = 58` (RangeSceneController.swift). */
+        const val DEFAULT_VERTICAL_FOV_DEGREES = 58.0
+    }
+}
 
 /**
  * Produces a fixed tee-box camera aimed down the target line. The pose never depends on the

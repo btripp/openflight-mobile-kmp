@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 package dev.openflight.companion.feature.range
 
+import dev.openflight.companion.core.data.RangeCameraMode
 import dev.openflight.companion.core.data.SettingsRepository
 import dev.openflight.companion.core.data.ShotRepository
 import dev.openflight.companion.core.data.TransportType
@@ -22,6 +23,11 @@ internal class FakeSettingsRepository(
     override val transport = MutableStateFlow(TransportType.WIFI)
     override val host = MutableStateFlow(SettingsRepository.DEFAULT_HOST)
     override val selectedClub = MutableStateFlow(club)
+    override val rangeCameraMode = MutableStateFlow(SettingsRepository.DEFAULT_RANGE_CAMERA_MODE)
+
+    override suspend fun setRangeCameraMode(mode: RangeCameraMode) {
+        rangeCameraMode.value = mode
+    }
 
     override suspend fun setTransport(transport: TransportType) {
         this.transport.value = transport

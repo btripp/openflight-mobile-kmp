@@ -21,6 +21,23 @@ enum class TransportType(
 }
 
 /**
+ * How the driving range's virtual camera behaves (plan R7a): [FIXED] is the reference's tee
+ * camera, [FOLLOW] chases the ball and settles over where it lands.
+ */
+enum class RangeCameraMode(
+    /** The value persisted in settings. */
+    val storageValue: String,
+) {
+    FIXED("fixed"),
+    FOLLOW("follow"),
+    ;
+
+    companion object {
+        fun fromStorageValue(value: String?): RangeCameraMode? = entries.firstOrNull { it.storageValue == value }
+    }
+}
+
+/**
  * The user's persisted choices: the same three values the iOS app keeps in `@AppStorage`
  * (`shotTransport`, `piHost`, `selectedClub`). Every flow emits the stored value, or the default
  * when nothing (or something unreadable) is stored.
@@ -40,6 +57,12 @@ interface SettingsRepository {
      */
     val units: Flow<UnitSystem> get() = flowOf(DEFAULT_UNITS)
 
+    /**
+     * The driving range's camera (plan R7a), defaulting to [RangeCameraMode.FOLLOW]. A default
+     * getter for the same source-compatibility reason as [units].
+     */
+    val rangeCameraMode: Flow<RangeCameraMode> get() = flowOf(DEFAULT_RANGE_CAMERA_MODE)
+
     suspend fun setTransport(transport: TransportType)
 
     /** Call on submit, not per keystroke: every distinct value builds a new Wi-Fi transport. */
@@ -50,10 +73,14 @@ interface SettingsRepository {
     /** Default no-op so existing implementations don't need to override it (see [units]). */
     suspend fun setUnits(units: UnitSystem) {}
 
+    /** Default no-op so existing implementations don't need to override it (see [rangeCameraMode]). */
+    suspend fun setRangeCameraMode(mode: RangeCameraMode) {}
+
     companion object {
         val DEFAULT_TRANSPORT: TransportType = TransportType.BLUETOOTH
         const val DEFAULT_HOST: String = "raspberrypi.local:8080"
         val DEFAULT_CLUB: GolfClub = GolfClub.DRIVER
         val DEFAULT_UNITS: UnitSystem = UnitSystem.IMPERIAL
+        val DEFAULT_RANGE_CAMERA_MODE: RangeCameraMode = RangeCameraMode.FOLLOW
     }
 }

@@ -11,6 +11,7 @@ import assertk.assertions.isNotEqualTo
 import assertk.assertions.isNotNull
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
+import dev.openflight.companion.core.data.RangeCameraMode
 import dev.openflight.companion.core.model.ConnectionState
 import dev.openflight.companion.core.model.GolfClub
 import kotlinx.coroutines.CoroutineDispatcher
@@ -335,6 +336,85 @@ class DrivingRangeViewModelTest {
                 assertThat(state.club.error).isNull()
             }
         }
+
+    // region Camera mode (plan R7a)
+
+    @Test
+    fun theCameraFollowsTheBallByDefault() =
+        runTest(scheduler) {
+            val viewModel = makeViewModel(FakeShotRepository(settings))
+
+            viewModel.uiState.test {
+                advanceUntilIdle()
+                val state = expectMostRecentItem()
+                assertThat(state.cameraMode).isEqualTo(RangeCameraMode.FOLLOW)
+                assertThat(state.cameraModeLocked).isFalse()
+            }
+        }
+
+    @Test
+    fun toggleSwitchesTheCameraAndPersistsIt() =
+        runTest(scheduler) {
+            val viewModel = makeViewModel(FakeShotRepository(settings))
+
+            viewModel.uiState.test {
+                viewModel.onEvent(DrivingRangeEvent.ToggleCameraMode)
+                awaitUntil { it.cameraMode == RangeCameraMode.FIXED }
+                assertThat(settings.rangeCameraMode.value).isEqualTo(RangeCameraMode.FIXED)
+
+                viewModel.onEvent(DrivingRangeEvent.ToggleCameraMode)
+                awaitUntil { it.cameraMode == RangeCameraMode.FOLLOW }
+                assertThat(settings.rangeCameraMode.value).isEqualTo(RangeCameraMode.FOLLOW)
+            }
+        }
+
+    @Test
+    fun aStoredFixedCameraIsWhatANewRangeOpensWith() =
+        runTest(scheduler) {
+            settings.rangeCameraMode.value = RangeCameraMode.FIXED
+            val viewModel = makeViewModel(FakeShotRepository(settings))
+
+            viewModel.uiState.test {
+                advanceUntilIdle()
+                assertThat(expectMostRecentItem().cameraMode).isEqualTo(RangeCameraMode.FIXED)
+            }
+        }
+
+    @Test
+    fun reducedMotionForcesTheFixedCameraAndLocksTheToggle() =
+        runTest(scheduler) {
+            val viewModel = makeViewModel(FakeShotRepository(settings))
+
+            viewModel.uiState.test {
+                viewModel.onEvent(DrivingRangeEvent.ReduceMotionChanged(enabled = true))
+                val locked = awaitUntil { it.cameraModeLocked }
+                assertThat(locked.cameraMode).isEqualTo(RangeCameraMode.FIXED)
+
+                viewModel.onEvent(DrivingRangeEvent.ToggleCameraMode)
+                advanceUntilIdle()
+                expectNoEvents()
+                assertThat(settings.rangeCameraMode.value).isEqualTo(RangeCameraMode.FOLLOW)
+
+                viewModel.onEvent(DrivingRangeEvent.ReduceMotionChanged(enabled = false))
+                val unlocked = awaitUntil { !it.cameraModeLocked }
+                assertThat(unlocked.cameraMode).isEqualTo(RangeCameraMode.FOLLOW)
+            }
+        }
+
+    @Test
+    fun theCameraModeSurvivesAFlight() =
+        runTest(scheduler) {
+            settings.rangeCameraMode.value = RangeCameraMode.FIXED
+            val shots = FakeShotRepository(settings)
+            val viewModel = makeViewModel(shots)
+
+            viewModel.uiState.test {
+                shots.emit(makeDrivingRangeShot())
+                assertThat(awaitUntil { it.phase == RangePhase.Flying }.cameraMode).isEqualTo(RangeCameraMode.FIXED)
+            }
+        }
+
+    // endregion
 
     /** Awaits states (virtual time advances meanwhile) until one matches, like the Swift `waitUntil`. */
     private suspend fun ReceiveTurbine<DrivingRangeUiState>.awaitUntil(

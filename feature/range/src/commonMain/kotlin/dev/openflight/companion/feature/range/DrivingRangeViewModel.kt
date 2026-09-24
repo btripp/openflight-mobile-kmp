@@ -3,6 +3,7 @@ package dev.openflight.companion.feature.range
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import dev.openflight.companion.core.data.RangeCameraMode
 import dev.openflight.companion.core.data.SettingsRepository
 import dev.openflight.companion.core.data.ShotRepository
 import dev.openflight.companion.core.flight.BallFlightSimulator
@@ -22,6 +23,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -35,13 +37,15 @@ import kotlinx.coroutines.withContext
  *   queued shot flies after the current one lands.
  * - The landing dwells for [LANDING_DWELL_MILLIS] before the next shot or [RangePhase.Waiting].
  * - [suspend] (background, screen gone) cancels everything and returns to waiting.
+ * - The camera mode (plan R7a) is the persisted [SettingsRepository.rangeCameraMode], forced to
+ *   [RangeCameraMode.FIXED] while the platform asks for reduced motion.
  *
  * The simulation runs on [computeDispatcher] (`Dispatchers.Default`); tests inject a test
  * dispatcher so the dwell and the simulation run on virtual time.
  */
 class DrivingRangeViewModel(
     private val shots: ShotRepository,
-    settings: SettingsRepository,
+    private val settings: SettingsRepository,
     private val resolver: FlightInputResolver = FlightInputResolver(),
     private val simulation: (FlightInput) -> FlightTrajectory = BallFlightSimulator()::simulate,
     private val computeDispatcher: CoroutineDispatcher = Dispatchers.Default,
@@ -49,6 +53,11 @@ class DrivingRangeViewModel(
     private val initialShot = shots.latestShot.value
     private val flight = MutableStateFlow(FlightState(phase = RangePhase.Waiting, displayedShot = initialShot))
     private val clubRequest = MutableStateFlow(ClubRequest())
+    private val reduceMotion = MutableStateFlow(false)
+    private val camera =
+        combine(settings.rangeCameraMode, reduceMotion) { preferred, reduced ->
+            RangeCameraState(mode = if (reduced) RangeCameraMode.FIXED else preferred, locked = reduced)
+        }
 
     private var lastObservedEventId: String? = initialShot?.eventId
     private var pendingShot: ShotEvent? = null
@@ -64,7 +73,8 @@ class DrivingRangeViewModel(
             settings.selectedClub,
             shots.connectionState,
             clubRequest,
-        ) { flight, club, connection, request ->
+            camera,
+        ) { flight, club, connection, request, camera ->
             val clubState =
                 RangeClubState(
                     selected = club,
@@ -74,9 +84,9 @@ class DrivingRangeViewModel(
                 )
             val shot = flight.displayedShot
             if (shot == null) {
-                DrivingRangeUiState.Ready(clubState)
+                DrivingRangeUiState.Ready(clubState, camera)
             } else {
-                DrivingRangeUiState.Showing(shot, flight.phase, flight.activeFlight, clubState)
+                DrivingRangeUiState.Showing(shot, flight.phase, flight.activeFlight, clubState, camera)
             }
         }.stateIn(
             scope = viewModelScope,
@@ -93,6 +103,8 @@ class DrivingRangeViewModel(
             DrivingRangeEvent.Replay -> replayDisplayedShot()
             DrivingRangeEvent.FlightCompleted -> animationCompleted()
             is DrivingRangeEvent.ClubSelected -> changeClub(event.club)
+            DrivingRangeEvent.ToggleCameraMode -> toggleCameraMode()
+            is DrivingRangeEvent.ReduceMotionChanged -> reduceMotion.value = event.enabled
         }
     }
 
@@ -171,6 +183,19 @@ class DrivingRangeViewModel(
             prepare(next)
         } else {
             flight.value = flight.value.copy(phase = RangePhase.Waiting)
+        }
+    }
+
+    /** Persists the other camera; the settings flow brings it back into the state. Locked under reduced motion. */
+    private fun toggleCameraMode() {
+        if (reduceMotion.value) return
+        viewModelScope.launch {
+            val next =
+                when (settings.rangeCameraMode.first()) {
+                    RangeCameraMode.FIXED -> RangeCameraMode.FOLLOW
+                    RangeCameraMode.FOLLOW -> RangeCameraMode.FIXED
+                }
+            settings.setRangeCameraMode(next)
         }
     }
 
