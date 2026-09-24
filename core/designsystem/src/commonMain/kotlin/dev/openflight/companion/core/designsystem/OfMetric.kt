@@ -4,6 +4,7 @@ package dev.openflight.companion.core.designsystem
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
@@ -50,7 +51,10 @@ fun OfMetricPrimary(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
         )
-        Row(verticalAlignment = Alignment.Bottom) {
+        // FlowRow (not Row): at a large system font scale, "142.3" plus " MPH" can be wider
+        // than the tile. Row would force the unit to wrap character-by-character ("MP"/"H");
+        // FlowRow wraps the whole unit token onto its own line instead.
+        FlowRow(itemVerticalAlignment = Alignment.Bottom) {
             Text(
                 text = value,
                 fontSize = OfMetricValueFontSize,
@@ -63,6 +67,7 @@ fun OfMetricPrimary(
                 text = unitSuffix(unit),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
                 modifier = Modifier.padding(bottom = OfSpacing.Xs),
             )
         }
@@ -94,7 +99,8 @@ fun OfMetricDetail(
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        Row(verticalAlignment = Alignment.Bottom) {
+        // See OfMetricPrimary above for why this is a FlowRow rather than a Row.
+        FlowRow(itemVerticalAlignment = Alignment.Bottom) {
             Text(
                 text = value,
                 style = MaterialTheme.typography.titleMedium,
@@ -106,6 +112,7 @@ fun OfMetricDetail(
                     text = unitSuffix(unit),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
                 )
             }
         }
