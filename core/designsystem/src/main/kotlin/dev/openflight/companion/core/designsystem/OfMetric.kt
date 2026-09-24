@@ -27,6 +27,9 @@ import androidx.compose.ui.unit.dp
  * independently, but [Modifier.semantics] with `mergeDescendants = true` collapses them
  * into one TalkBack/VoiceOver stop reading a full phrase, for example
  * "Ball speed, 139.1 miles per hour", instead of three separate announcements.
+ *
+ * @param subtext an optional dim line under the value, for example the carry range
+ *   "231-255 yds" or "spin-adjusted" (`ShotDisplay.tsx`'s `metric-card__subtext`).
  */
 @Composable
 fun OfMetricPrimary(
@@ -34,6 +37,7 @@ fun OfMetricPrimary(
     value: String,
     unit: String,
     modifier: Modifier = Modifier,
+    subtext: String? = null,
 ) {
     Column(
         modifier =
@@ -69,6 +73,15 @@ fun OfMetricPrimary(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 modifier = Modifier.padding(bottom = OfSpacing.Xs),
+            )
+        }
+        subtext?.let {
+            Text(
+                text = it,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
         }
     }
@@ -154,6 +167,8 @@ private fun spokenUnit(unit: String): String =
     when (unit.trim().lowercase()) {
         "" -> ""
         "mph" -> "miles per hour"
+        "km/h" -> "kilometers per hour"
+        "m" -> "meters"
         "yds" -> "yards"
         "rpm" -> "revolutions per minute"
         "°" -> "degrees"
