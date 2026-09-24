@@ -5,11 +5,13 @@ import androidx.activity.ComponentActivity
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasContentDescriptionExactly
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -46,14 +48,18 @@ class DashboardScreenTest {
     fun givenAShotWithoutOptionalMetrics_whenShown_thenTheyRenderAsDashesWithoutUnits() {
         show(DashboardUiState.Live(ConnectionPanelState(state = ConnectionState.Connected), bareShot, emptyList()))
 
+        // OfMetricDetail merges its title/value/unit into one TalkBack/VoiceOver stop
+        // (accessibility task 3), so inspecting the individual leaf Text nodes below needs the
+        // unmerged tree.
         for (title in listOf("Club speed", "Smash", "Launch", "Direction", "Spin", "Club path", "Spin axis")) {
             val cell = hasAnyAncestor(hasTestTag(DashboardTestTags.metric(title)))
-            composeRule.onAllNodes(hasText("—") and cell).assertCountEquals(1)
+            composeRule.onAllNodes(hasText("—") and cell, useUnmergedTree = true).assertCountEquals(1)
         }
         for (unit in listOf("mph", "°", "rpm")) {
             composeRule
                 .onAllNodes(
                     hasText(unit, substring = true) and hasAnyAncestor(hasTestTag(DashboardTestTags.LATEST_SHOT)),
+                    useUnmergedTree = true,
                 ).assertCountEquals(0)
         }
         composeRule.onNodeWithText("151.4").assertIsDisplayed()
@@ -65,11 +71,13 @@ class DashboardScreenTest {
         show(DashboardUiState.Live(ConnectionPanelState(state = ConnectionState.Connected), fullShot, emptyList()))
 
         val spin = hasAnyAncestor(hasTestTag(DashboardTestTags.metric("Spin")))
-        composeRule.onAllNodes(hasText("2,380") and spin).assertCountEquals(1)
-        composeRule.onAllNodes(hasText("rpm", substring = true) and spin).assertCountEquals(1)
+        composeRule.onAllNodes(hasText("2,380") and spin, useUnmergedTree = true).assertCountEquals(1)
+        composeRule.onAllNodes(hasText("rpm", substring = true) and spin, useUnmergedTree = true).assertCountEquals(1)
         composeRule
-            .onAllNodes(hasText("1.47") and hasAnyAncestor(hasTestTag(DashboardTestTags.metric("Smash"))))
-            .assertCountEquals(1)
+            .onAllNodes(
+                hasText("1.47") and hasAnyAncestor(hasTestTag(DashboardTestTags.metric("Smash"))),
+                useUnmergedTree = true,
+            ).assertCountEquals(1)
     }
 
     @Test
@@ -152,6 +160,17 @@ class DashboardScreenTest {
         composeRule.onNodeWithTag(DashboardTestTags.CLUB_ERROR).performClick()
 
         assertEquals(listOf<DashboardEvent>(DashboardEvent.DismissError), events)
+    }
+
+    @Test
+    fun givenADegreeMetric_whenShown_thenItsContentDescriptionIsOneMergedPhrase() {
+        show(DashboardUiState.Live(ConnectionPanelState(state = ConnectionState.Connected), fullShot, emptyList()))
+
+        // A screen reader must announce the title, value and unit as one phrase, and spell out
+        // the degree sign, instead of stopping on "Launch", then "12.6", then "°" separately.
+        composeRule
+            .onNodeWithTag(DashboardTestTags.metric("Launch"))
+            .assert(hasContentDescriptionExactly("Launch, 12.6 degrees"))
     }
 
     @Test
