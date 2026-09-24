@@ -4,8 +4,8 @@ config:
 
 naming:
   FunctionNaming:
-    # Composables are PascalCase.
-    ignoreAnnotated: ['Composable']
+    # Composables are PascalCase; instrumented/UI tests are named given_when_then.
+    ignoreAnnotated: ['Composable', 'Test']
   TopLevelPropertyNaming:
     constantPattern: '[A-Z][A-Za-z0-9_]*'
 
@@ -29,6 +29,9 @@ style:
     maxLineLength: 120
 
 complexity:
+  TooManyFunctions:
+    # detekt's default test excludes miss the KMP test source sets (androidDeviceTest, ...).
+    excludes: ['**/*Test/**', '**/*Test.kt']
   LongParameterList:
     ignoreDefaultParameters: true
     ignoreAnnotated: ['Composable']

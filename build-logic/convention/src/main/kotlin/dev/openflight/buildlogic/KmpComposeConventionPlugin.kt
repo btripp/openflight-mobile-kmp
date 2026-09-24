@@ -15,6 +15,11 @@ import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension
  * Adds the Compose compiler, the CMP runtime/foundation/ui/material3/resources
  * artifacts to commonMain, and enables Android resources so Compose resources work
  * in the Android KMP library target.
+ *
+ * Also enables Android **device** (instrumented) tests in `androidDeviceTest`, with the
+ * Compose UI test rule (`createAndroidComposeRule<ComponentActivity>()`) on the classpath.
+ * They need a device or emulator: `./gradlew :<module>:connectedAndroidDeviceTest`. They
+ * are not part of `allTests`.
  */
 class KmpComposeConventionPlugin : Plugin<Project> {
     override fun apply(target: Project) {
@@ -28,6 +33,9 @@ class KmpComposeConventionPlugin : Plugin<Project> {
                     androidResources {
                         enable = true
                     }
+                    withDeviceTest {
+                        instrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+                    }
                 }
 
                 sourceSets.getByName("commonMain").dependencies {
@@ -40,6 +48,14 @@ class KmpComposeConventionPlugin : Plugin<Project> {
                 }
                 sourceSets.getByName("androidMain").dependencies {
                     implementation(libs.library("compose-uiToolingPreview"))
+                }
+                sourceSets.getByName("androidDeviceTest").dependencies {
+                    implementation(libs.library("kotlin-test"))
+                    implementation(libs.library("androidx-compose-ui-test-junit4"))
+                    implementation(libs.library("androidx-compose-ui-test-manifest"))
+                    implementation(libs.library("androidx-test-runner"))
+                    implementation(libs.library("androidx-test-ext-junit"))
+                    implementation(libs.library("androidx-test-espresso-core"))
                 }
             }
 
