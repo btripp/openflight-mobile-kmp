@@ -20,6 +20,14 @@ jobs:
           distribution: temurin
           java-version: "21"
       - uses: gradle/actions/setup-gradle@v4
+      - name: No Compose in shared code (ADR 0001)
+        run: |
+          if grep -rn "androidx.compose\|org.jetbrains.compose" feature/*/src/commonMain shared/src; then
+            echo "Compose referenced in shared (commonMain) code"; exit 1
+          fi
+          if grep -rn "org.jetbrains.compose" --include=*.kts --include=*.toml .; then
+            echo "Compose Multiplatform referenced in the build"; exit 1
+          fi
       - name: Check, test, assemble
         # allTests on Linux has no iOS test tasks to run; exclude them explicitly anyway.
         run: >
@@ -40,8 +48,8 @@ jobs:
         with:
           path: ~/.konan
           key: konan-${{ runner.os }}-${{ hashFiles('gradle/libs.versions.toml') }}
-      - name: iOS simulator tests
-        run: ./gradlew iosSimulatorArm64Test
+      - name: iOS simulator tests + Shared framework
+        run: ./gradlew iosSimulatorArm64Test :shared:linkDebugFrameworkIosSimulatorArm64
       - name: Xcode build
         run: >
           xcodebuild -project iosApp/iosApp.xcodeproj -scheme iosApp

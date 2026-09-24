@@ -1,8 +1,11 @@
 # OpenFlight Companion (Kotlin Multiplatform)
 
 An Android + iOS companion app for [OpenFlight](https://openflight.dev), the DIY golf launch
-monitor. It talks to the Pi over Bluetooth LE or Wi-Fi (SSE), and the UI is one Compose
-Multiplatform codebase shared between both platforms.
+monitor. It talks to the Pi over Bluetooth LE or Wi-Fi (SSE). Each platform has a native UI
+(Jetpack Compose on Android, SwiftUI on iOS) over the same shared Kotlin Multiplatform
+ViewModels, repositories and transports ([ADR 0001](docs/adr/0001-native-ui-shared-viewmodels.md)).
+The SwiftUI screens are being ported (plan §8, R2–R3); until then the iOS app is a placeholder
+that links the shared framework.
 
 ## Features
 
@@ -46,16 +49,17 @@ project, so it is a derivative work under the same license. Kotlin sources carry
 
 | Path | What |
 |---|---|
-| `androidApp/` | Android application (`com.android.application`), hosts `App()` in `MainActivity` |
-| `composeApp/` | KMP shared app shell (Android library + iOS `ComposeApp.framework`): nav host, Koin DI graph |
-| `iosApp/` | Xcode project, embeds `ComposeApp.framework` through a Gradle build phase |
+| `androidApp/` | Android application: `MainActivity`, the Jetpack `navigation-compose` nav host, runtime permission prompts, launch-option intent extras, Koin start |
+| `shared/` | KMP, no UI: common Koin bootstrap (`initKoin`), `LaunchOptions`, the preview repository, and the iOS umbrella framework `Shared.framework` (exports `core:model`/`core:data`/`core:insights` and every `feature:*` ViewModel module, plus `KoinHelper` for Swift) |
+| `iosApp/` | Xcode project (SwiftUI), embeds `Shared.framework` through a Gradle build phase |
 | `core/model`, `core/protocol` | Pure data types and the wire-protocol codec (frames, SSE parsing, control envelopes); no I/O |
 | `core/ble`, `core/network` | The BLE (Kable-backed) and Wi-Fi/SSE transports, both implementing `core/protocol`'s `ShotTransport` |
 | `core/data` | `ShotRepository`/`SettingsRepository` — the single source of truth the UI observes as `Flow`s |
 | `core/flight` | Pure ball-flight math (RK4 simulator, camera projection) for the driving range |
 | `core/sensors` | Gravity sensor `expect`/`actual` and the phone-orientation calibration math |
-| `core/designsystem` | The `Of*` component wrappers every feature UI must use instead of raw Material3 |
-| `feature/dashboard`, `feature/calibration`, `feature/range` | The three screens |
+| `core/designsystem` | Android-only (Jetpack Compose): the `Of*` component wrappers every feature UI must use instead of raw Material3 |
+| `feature/dashboard`, `feature/calibration`, `feature/range`, `feature/session` | KMP, shared presentation: each screen's `ViewModel`, `UiState`, events and pure helpers (no Compose in `commonMain`) |
+| `feature/<name>/ui` | Android-only (Jetpack Compose): that screen's composables and its device UI tests |
 | `build-logic/` | Gradle convention plugins (`openflight.*`) |
 | `gradle/libs.versions.toml` | Single source of truth for versions |
 | `tools/` | Dev helpers (`fire-mock-shot.py`, the BLE frame-golden generator) |
@@ -73,7 +77,7 @@ export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"  
 ./gradlew spotlessCheck detekt          # formatting + static analysis
 ./gradlew allTests                      # Android host tests + iOS simulator tests, every module
 ./gradlew :androidApp:assembleDebug     # Android APK
-./gradlew :composeApp:linkDebugFrameworkIosSimulatorArm64
+./gradlew :shared:linkDebugFrameworkIosSimulatorArm64
 
 xcodebuild -project iosApp/iosApp.xcodeproj -scheme iosApp \
   -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build
@@ -88,15 +92,17 @@ environment.
 ```bash
 ./gradlew allTests                                       # every module's host + iOS simulator tests
 ./gradlew :core:model:allTests :core:protocol:allTests    # a single module
-./gradlew :feature:dashboard:connectedAndroidDeviceTest   # Compose UI tests, needs a booted emulator/device
-./gradlew :feature:calibration:connectedAndroidDeviceTest
-./gradlew :feature:range:connectedAndroidDeviceTest
+./gradlew :feature:dashboard:ui:connectedDebugAndroidTest   # Compose UI tests, needs a booted emulator/device
+./gradlew :feature:calibration:ui:connectedDebugAndroidTest
+./gradlew :feature:range:ui:connectedDebugAndroidTest
+./gradlew :androidApp:connectedDebugAndroidTest              # app-level flow (DrivingRangeFlowTest)
 ```
 
 `allTests` runs `testAndroidHostTest` (JVM-hosted Android unit tests, no emulator needed) and
-`iosSimulatorArm64Test` on every module. The `connectedAndroidDeviceTest` tasks are Compose UI
-tests and need a running Android emulator or a connected device — CI doesn't run these; they
-run manually (see `plans/openflight-kmp-app.md` §5, Step 7).
+`iosSimulatorArm64Test` on every KMP module, `testDebugUnitTest` on the Android-only modules,
+and `verifyNoComposeInCommonMain` (ADR 0001: shared code never mentions Compose). The
+`connectedDebugAndroidTest` tasks are Compose UI tests and need a running Android emulator or
+a connected device — CI doesn't run these; they run manually.
 
 ## Running against the mock server
 
@@ -135,7 +141,7 @@ Pi at all:
 adb shell am start -n dev.openflight.companion/.MainActivity \
   --ez preview_shot true --es transport wifi --es host 10.0.2.2:8091
 
-# iOS
+# iOS (parsed by the shared LaunchOptions; the SwiftUI screens that use them arrive in R2)
 # pass --ui-testing --preview-shot --transport wifi --host <host:port> as launch arguments
 ```
 
