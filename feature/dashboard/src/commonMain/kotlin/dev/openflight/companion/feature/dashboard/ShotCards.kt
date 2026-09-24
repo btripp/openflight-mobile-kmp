@@ -19,6 +19,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
@@ -44,6 +46,7 @@ import dev.openflight.companion.core.designsystem.OfTextRole
 import dev.openflight.companion.core.designsystem.OfTheme
 import dev.openflight.companion.core.designsystem.OfTopBar
 import dev.openflight.companion.core.designsystem.StatusTone
+import dev.openflight.companion.core.designsystem.metricContentDescription
 import dev.openflight.companion.core.model.ConnectionState
 import dev.openflight.companion.core.model.GolfClub
 import dev.openflight.companion.core.model.ShotEvent
@@ -147,8 +150,19 @@ internal fun ShotHistoryCard(previous: List<ShotEvent>) {
 
 @Composable
 private fun PreviousShotRow(shot: ShotEvent) {
+    val ballSpeed = ShotMetricFormatter.number(shot.ballSpeedMph, decimals = 1)
+    val carry = ShotMetricFormatter.number(shot.estimatedCarryYards, decimals = 0)
     Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = OfSpacing.Md),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(vertical = OfSpacing.Md)
+                .semantics(mergeDescendants = true) {
+                    contentDescription =
+                        "${shot.displayClub}, completed shot, " +
+                        "${metricContentDescription("Ball speed", ballSpeed, "MPH")}, " +
+                        metricContentDescription("Carry", carry, "YDS")
+                },
         horizontalArrangement = Arrangement.spacedBy(OfSpacing.Md),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -156,8 +170,8 @@ private fun PreviousShotRow(shot: ShotEvent) {
             OfText(text = shot.displayClub, role = OfTextRole.TitleSmall, maxLines = 1)
             OfText(text = "Completed shot", role = OfTextRole.BodySmall, color = OfColorTokens.CreamDim)
         }
-        HistoryMetric(ShotMetricFormatter.number(shot.ballSpeedMph, decimals = 1), "MPH")
-        HistoryMetric(ShotMetricFormatter.number(shot.estimatedCarryYards, decimals = 0), "YDS")
+        HistoryMetric(ballSpeed, "MPH")
+        HistoryMetric(carry, "YDS")
     }
 }
 

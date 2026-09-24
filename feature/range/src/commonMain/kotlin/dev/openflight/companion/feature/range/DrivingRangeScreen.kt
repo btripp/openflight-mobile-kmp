@@ -57,20 +57,28 @@ fun DrivingRangeScreen(
         )
         Box(modifier = Modifier.fillMaxSize().background(Shade))
         Box(modifier = Modifier.fillMaxSize().safeDrawingPadding()) {
-            RangeMetricsOverlay(
-                uiState = uiState,
-                isLandscape = isLandscape,
-                onSelectClub = { onEvent(DrivingRangeEvent.ClubSelected(it)) },
-            )
+            // Controls and the metrics overlay stack in a Column, not two independently
+            // top-aligned Boxes: at a large system font scale, the status pill in Controls can
+            // wrap onto 2-3 lines, and a fixed top padding on RangeMetricsOverlay (sized for a
+            // single line) would then overlap it. Stacking lets the metrics row push down by
+            // however tall Controls actually measures.
+            Column(modifier = Modifier.fillMaxSize()) {
+                Controls(
+                    uiState = uiState,
+                    onReplay = { onEvent(DrivingRangeEvent.Replay) },
+                    onExit = onExit,
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                )
+                RangeMetricsOverlay(
+                    uiState = uiState,
+                    isLandscape = isLandscape,
+                    onSelectClub = { onEvent(DrivingRangeEvent.ClubSelected(it)) },
+                    modifier = Modifier.weight(1f),
+                )
+            }
             if (uiState is DrivingRangeUiState.Ready) {
                 ReadyCard(modifier = Modifier.align(Alignment.Center))
             }
-            Controls(
-                uiState = uiState,
-                onReplay = { onEvent(DrivingRangeEvent.Replay) },
-                onExit = onExit,
-                modifier = Modifier.align(Alignment.TopCenter).padding(horizontal = 14.dp, vertical = 10.dp),
-            )
         }
     }
 }

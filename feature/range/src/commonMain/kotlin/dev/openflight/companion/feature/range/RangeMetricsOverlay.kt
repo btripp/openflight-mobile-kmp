@@ -50,7 +50,10 @@ internal fun RangeMetricsOverlay(
                 .padding(
                     start = if (isLandscape) 28.dp else 16.dp,
                     end = if (isLandscape) 28.dp else 16.dp,
-                    top = if (isLandscape) 64.dp else 72.dp,
+                    // Controls (Exit/status/Replay) is now a Column sibling above this overlay
+                    // (DrivingRangeScreen.kt), so it already reserves whatever height it needs;
+                    // this only needs a small gap, not a fixed offset sized for one line of text.
+                    top = OfSpacing.Sm,
                     bottom = 14.dp,
                 ),
         horizontalAlignment = Alignment.CenterHorizontally,

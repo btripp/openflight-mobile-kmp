@@ -53,12 +53,17 @@ class DrivingRangeScreenTest {
     fun givenAnEstimatedFlight_whenFlying_thenTheOverlayShowsCarryAndTheEstimatedBadge() {
         show(DrivingRangeUiState.Showing(shot, RangePhase.Flying, ActiveFlight(estimatedTrajectory, playbackId = 1)))
 
+        // OfMetricPrimary merges its title/value/unit into one TalkBack/VoiceOver stop
+        // (accessibility task 3), so inspecting the individual leaf Text nodes below needs the
+        // unmerged tree.
         composeRule
-            .onAllNodes(hasText("264") and hasAnyAncestor(hasTestTag(RangeTestTags.CARRY)))
+            .onAllNodes(hasText("264") and hasAnyAncestor(hasTestTag(RangeTestTags.CARRY)), useUnmergedTree = true)
             .assertCountEquals(1)
         composeRule
-            .onAllNodes(hasText("151.4") and hasAnyAncestor(hasTestTag(RangeTestTags.BALL_SPEED)))
-            .assertCountEquals(1)
+            .onAllNodes(
+                hasText("151.4") and hasAnyAncestor(hasTestTag(RangeTestTags.BALL_SPEED)),
+                useUnmergedTree = true,
+            ).assertCountEquals(1)
         composeRule.onNodeWithTag(RangeTestTags.ESTIMATED).assertIsDisplayed()
         composeRule.onNodeWithText("Estimated flight uses club defaults").assertIsDisplayed()
         composeRule.onNodeWithText("Ball in flight").assertIsDisplayed()
@@ -83,7 +88,7 @@ class DrivingRangeScreenTest {
         composeRule.onNodeWithTag(RangeTestTags.READY_CARD).assertIsDisplayed()
         composeRule.onNodeWithText("Driving Range Ready").assertIsDisplayed()
         composeRule
-            .onAllNodes(hasText("—") and hasAnyAncestor(hasTestTag(RangeTestTags.CARRY)))
+            .onAllNodes(hasText("—") and hasAnyAncestor(hasTestTag(RangeTestTags.CARRY)), useUnmergedTree = true)
             .assertCountEquals(1)
         composeRule.onAllNodes(hasTestTag(RangeTestTags.REPLAY)).assertCountEquals(0)
     }
