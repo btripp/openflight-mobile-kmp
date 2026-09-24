@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 package dev.openflight.companion.feature.range
 
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.isSpecified
 import dev.openflight.companion.core.flight.FlightTrajectory
 import dev.openflight.companion.core.flight.RangeTracerStyle
 import dev.openflight.companion.core.flight.Vec3
@@ -16,7 +14,7 @@ import kotlin.math.max
  * RangeSceneController.swift `configureTracer`). The ball rides the same samples, so it always sits
  * on the tip of the tracer. A sample behind the camera has NaN coordinates and is skipped.
  */
-internal class FlightGeometry private constructor(
+class FlightGeometry private constructor(
     val segments: Int,
 ) {
     private val count = segments + 1
@@ -41,9 +39,9 @@ internal class FlightGeometry private constructor(
     fun sampleAt(progress: Float): Float = progress.coerceIn(0f, 1f) * segments
 
     /** The tracer tip / ball centre at fractional sample [position]. */
-    fun pointAt(position: Float): Offset = interpolate(xs, ys, position)
+    fun pointAt(position: Float): ScreenPoint = interpolate(xs, ys, position)
 
-    fun shadowAt(position: Float): Offset = interpolate(shadowXs, shadowYs, position)
+    fun shadowAt(position: Float): ScreenPoint = interpolate(shadowXs, shadowYs, position)
 
     fun valueAt(
         values: FloatArray,
@@ -59,11 +57,11 @@ internal class FlightGeometry private constructor(
         x: FloatArray,
         y: FloatArray,
         position: Float,
-    ): Offset {
+    ): ScreenPoint {
         val index = position.toInt().coerceIn(0, segments)
         val next = (index + 1).coerceAtMost(segments)
         val fraction = position - index
-        return Offset(x[index] + (x[next] - x[index]) * fraction, y[index] + (y[next] - y[index]) * fraction)
+        return ScreenPoint(x[index] + (x[next] - x[index]) * fraction, y[index] + (y[next] - y[index]) * fraction)
     }
 
     private fun fill(

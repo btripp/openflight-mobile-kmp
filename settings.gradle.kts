@@ -32,7 +32,7 @@ dependencyResolutionManagement {
 }
 
 include(":androidApp")
-include(":composeApp")
+include(":shared")
 include(":core:data")
 include(":core:designsystem")
 include(":core:flight")
@@ -46,3 +46,6 @@ include(":feature:dashboard")
 include(":feature:calibration")
 include(":feature:range")
 include(":feature:session")
+include(":feature:dashboard:ui")
+include(":feature:calibration:ui")
+include(":feature:range:ui")

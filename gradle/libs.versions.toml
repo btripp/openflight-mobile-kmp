@@ -1,13 +1,14 @@
 # Versions checked on 2026-09-24 against Maven Central, Google Maven, the Gradle
-# plugin portal, the Kotlin/AGP compatibility tables and the Compose Multiplatform
-# 1.12.1 changelog. Gradle wrapper: 9.7.1.
+# plugin portal and the Kotlin/AGP compatibility tables. Gradle wrapper: 9.7.1.
 #
 # Compatibility notes:
 # - Kotlin 2.4.20 is fully supported with Gradle 7.6.3–9.7.x and AGP 8.5.2–9.3.x,
 #   so AGP stays on 9.3.x even though 9.4.1 is out (9.4 needs Gradle 9.6 and is not
 #   yet in the KGP support table).
-# - Compose Multiplatform material3 and navigation have no stable build paired with
-#   CMP 1.12.1; the versions below are the ones the CMP 1.12.1 changelog pairs with it.
+# - ADR 0001 (step R1): Android UI is Jetpack Compose, so Compose comes from the Jetpack
+#   Compose BOM (2026.09.00 = Compose 1.12.1, material3 1.4.0), not Compose Multiplatform.
+#   Shared ViewModels use the KMP `androidx.lifecycle:lifecycle-viewmodel` (2.11.0 publishes
+#   iosArm64/iosSimulatorArm64). Versions checked on 2026-09-24 against Google Maven.
 # - detekt 2.x is still alpha, so we use 1.23.8 (latest stable).
 [versions]
 agp = "9.3.3"
@@ -15,19 +16,13 @@ android-compileSdk = "37"
 android-minSdk = "26"
 android-targetSdk = "37"
 androidx-activity = "1.13.0"
-# Jetpack Compose UI that CMP 1.12.1 resolves to on Android; used only for device UI tests.
-androidx-compose-uiTest = "1.12.1"
 androidx-test-runner = "1.7.0"
 androidx-test-extJunit = "1.3.0"
 # ui-test-junit4 pulls an older Espresso that cannot inject input on API 36+ (no InputManager.getInstance).
 androidx-test-espresso = "3.7.0"
 assertk = "0.28.1"
-composeMultiplatform = "1.12.1"
-composeMaterial3 = "1.12.0-alpha03"
 datastore = "1.2.1"
 detekt = "1.23.8"
-jetbrains-lifecycle = "2.11.0"
-jetbrains-navigation = "2.10.0-beta01"
 kable = "0.45.0"
 koin = "4.2.2"
 kotlin = "2.4.20"
@@ -38,6 +33,9 @@ ktor = "3.6.0"
 okio = "3.18.2"
 spotless = "8.10.2"
 turbine = "1.2.1"
+androidx-compose-bom = "2026.09.00"
+androidx-lifecycle = "2.11.0"
+androidx-navigation = "2.10.2"
 
 [libraries]
 # Test
@@ -45,6 +43,8 @@ kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotl
 assertk = { module = "com.willowtreeapps.assertk:assertk", version.ref = "assertk" }
 turbine = { module = "app.cash.turbine:turbine", version.ref = "turbine" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "kotlinx-coroutines" }
+# JUnit 4 binding of kotlin.test for the Android-only modules' JVM unit tests (src/test).
+kotlin-test-junit = { module = "org.jetbrains.kotlin:kotlin-test-junit", version.ref = "kotlin" }
 
 # Kotlinx
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinx-coroutines" }
@@ -52,33 +52,35 @@ kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serializa
 
 # AndroidX
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidx-activity" }
-androidx-compose-ui-test-junit4 = { module = "androidx.compose.ui:ui-test-junit4", version.ref = "androidx-compose-uiTest" }
-androidx-compose-ui-test-manifest = { module = "androidx.compose.ui:ui-test-manifest", version.ref = "androidx-compose-uiTest" }
 androidx-test-runner = { module = "androidx.test:runner", version.ref = "androidx-test-runner" }
 androidx-test-ext-junit = { module = "androidx.test.ext:junit", version.ref = "androidx-test-extJunit" }
 androidx-test-espresso-core = { module = "androidx.test.espresso:espresso-core", version.ref = "androidx-test-espresso" }
 androidx-datastore-preferences-core = { module = "androidx.datastore:datastore-preferences-core", version.ref = "datastore" }
 okio = { module = "com.squareup.okio:okio", version.ref = "okio" }
+# KMP (commonMain) ViewModel base class for the shared feature ViewModels.
+androidx-lifecycle-viewmodel = { module = "androidx.lifecycle:lifecycle-viewmodel", version.ref = "androidx-lifecycle" }
+androidx-lifecycle-runtime-compose = { module = "androidx.lifecycle:lifecycle-runtime-compose", version.ref = "androidx-lifecycle" }
+androidx-lifecycle-viewmodel-compose = { module = "androidx.lifecycle:lifecycle-viewmodel-compose", version.ref = "androidx-lifecycle" }
+androidx-navigation-compose = { module = "androidx.navigation:navigation-compose", version.ref = "androidx-navigation" }
 
-# Compose Multiplatform
-compose-runtime = { module = "org.jetbrains.compose.runtime:runtime", version.ref = "composeMultiplatform" }
-compose-foundation = { module = "org.jetbrains.compose.foundation:foundation", version.ref = "composeMultiplatform" }
-compose-ui = { module = "org.jetbrains.compose.ui:ui", version.ref = "composeMultiplatform" }
-compose-material3 = { module = "org.jetbrains.compose.material3:material3", version.ref = "composeMaterial3" }
-compose-components-resources = { module = "org.jetbrains.compose.components:components-resources", version.ref = "composeMultiplatform" }
-compose-uiTooling = { module = "org.jetbrains.compose.ui:ui-tooling", version.ref = "composeMultiplatform" }
-compose-uiToolingPreview = { module = "org.jetbrains.compose.ui:ui-tooling-preview", version.ref = "composeMultiplatform" }
-jetbrains-lifecycle-viewmodelCompose = { module = "org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-compose", version.ref = "jetbrains-lifecycle" }
-jetbrains-lifecycle-runtimeCompose = { module = "org.jetbrains.androidx.lifecycle:lifecycle-runtime-compose", version.ref = "jetbrains-lifecycle" }
-jetbrains-navigation-compose = { module = "org.jetbrains.androidx.navigation:navigation-compose", version.ref = "jetbrains-navigation" }
+# Jetpack Compose (Android UI only; versions from the BOM)
+androidx-compose-bom = { module = "androidx.compose:compose-bom", version.ref = "androidx-compose-bom" }
+androidx-compose-runtime = { module = "androidx.compose.runtime:runtime" }
+androidx-compose-foundation = { module = "androidx.compose.foundation:foundation" }
+androidx-compose-ui = { module = "androidx.compose.ui:ui" }
+androidx-compose-material3 = { module = "androidx.compose.material3:material3" }
+androidx-compose-ui-tooling = { module = "androidx.compose.ui:ui-tooling" }
+androidx-compose-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling-preview" }
+androidx-compose-ui-test-junit4 = { module = "androidx.compose.ui:ui-test-junit4" }
+androidx-compose-ui-test-manifest = { module = "androidx.compose.ui:ui-test-manifest" }
 
 # DI
 koin-bom = { module = "io.insert-koin:koin-bom", version.ref = "koin" }
 koin-core = { module = "io.insert-koin:koin-core" }
-koin-compose = { module = "io.insert-koin:koin-compose" }
-koin-compose-viewmodel = { module = "io.insert-koin:koin-compose-viewmodel" }
 koin-android = { module = "io.insert-koin:koin-android" }
 koin-test = { module = "io.insert-koin:koin-test" }
+koin-core-viewmodel = { module = "io.insert-koin:koin-core-viewmodel" }
+koin-androidx-compose = { module = "io.insert-koin:koin-androidx-compose" }
 
 # Transports
 kable-core = { module = "com.juul.kable:kable-core", version.ref = "kable" }
@@ -92,7 +94,6 @@ ktor-serialization-kotlinx-json = { module = "io.ktor:ktor-serialization-kotlinx
 # Build logic (compileOnly in build-logic/convention)
 android-gradlePlugin = { module = "com.android.tools.build:gradle", version.ref = "agp" }
 kotlin-gradlePlugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version.ref = "kotlin" }
-compose-gradlePlugin = { module = "org.jetbrains.compose:compose-gradle-plugin", version.ref = "composeMultiplatform" }
 kotlin-composeCompilerGradlePlugin = { module = "org.jetbrains.kotlin:compose-compiler-gradle-plugin", version.ref = "kotlin" }
 spotless-gradlePlugin = { module = "com.diffplug.spotless:spotless-plugin-gradle", version.ref = "spotless" }
 detekt-gradlePlugin = { module = "io.gitlab.arturbosch.detekt:detekt-gradle-plugin", version.ref = "detekt" }
@@ -100,16 +101,16 @@ detekt-gradlePlugin = { module = "io.gitlab.arturbosch.detekt:detekt-gradle-plug
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 android-kotlin-multiplatform-library = { id = "com.android.kotlin.multiplatform.library", version.ref = "agp" }
-compose-multiplatform = { id = "org.jetbrains.compose", version.ref = "composeMultiplatform" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 spotless = { id = "com.diffplug.spotless", version.ref = "spotless" }
 detekt = { id = "io.gitlab.arturbosch.detekt", version.ref = "detekt" }
+android-library = { id = "com.android.library", version.ref = "agp" }
 
 # Convention plugins (build-logic/convention)
 openflight-kmp-library = { id = "openflight.kmp.library" }
-openflight-kmp-compose = { id = "openflight.kmp.compose" }
 openflight-android-application = { id = "openflight.android.application" }
 openflight-spotless = { id = "openflight.spotless" }
 openflight-detekt = { id = "openflight.detekt" }
+openflight-android-library-compose = { id = "openflight.android.library.compose" }

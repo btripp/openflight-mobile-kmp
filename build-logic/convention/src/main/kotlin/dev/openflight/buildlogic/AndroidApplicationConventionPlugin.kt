@@ -12,8 +12,9 @@ import org.jetbrains.kotlin.gradle.dsl.KotlinAndroidProjectExtension
  * `openflight.android.application`: the Android app module.
  *
  * AGP 9 compiles Kotlin itself (built-in Kotlin), so no `kotlin-android` plugin is
- * applied. Adds the Compose compiler, SDK levels from the catalog, Java/Kotlin 17
- * bytecode, spotless and detekt.
+ * applied. Adds the Compose compiler and Jetpack Compose from the BOM
+ * ([addJetpackComposeDependencies], including the `src/androidTest` UI test stack), SDK levels
+ * from the catalog, Java/Kotlin 17 bytecode, spotless and detekt.
  */
 class AndroidApplicationConventionPlugin : Plugin<Project> {
     override fun apply(target: Project) {
@@ -28,6 +29,7 @@ class AndroidApplicationConventionPlugin : Plugin<Project> {
                 defaultConfig {
                     minSdk = libs.version("android-minSdk").toInt()
                     targetSdk = libs.version("android-targetSdk").toInt()
+                    testInstrumentationRunner = TEST_INSTRUMENTATION_RUNNER
                 }
                 compileOptions {
                     sourceCompatibility = JavaVersion.VERSION_17
@@ -48,6 +50,8 @@ class AndroidApplicationConventionPlugin : Plugin<Project> {
                     jvmTarget.set(OPENFLIGHT_JVM_TARGET)
                 }
             }
+
+            addJetpackComposeDependencies()
         }
     }
 }

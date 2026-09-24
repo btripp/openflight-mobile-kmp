@@ -26,7 +26,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         applyDebugLaunchOptions()
         setContent {
-            App()
+            OpenFlightApp()
         }
     }
 

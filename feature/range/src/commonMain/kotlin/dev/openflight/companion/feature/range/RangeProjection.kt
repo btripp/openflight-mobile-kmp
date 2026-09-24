@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 package dev.openflight.companion.feature.range
 
-import androidx.compose.ui.geometry.Offset
 import dev.openflight.companion.core.flight.FlightTrajectory
 import dev.openflight.companion.core.flight.RangeCameraPose
 import dev.openflight.companion.core.flight.Vec3
@@ -21,7 +20,7 @@ import kotlin.math.tan
  * The camera looks from [RangeCameraPose.position] at [RangeCameraPose.target] with world-up +y,
  * and [verticalFovDegrees] spans the canvas height (RealityKit's default orientation).
  */
-internal class RangeProjection(
+class RangeProjection(
     pose: RangeCameraPose,
     val width: Float,
     val height: Float,
@@ -50,26 +49,26 @@ internal class RangeProjection(
         z: Double,
     ): Double = (x - originX) * forward.x + (y - originY) * forward.y + (z - originZ) * forward.z
 
-    /** The canvas point for a scene point, or [Offset.Unspecified] when it is behind the near plane. */
+    /** The canvas point for a scene point, or [ScreenPoint.Unspecified] when it is behind the near plane. */
     fun project(
         x: Double,
         y: Double,
         z: Double,
-    ): Offset {
+    ): ScreenPoint {
         val dx = x - originX
         val dy = y - originY
         val dz = z - originZ
         val depth = dx * forward.x + dy * forward.y + dz * forward.z
-        if (depth <= NEAR_PLANE_METERS) return Offset.Unspecified
+        if (depth <= NEAR_PLANE_METERS) return ScreenPoint.Unspecified
         val cameraX = dx * right.x + dy * right.y + dz * right.z
         val cameraY = dx * up.x + dy * up.y + dz * up.z
-        return Offset(
+        return ScreenPoint(
             x = (centerX + focalLengthPixels * cameraX / depth).toFloat(),
             y = (centerY - focalLengthPixels * cameraY / depth).toFloat(),
         )
     }
 
-    fun project(point: Vec3): Offset = project(point.x, point.y, point.z)
+    fun project(point: Vec3): ScreenPoint = project(point.x, point.y, point.z)
 
     /** The on-screen size of a [meters]-long object facing the camera at [depth]. */
     fun pixels(
@@ -114,9 +113,9 @@ internal class RangeProjection(
 }
 
 /** Seconds the scene takes to fly [trajectory]: 0.9 s under reduced motion (RangeSceneController.swift). */
-internal fun playbackSeconds(
+fun playbackSeconds(
     trajectory: FlightTrajectory,
     reduceMotion: Boolean,
 ): Double = if (reduceMotion) REDUCED_MOTION_PLAYBACK_SECONDS else trajectory.playbackDuration
 
-internal const val REDUCED_MOTION_PLAYBACK_SECONDS = 0.9
+const val REDUCED_MOTION_PLAYBACK_SECONDS = 0.9
