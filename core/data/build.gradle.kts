@@ -1,5 +1,6 @@
 plugins {
     alias(libs.plugins.openflight.kmp.library)
+    alias(libs.plugins.kotlin.serialization)
 }
 
 kotlin {
@@ -12,6 +13,8 @@ kotlin {
             api(projects.core.insights)
             implementation(projects.core.network)
             implementation(projects.core.ble)
+            implementation(projects.core.socketio)
+            implementation(libs.kotlinx.serialization.json)
             implementation(libs.kotlinx.coroutines.core)
             implementation(libs.androidx.datastore.preferences.core)
             implementation(libs.okio)

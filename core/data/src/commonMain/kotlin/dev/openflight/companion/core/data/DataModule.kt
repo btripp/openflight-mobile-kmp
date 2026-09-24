@@ -5,6 +5,7 @@ import dev.openflight.companion.core.ble.BleShotTransport
 import dev.openflight.companion.core.network.PiControlClient
 import dev.openflight.companion.core.network.WifiShotTransport
 import dev.openflight.companion.core.network.openFlightHttpClient
+import dev.openflight.companion.core.socketio.KtorWebSocketTransport
 import io.ktor.client.HttpClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -44,6 +45,16 @@ val dataModule: Module =
                 wifiTransportFactory = get(),
                 scope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
                 piControl = get(),
+            )
+        }
+        // R6a: the Wi-Fi-only Socket.IO session API, sharing the HttpClient's engine.
+        single<PiSessionRepository> {
+            val httpClient = get<HttpClient>()
+            DefaultPiSessionRepository(
+                settings = get(),
+                socketFactory = socketIoPiSocketFactory(KtorWebSocketTransport(httpClient)),
+                cameraSource = KtorPiCameraSource(httpClient),
+                scope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
             )
         }
     }

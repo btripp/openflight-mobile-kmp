@@ -6,7 +6,8 @@ plugins {
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            implementation(libs.kotlinx.serialization.json)
+            // api: the pi.* Socket.IO models keep hardware-specific blobs as JsonElement.
+            api(libs.kotlinx.serialization.json)
         }
     }
 }
