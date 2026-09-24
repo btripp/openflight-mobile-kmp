@@ -6,7 +6,43 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		A1B2C3D4E5F60718293A4B19 /* KMPNativeCoroutinesAsync in Frameworks */ = {isa = PBXBuildFile; productRef = A1B2C3D4E5F60718293A4B18 /* KMPNativeCoroutinesAsync */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		A1B2C3D4E5F60718293A4B0D /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = C034475343AD6AE5CC03F03B /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = F03A6A9D360A7B752A53C958;
+			remoteInfo = iosApp;
+		};
+		A1B2C3D4E5F60718293A4B0E /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = C034475343AD6AE5CC03F03B /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = F03A6A9D360A7B752A53C958;
+			remoteInfo = iosApp;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXTargetDependency section */
+		A1B2C3D4E5F60718293A4B0F /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = F03A6A9D360A7B752A53C958 /* iosApp */;
+			targetProxy = A1B2C3D4E5F60718293A4B0D /* PBXContainerItemProxy */;
+		};
+		A1B2C3D4E5F60718293A4B10 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = F03A6A9D360A7B752A53C958 /* iosApp */;
+			targetProxy = A1B2C3D4E5F60718293A4B0E /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
 /* Begin PBXFileReference section */
+		A1B2C3D4E5F60718293A4B01 /* iosAppUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = iosAppUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		A1B2C3D4E5F60718293A4B02 /* iosAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = iosAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		3799C5A618E08C9C5511EF79 /* OpenFlight.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = OpenFlight.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -34,10 +70,35 @@
 			path = Configuration;
 			sourceTree = "<group>";
 		};
+		A1B2C3D4E5F60718293A4B03 /* iosAppUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = iosAppUITests;
+			sourceTree = "<group>";
+		};
+		A1B2C3D4E5F60718293A4B04 /* iosAppTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = iosAppTests;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		34212E3CDDB1C816C8D1E7A8 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A1B2C3D4E5F60718293A4B19 /* KMPNativeCoroutinesAsync in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A1B2C3D4E5F60718293A4B08 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A1B2C3D4E5F60718293A4B0B /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -52,6 +113,8 @@
 			children = (
 				9B7C780E6AE96DC3E4BA3DD8 /* Configuration */,
 				DE9E3318C01C14304FF722A0 /* iosApp */,
+				A1B2C3D4E5F60718293A4B04 /* iosAppTests */,
+				A1B2C3D4E5F60718293A4B03 /* iosAppUITests */,
 				4D47A7EFB180CA14825F3297 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -60,6 +123,8 @@
 			isa = PBXGroup;
 			children = (
 				3799C5A618E08C9C5511EF79 /* OpenFlight.app */,
+				A1B2C3D4E5F60718293A4B02 /* iosAppTests.xctest */,
+				A1B2C3D4E5F60718293A4B01 /* iosAppUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -85,10 +150,57 @@
 			);
 			name = iosApp;
 			packageProductDependencies = (
+				A1B2C3D4E5F60718293A4B18 /* KMPNativeCoroutinesAsync */,
 			);
 			productName = iosApp;
 			productReference = 3799C5A618E08C9C5511EF79 /* OpenFlight.app */;
 			productType = "com.apple.product-type.application";
+		};
+		A1B2C3D4E5F60718293A4B06 /* iosAppTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A1B2C3D4E5F60718293A4B12 /* Build configuration list for PBXNativeTarget "iosAppTests" */;
+			buildPhases = (
+				A1B2C3D4E5F60718293A4B0A /* Sources */,
+				A1B2C3D4E5F60718293A4B0B /* Frameworks */,
+				A1B2C3D4E5F60718293A4B0C /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				A1B2C3D4E5F60718293A4B10 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				A1B2C3D4E5F60718293A4B04 /* iosAppTests */,
+			);
+			name = iosAppTests;
+			packageProductDependencies = (
+			);
+			productName = iosAppTests;
+			productReference = A1B2C3D4E5F60718293A4B02 /* iosAppTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		A1B2C3D4E5F60718293A4B05 /* iosAppUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A1B2C3D4E5F60718293A4B11 /* Build configuration list for PBXNativeTarget "iosAppUITests" */;
+			buildPhases = (
+				A1B2C3D4E5F60718293A4B07 /* Sources */,
+				A1B2C3D4E5F60718293A4B08 /* Frameworks */,
+				A1B2C3D4E5F60718293A4B09 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				A1B2C3D4E5F60718293A4B0F /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				A1B2C3D4E5F60718293A4B03 /* iosAppUITests */,
+			);
+			name = iosAppUITests;
+			packageProductDependencies = (
+			);
+			productName = iosAppUITests;
+			productReference = A1B2C3D4E5F60718293A4B01 /* iosAppUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
 		};
 /* End PBXNativeTarget section */
 
@@ -103,6 +215,14 @@
 					F03A6A9D360A7B752A53C958 = {
 						CreatedOnToolsVersion = 16.2;
 					};
+					A1B2C3D4E5F60718293A4B06 = {
+						CreatedOnToolsVersion = 16.2;
+						TestTargetID = F03A6A9D360A7B752A53C958;
+					};
+					A1B2C3D4E5F60718293A4B05 = {
+						CreatedOnToolsVersion = 16.2;
+						TestTargetID = F03A6A9D360A7B752A53C958;
+					};
 				};
 			};
 			buildConfigurationList = 27915F717993E2935F687DD8 /* Build configuration list for PBXProject "iosApp" */;
@@ -114,18 +234,37 @@
 			);
 			mainGroup = 8476363595CD78FC003BA767;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				A1B2C3D4E5F60718293A4B17 /* XCRemoteSwiftPackageReference "KMP-NativeCoroutines" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 4D47A7EFB180CA14825F3297 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
 				F03A6A9D360A7B752A53C958 /* iosApp */,
+				A1B2C3D4E5F60718293A4B06 /* iosAppTests */,
+				A1B2C3D4E5F60718293A4B05 /* iosAppUITests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		15DED18AEE50BACF2118AB59 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A1B2C3D4E5F60718293A4B09 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A1B2C3D4E5F60718293A4B0C /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -158,6 +297,20 @@
 
 /* Begin PBXSourcesBuildPhase section */
 		CE4BE213F1E7FD1CE2305C9D /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A1B2C3D4E5F60718293A4B07 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A1B2C3D4E5F60718293A4B0A /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -344,6 +497,78 @@
 			};
 			name = Release;
 		};
+		A1B2C3D4E5F60718293A4B13 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "${TEAM_ID}";
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 0.1.0;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				PRODUCT_BUNDLE_IDENTIFIER = dev.openflight.companion.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				TEST_TARGET_NAME = iosApp;
+			};
+			name = Debug;
+		};
+		A1B2C3D4E5F60718293A4B14 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "${TEAM_ID}";
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 0.1.0;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				PRODUCT_BUNDLE_IDENTIFIER = dev.openflight.companion.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				TEST_TARGET_NAME = iosApp;
+			};
+			name = Release;
+		};
+		A1B2C3D4E5F60718293A4B15 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "${TEAM_ID}";
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 0.1.0;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				PRODUCT_BUNDLE_IDENTIFIER = dev.openflight.companion.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/OpenFlight.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/OpenFlight";
+				OTHER_SWIFT_FLAGS = "$(inherited) -Xfrontend -disable-autolink-framework -Xfrontend Shared";
+			};
+			name = Debug;
+		};
+		A1B2C3D4E5F60718293A4B16 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "${TEAM_ID}";
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 0.1.0;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				PRODUCT_BUNDLE_IDENTIFIER = dev.openflight.companion.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/OpenFlight.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/OpenFlight";
+				OTHER_SWIFT_FLAGS = "$(inherited) -Xfrontend -disable-autolink-framework -Xfrontend Shared";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -365,7 +590,44 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		A1B2C3D4E5F60718293A4B11 /* Build configuration list for PBXNativeTarget "iosAppUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A1B2C3D4E5F60718293A4B13 /* Debug */,
+				A1B2C3D4E5F60718293A4B14 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A1B2C3D4E5F60718293A4B12 /* Build configuration list for PBXNativeTarget "iosAppTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A1B2C3D4E5F60718293A4B15 /* Debug */,
+				A1B2C3D4E5F60718293A4B16 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		A1B2C3D4E5F60718293A4B17 /* XCRemoteSwiftPackageReference "KMP-NativeCoroutines" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/rickclephas/KMP-NativeCoroutines.git";
+			requirement = {
+				kind = exactVersion;
+				version = 1.0.6;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		A1B2C3D4E5F60718293A4B18 /* KMPNativeCoroutinesAsync */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A1B2C3D4E5F60718293A4B17 /* XCRemoteSwiftPackageReference "KMP-NativeCoroutines" */;
+			productName = KMPNativeCoroutinesAsync;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = C034475343AD6AE5CC03F03B /* Project object */;
 }

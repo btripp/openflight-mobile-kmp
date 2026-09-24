@@ -36,6 +36,10 @@ turbine = "1.2.1"
 androidx-compose-bom = "2026.09.00"
 androidx-lifecycle = "2.11.0"
 androidx-navigation = "2.10.2"
+# iOS interop (ADR 0001, R2): SKIE supports Kotlin only up to 2.4.10; KMP-NativeCoroutines
+# 1.0.6 is built for Kotlin 2.4.20 (compiler-plugin mode, no KSP). Keep it in step with the
+# Swift package pinned in iosApp.xcodeproj.
+kmp-nativecoroutines = "1.0.6"
 
 [libraries]
 # Test
@@ -107,6 +111,7 @@ kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", versi
 spotless = { id = "com.diffplug.spotless", version.ref = "spotless" }
 detekt = { id = "io.gitlab.arturbosch.detekt", version.ref = "detekt" }
 android-library = { id = "com.android.library", version.ref = "agp" }
+kmp-nativecoroutines = { id = "com.rickclephas.kmp.nativecoroutines", version.ref = "kmp-nativecoroutines" }
 
 # Convention plugins (build-logic/convention)
 openflight-kmp-library = { id = "openflight.kmp.library" }
