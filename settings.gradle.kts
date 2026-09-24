@@ -34,3 +34,5 @@ dependencyResolutionManagement {
 include(":androidApp")
 include(":composeApp")
 include(":core:designsystem")
+include(":core:model")
+include(":core:protocol")
