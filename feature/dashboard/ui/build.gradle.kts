@@ -8,6 +8,7 @@ dependencies {
     implementation(projects.feature.dashboard)
     implementation(projects.core.data)
     implementation(projects.core.designsystem)
+    implementation(projects.core.insights)
     implementation(projects.core.model)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(platform(libs.koin.bom))

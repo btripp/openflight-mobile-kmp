@@ -2,7 +2,13 @@
 package dev.openflight.companion.feature.dashboard
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.openflight.companion.core.data.TransportType
 import org.koin.androidx.compose.koinViewModel
@@ -18,6 +24,7 @@ import org.koin.androidx.compose.koinViewModel
 fun DashboardRoute(
     onOpenCalibration: () -> Unit,
     onOpenRange: () -> Unit,
+    navigation: DashboardNavigation = DashboardNavigation(),
     transportPermissionRequest: @Composable (transport: TransportType, onGranted: () -> Unit) -> Unit = { _, _ -> },
     viewModel: DashboardViewModel = koinViewModel(),
 ) {
@@ -26,7 +33,22 @@ fun DashboardRoute(
     transport?.let { selected ->
         transportPermissionRequest(selected) { viewModel.onEvent(DashboardEvent.Retry) }
     }
+    // Plan R5b: a haptic tick and the gold shot-flash for every new shot (never for a replay).
+    val haptics = LocalHapticFeedback.current
+    var shotFlashes by remember { mutableIntStateOf(0) }
+    LaunchedEffect(viewModel) {
+        viewModel.effects.collect { effect ->
+            when (effect) {
+                DashboardEffect.NewShot -> {
+                    haptics.performHapticFeedback(HapticFeedbackType.Confirm)
+                    shotFlashes++
+                }
+            }
+        }
+    }
     DashboardScreen(
+        navigation = navigation,
+        shotFlashes = shotFlashes,
         uiState = uiState,
         onEvent = viewModel::onEvent,
         onOpenCalibration = onOpenCalibration,
