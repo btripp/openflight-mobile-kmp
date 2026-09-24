@@ -1038,7 +1038,8 @@ ViewModels are kept as they are.
 ```
 R1 Android: CMP → Jetpack Compose, VMs isolated in commonMain ──> R2 iOS interop + SwiftUI shell + Dashboard
                                                                    ├─> R3a SwiftUI Calibration ─┐
-                                                                   └─> R3b SwiftUI Range (RealityKit) ┴─> R4 icons, XCUITests, docs, v0.1.0-sim
+                                                                   └─> R3b SwiftUI Range (RealityKit) ┴─> R5b parity UI ─> R4 icons, docs, v0.1.0-sim
+(R5a shared parity logic runs in parallel with R1)
 ```
 
 ### R1: Android on Jetpack Compose; shared presentation isolated (model: strongest)
@@ -1108,6 +1109,52 @@ R1 Android: CMP → Jetpack Compose, VMs isolated in commonMain ──> R2 iOS i
   trajectory points come from `core:flight` through the VM.
 - Port `DrivingRangeUITests` (dashboard → range → exit) as an XCUITest.
 - Live run: newest-wins, and carry matches the server.
+
+### R5: "Best of all sources": web-UI parity features that need no server changes
+
+These come from a survey of the Pi's React web UI (`ui/src/**`) on 2026-09-24. The SSE and
+BLE schema is narrow (§0.1), so only features computable from it, or reachable over plain
+HTTP, are in scope.
+
+**R5a: shared logic (KMP; can run in parallel with R1)**
+- Create a new module `core:insights`, depending only on `core:model`. It contains:
+  - A **units** preference (IMPERIAL: mph and yds; METRIC: km/h and m) with conversions and
+    formatting. Degrees render tight ("9.5°").
+  - **Per-club stats**, matching the web `StatsView.tsx`: count, average and maximum ball
+    speed, average carry, average club speed, average smash, and shot counts per club.
+  - **CSV export**, with columns matching the web `ShotList.tsx` export, without the
+    comparator.
+- `core:data` additions:
+  - A persisted `units` setting.
+  - `ShotRepository.deleteShot(eventId)` and `clearHistory()`, which are local only; the web UI
+    uses Socket.IO for these.
+  - A `PiControlClient.shutdown()` calling `POST /api/shutdown`, available on Wi-Fi only.
+- Dashboard VM: `UiState` gains the units, the per-club stats, the club chips with counts, and a
+  `newShot` one-shot event (for haptics and the flash).
+- Add a new `feature:session` VM: stats tabs by club, plus the delete, clear and export
+  actions.
+
+**R5b: native UI for R5a (after R2, on both platforms)**
+- A units toggle in settings.
+- A Session/Stats screen with club tabs.
+- CSV export through the Android share sheet and the iOS `ShareLink`.
+- Swipe to delete, and clear with a confirmation.
+- A haptic and a gold shot-flash on each new shot.
+- Pi shutdown behind a confirmation dialog.
+- Fonts: DM Serif Display for headings and Outfit for body text (OFL), bundled on both
+  platforms.
+
+**Out of scope (needs Pi/server changes; list them in the README):**
+- confidence badges (`launch_angle_confidence`, `spin_quality`, `spin_source`,
+  `carry_range`)
+- a session backfill on connect (`GET /api/session`)
+- server-side delete and simulate
+- swing-speed training mode
+- camera
+- player profiles
+- simulator (GSPro) status
+- the radar debug panel
+- FlightWeb cloud sync
 
 ### R4: App icons, docs, release tag (model: default)
 
