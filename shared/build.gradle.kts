@@ -19,6 +19,7 @@ kotlin {
             export(projects.core.model)
             export(projects.core.data)
             export(projects.core.insights)
+            export(projects.core.flight)
             export(projects.feature.dashboard)
             export(projects.feature.calibration)
             export(projects.feature.range)
@@ -34,6 +35,8 @@ kotlin {
             api(projects.core.model)
             api(projects.core.data)
             api(projects.core.insights)
+            // The range scene (camera, markers, trees, tracer style) is built in Swift from these.
+            api(projects.core.flight)
             api(projects.feature.dashboard)
             api(projects.feature.calibration)
             api(projects.feature.range)

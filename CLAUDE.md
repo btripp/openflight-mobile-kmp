@@ -25,7 +25,7 @@ androidApp (Jetpack NavHost, permissions, launch extras, Koin start)
     ├──> feature:dashboard:ui | feature:calibration:ui | feature:range:ui
     │        └──> its own feature:<name> + core:designsystem + core:* (never another feature)
     └──> shared (KMP: initKoin, LaunchOptions, PreviewShotRepository)
-iosApp (SwiftUI, Xcode) ──> Shared.framework = shared, exporting core:model/data/insights + feature:*
+iosApp (SwiftUI, Xcode) ──> Shared.framework = shared, exporting core:model/data/insights/flight + feature:*
 shared ──> feature:dashboard | feature:calibration | feature:range | feature:session (KMP, VMs)
              └──> core:data ──> core:ble / core:network ──> core:protocol ──> core:model
 feature:range ──> core:flight ; feature:calibration ──> core:sensors ; dashboard/session ──> core:insights
