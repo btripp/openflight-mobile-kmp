@@ -10,6 +10,14 @@ naming:
     constantPattern: '[A-Z][A-Za-z0-9_]*'
 
 style:
+  ForbiddenImport:
+    active: true
+    # Invariant 5: feature UIs (and composeApp) use only the core:designsystem
+    # wrappers (Of*), never raw Material3 components. core/designsystem itself is
+    # where those wrappers are built, so it is exempt.
+    imports:
+      - 'androidx.compose.material3.*'
+    excludes: ['**/core/designsystem/**']
   MagicNumber:
     ignorePropertyDeclaration: true
     ignoreCompanionObjectPropertyDeclaration: true
