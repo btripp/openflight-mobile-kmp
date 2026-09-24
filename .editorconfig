@@ -1,0 +1,22 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+[*.{kt,kts}]
+max_line_length = 120
+ktlint_code_style = ktlint_official
+# Composables are PascalCase by convention.
+ktlint_function_naming_ignore_when_annotated_with = Composable
+ktlint_standard_function-signature = enabled
+
+[*.{yml,yaml,json,toml}]
+indent_size = 2
+
+[*.pbxproj]
+indent_style = tab

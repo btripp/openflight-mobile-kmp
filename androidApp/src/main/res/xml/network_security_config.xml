@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The OpenFlight Pi serves shots over plain HTTP on the local network, at a host the
+  user types in (a .local name or a bare IP). Android cannot allow-list arbitrary
+  user-entered IPs, so cleartext is permitted app-wide. See README "Network security".
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

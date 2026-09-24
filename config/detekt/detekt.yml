@@ -1,0 +1,28 @@
+# Overrides on top of detekt's default config (buildUponDefaultConfig = true).
+config:
+  validation: true
+
+naming:
+  FunctionNaming:
+    # Composables are PascalCase.
+    ignoreAnnotated: ['Composable']
+  TopLevelPropertyNaming:
+    constantPattern: '[A-Z][A-Za-z0-9_]*'
+
+style:
+  MagicNumber:
+    ignorePropertyDeclaration: true
+    ignoreCompanionObjectPropertyDeclaration: true
+    ignoreAnnotated: ['Composable', 'Preview']
+    excludes: ['**/*Test/**', '**/*Test.kt']
+  UnusedPrivateMember:
+    ignoreAnnotated: ['Preview']
+  MaxLineLength:
+    maxLineLength: 120
+
+complexity:
+  LongParameterList:
+    ignoreDefaultParameters: true
+    ignoreAnnotated: ['Composable']
+  LongMethod:
+    ignoreAnnotated: ['Composable']
