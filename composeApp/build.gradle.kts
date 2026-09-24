@@ -18,6 +18,7 @@ kotlin {
             // `api` so the Android app module can start Koin with these modules.
             api(projects.core.data)
             api(projects.feature.dashboard)
+            api(projects.feature.range)
             implementation(projects.core.designsystem)
             implementation(projects.core.model)
             implementation(libs.kotlinx.coroutines.core)
