@@ -26,6 +26,15 @@ class LaunchOptionsTest {
     }
 
     @Test
+    fun rangeModeAndPreviewFlightAreFlagsThatKeepTheRealRepository() {
+        val options = LaunchOptions.fromArguments(listOf("app", "--range-mode", "--preview-flight"))
+
+        assertThat(options.rangeMode).isTrue()
+        assertThat(options.previewFlight).isTrue()
+        assertThat(options.usesFakeRepository).isFalse()
+    }
+
+    @Test
     fun transportAndHostTakeTheFollowingArgument() {
         val options = LaunchOptions.fromArguments(listOf("app", "--transport", "wifi", "--host", "localhost:8091"))
 
