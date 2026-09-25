@@ -47,4 +47,61 @@ object OfIcons {
                 }
             }.build()
     }
+
+    /** A warning triangle with an exclamation mark: a problem the user should read (plan R8f). */
+    val Warning: ImageVector by lazy {
+        ImageVector
+            .Builder(
+                name = "OfWarning",
+                defaultWidth = 24.dp,
+                defaultHeight = 24.dp,
+                viewportWidth = 24f,
+                viewportHeight = 24f,
+            ).apply {
+                path(fill = SolidColor(Color.Black), pathFillType = PathFillType.EvenOdd) {
+                    moveTo(12f, 2.5f)
+                    lineTo(22.5f, 21f)
+                    lineTo(1.5f, 21f)
+                    close()
+                    // The exclamation mark's bar and dot are holes in the triangle.
+                    moveTo(11f, 9f)
+                    lineTo(13f, 9f)
+                    lineTo(12.6f, 15f)
+                    lineTo(11.4f, 15f)
+                    close()
+                    moveTo(11f, 16.5f)
+                    lineTo(13f, 16.5f)
+                    lineTo(13f, 18.5f)
+                    lineTo(11f, 18.5f)
+                    close()
+                }
+            }.build()
+    }
+
+    /** A check mark in a circle: something the Pi confirmed (plan R8f). */
+    val Check: ImageVector by lazy {
+        ImageVector
+            .Builder(
+                name = "OfCheck",
+                defaultWidth = 24.dp,
+                defaultHeight = 24.dp,
+                viewportWidth = 24f,
+                viewportHeight = 24f,
+            ).apply {
+                path(fill = SolidColor(Color.Black), pathFillType = PathFillType.EvenOdd) {
+                    moveTo(12f, 2f)
+                    arcToRelative(10f, 10f, 0f, true, true, 0f, 20f)
+                    arcToRelative(10f, 10f, 0f, true, true, 0f, -20f)
+                    close()
+                    // The tick is a hole in the disc.
+                    moveTo(6.5f, 12.5f)
+                    lineTo(8f, 11f)
+                    lineTo(10.5f, 13.5f)
+                    lineTo(16f, 8f)
+                    lineTo(17.5f, 9.5f)
+                    lineTo(10.5f, 16.5f)
+                    close()
+                }
+            }.build()
+    }
 }

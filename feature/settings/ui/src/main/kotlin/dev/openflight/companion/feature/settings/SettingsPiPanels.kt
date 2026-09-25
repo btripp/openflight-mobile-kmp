@@ -23,7 +23,6 @@ import dev.openflight.companion.core.designsystem.OfText
 import dev.openflight.companion.core.designsystem.OfTextRole
 import dev.openflight.companion.core.designsystem.StatusTone
 import dev.openflight.companion.core.model.pi.CloudUploadState
-import dev.openflight.companion.core.model.pi.TriggerStatus
 
 // The Pi's Wi-Fi-only panels (plan R6c): SimStatus.tsx, DebugPanel.tsx and the cloud upload.
 
@@ -94,7 +93,6 @@ internal fun RadarCard(
             )
         }
         radar.refresh.disabledReason?.let { OfDisabledReason(it) }
-        radar.triggerStatus?.let { TriggerStatusRows(it) }
         if (radar.config == null) {
             OfText(
                 text = "No radar config from the Pi yet",
@@ -121,16 +119,6 @@ internal fun RadarCard(
         }
         Diagnostics(radar.diagnostics)
     }
-}
-
-@Composable
-private fun TriggerStatusRows(status: TriggerStatus) {
-    InfoRow("Mode", status.mode.ifEmpty { "—" })
-    InfoRow("Radar", if (status.radarConnected) "Connected ${status.radarPort.orEmpty()}".trim() else "Not connected")
-    InfoRow(
-        "Triggers",
-        "${status.triggersTotal} total · ${status.triggersAccepted} accepted · ${status.triggersRejected} rejected",
-    )
 }
 
 /** `DebugPanel.tsx`'s trigger history, newest first. */

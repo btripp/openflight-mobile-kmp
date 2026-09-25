@@ -125,9 +125,13 @@ internal class FakeSettingsRepository(
 }
 
 /** A [PiControlClient] whose `shutdown` always answers the given [status] (default: success). */
-internal fun fakePiControlClient(status: String = "shutting_down"): PiControlClient {
+internal fun fakePiControlClient(
+    status: String = "shutting_down",
+    requestedUrls: MutableList<String>? = null,
+): PiControlClient {
     val engine =
-        MockEngine {
+        MockEngine { request ->
+            requestedUrls?.add(request.url.toString())
             respond(
                 content = """{"status":"$status"}""",
                 status = HttpStatusCode.OK,

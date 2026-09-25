@@ -10,6 +10,7 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
+import dev.openflight.companion.core.data.AppLifecycle
 import dev.openflight.companion.core.data.TransportType
 import dev.openflight.companion.core.insights.UnitSystem
 import dev.openflight.companion.core.model.pi.CloudUploadState
@@ -50,7 +51,7 @@ class SettingsViewModelTest {
     @BeforeTest
     fun setUp() {
         Dispatchers.setMain(UnconfinedTestDispatcher())
-        viewModel = SettingsViewModel(shots, settings, piSession)
+        viewModel = SettingsViewModel(shots, settings, piSession, AppLifecycle().apply { onForeground() })
     }
 
     @AfterTest
@@ -243,19 +244,23 @@ class SettingsViewModelTest {
         runTest {
             viewModel.uiState.testIgnoringRest {
                 viewModel.onEvent(SettingsEvent.RequestShutdown)
-                assertThat(awaitUntil { it.shutdown.confirmationRequired }.shutdown.confirmationRequired).isTrue()
-                assertThat(piSession.commands).isEmpty()
+                assertThat(awaitUntil { it.shutdown.confirmationRequired }.shutdown.phase)
+                    .isEqualTo(ShutdownPhase.Confirming)
+                assertThat(shots.shutdownTargets).isEmpty()
 
                 viewModel.onEvent(SettingsEvent.CancelShutdown)
                 awaitUntil { !it.shutdown.confirmationRequired }
                 viewModel.onEvent(SettingsEvent.ConfirmShutdown) // Nothing to confirm any more.
-                assertThat(piSession.commands).isEmpty()
+                assertThat(shots.shutdownTargets).isEmpty()
 
                 viewModel.onEvent(SettingsEvent.RequestShutdown)
                 awaitUntil { it.shutdown.confirmationRequired }
                 viewModel.onEvent(SettingsEvent.ConfirmShutdown)
-                assertThat(awaitUntil { !it.shutdown.confirmationRequired }.shutdown.confirmationRequired).isFalse()
-                assertThat(piSession.commands).containsExactly("shutdown")
+                assertThat(awaitUntil { it.shutdown.phase is ShutdownPhase.Done }.shutdown.phase)
+                    .isEqualTo(ShutdownPhase.Done("pi.local:8080"))
+                // Over HTTP (`POST /api/shutdown`), not the Socket.IO event.
+                assertThat(shots.shutdownTargets).containsExactly("pi.local:8080")
+                assertThat(piSession.commands).isEmpty()
             }
         }
 

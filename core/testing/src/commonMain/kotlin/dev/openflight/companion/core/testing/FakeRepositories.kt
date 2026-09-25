@@ -95,6 +95,17 @@ class FakeShotRepository : ShotRepository {
         shutdownCalls++
     }
 
+    /** Every [shutdownPi] target, in order. */
+    val shutdownTargets = mutableListOf<String>()
+
+    /** Answers [shutdownPi] with a target: returns (the Pi's 200), throws, or suspends. */
+    var shutdownResponse: suspend (String) -> Unit = {}
+
+    override suspend fun shutdownPi(target: String) {
+        shutdownTargets += target
+        shutdownResponse(target)
+    }
+
     /** Sets [history] (newest first) and [latestShot] together. */
     fun setHistory(newestFirst: List<ShotEvent>) {
         history.value = newestFirst

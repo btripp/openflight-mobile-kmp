@@ -20,6 +20,7 @@ import dev.openflight.companion.core.designsystem.OfColorTokens
 import dev.openflight.companion.core.designsystem.OfConfirmDialog
 import dev.openflight.companion.core.designsystem.OfDisabledReason
 import dev.openflight.companion.core.designsystem.OfMessageHostState
+import dev.openflight.companion.core.designsystem.OfNotice
 import dev.openflight.companion.core.designsystem.OfOutlinedButton
 import dev.openflight.companion.core.designsystem.OfPill
 import dev.openflight.companion.core.designsystem.OfScaffold
@@ -77,9 +78,12 @@ fun SettingsScreen(
             UnitsCard(uiState.units, onEvent)
             ConnectionCard(uiState)
             ProfileCard(uiState.profile)
+            LaunchMonitorCard(uiState.trigger)
+            uiState.power?.let { PowerStatusCard(it) }
             SimulatorsCard(uiState.simulators, uiState.profile.availability.disabledReason)
             RadarCard(uiState.radar, onEvent)
-            DebugCard(uiState.debug, onEvent)
+            // Hidden until the Pi reports its debug mode: never offer "Start" before that is known.
+            if (uiState.debug.loaded) DebugCard(uiState.debug, onEvent)
             CloudCard(uiState.cloud, onEvent)
             ShutdownCard(uiState.shutdown, onEvent)
         }
@@ -87,8 +91,8 @@ fun SettingsScreen(
     if (uiState.shutdown.confirmationRequired) {
         OfConfirmDialog(
             title = ShutdownSettings.CONFIRMATION_TEXT,
-            message = "The Pi powers off. You'll need to switch it back on by hand to use OpenFlight again.",
-            confirmLabel = "Shut Down",
+            message = ShutdownPhase.CONFIRM_MESSAGE,
+            confirmLabel = "Stop now",
             destructive = true,
             onConfirm = { onEvent(SettingsEvent.ConfirmShutdown) },
             onDismiss = { onEvent(SettingsEvent.CancelShutdown) },
@@ -140,6 +144,15 @@ private fun ConnectionCard(uiState: SettingsUiState) {
             )
             OfPill(label = uiState.linkDescription, tone = uiState.linkState.tone())
         }
+        // Plan R8f: say what's wrong in words, not only with the pill's colour.
+        uiState.connectionProblem?.let { problem ->
+            OfNotice(
+                title = problem.title,
+                detail = problem.detail,
+                tone = StatusTone.Negative,
+                modifier = Modifier.testTag(SettingsTestTags.CONNECTION_PROBLEM),
+            )
+        }
         if (uiState.mockMode) {
             OfText(text = "The Pi runs in mock mode", role = OfTextRole.BodySmall, color = OfColorTokens.Warning)
         }
@@ -179,24 +192,5 @@ private fun ProfileCard(profile: ProfileSettings) {
         SectionTitle("PROFILE")
         InfoRow("Active profile", profile.activeName ?: "—", Modifier.testTag(SettingsTestTags.PROFILE))
         profile.availability.disabledReason?.let { OfDisabledReason(it) }
-    }
-}
-
-/** `App.tsx`'s power button and "Shut down OpenFlight?" dialog. */
-@Composable
-private fun ShutdownCard(
-    shutdown: ShutdownSettings,
-    onEvent: (SettingsEvent) -> Unit,
-) {
-    OfCard(modifier = Modifier.fillMaxWidth(), contentSpacing = OfSpacing.Md) {
-        SectionTitle("POWER")
-        OfTextButton(
-            text = "Shut Down Pi",
-            destructive = true,
-            enabled = shutdown.shutdown.isAvailable,
-            onClick = { onEvent(SettingsEvent.RequestShutdown) },
-            modifier = Modifier.fillMaxWidth().testTag(SettingsTestTags.SHUTDOWN),
-        )
-        shutdown.shutdown.disabledReason?.let { OfDisabledReason(it) }
     }
 }

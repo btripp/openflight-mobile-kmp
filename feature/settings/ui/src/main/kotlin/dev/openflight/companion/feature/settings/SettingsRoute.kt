@@ -42,6 +42,16 @@ object SettingsTestTags {
     const val SHUTDOWN = "settings.shutdown"
     const val SHUTDOWN_CONFIRM = "settings.shutdown.confirm"
     const val SHUTDOWN_CANCEL = "settings.shutdown.cancel"
+    const val SHUTDOWN_PENDING = "settings.shutdown.pending"
+    const val SHUTDOWN_DONE = "settings.shutdown.done"
+    const val SHUTDOWN_FAILED = "settings.shutdown.failed"
+    const val SHUTDOWN_RETRY = "settings.shutdown.retry"
+    const val SHUTDOWN_DISMISS = "settings.shutdown.dismiss"
+    const val CONNECTION_PROBLEM = "settings.connection.problem"
+    const val TRIGGER = "settings.trigger"
+    const val TRIGGER_WAITING = "settings.trigger.waiting"
+    const val POWER = "settings.power"
+    const val POWER_STATE = "settings.power.state"
 
     /** A radar slider, by its field. */
     fun slider(field: RadarField): String = "settings.radar.${field.name}"

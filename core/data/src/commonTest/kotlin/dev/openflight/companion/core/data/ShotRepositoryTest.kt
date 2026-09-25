@@ -39,6 +39,7 @@ class ShotRepositoryTest {
         val ble = FakeShotTransport("ble", events)
         val wifiTransports = mutableListOf<Pair<String, FakeShotTransport>>()
         val logs = mutableListOf<String>()
+        val shutdownUrls = mutableListOf<String>()
         val sockets = mutableListOf<FakePiSocket>()
         val piSession =
             DefaultPiSessionRepository(
@@ -55,7 +56,7 @@ class ShotRepositoryTest {
                     FakeShotTransport("wifi($host)", events).also { wifiTransports += host to it }
                 },
                 scope = scope,
-                piControl = fakePiControlClient(),
+                piControl = fakePiControlClient(requestedUrls = shutdownUrls),
                 piSession = piSession,
                 log = { logs += it },
             )
@@ -484,6 +485,23 @@ class ShotRepositoryTest {
     fun shutdownPiOverBluetoothFailsWithoutCallingTheServer() =
         runRepositoryTest { h ->
             assertFailsWith<PiShutdownUnsupportedException> { h.repository.shutdownPi() }
+        }
+
+    @Test
+    fun shutdownPiToATargetPostsThereNotToTheSavedHost() =
+        runRepositoryTest(transport = TransportType.WIFI, host = "pi.local:8091") { h ->
+            h.settings.setHost("other.local:8080")
+
+            h.repository.shutdownPi("pi.local:8091")
+
+            assertThat(h.shutdownUrls).containsExactly("http://pi.local:8091/api/shutdown")
+        }
+
+    @Test
+    fun shutdownPiToATargetOverBluetoothFailsWithoutCallingTheServer() =
+        runRepositoryTest { h ->
+            assertFailsWith<PiShutdownUnsupportedException> { h.repository.shutdownPi("pi.local:8091") }
+            assertThat(h.shutdownUrls).isEmpty()
         }
 
     @Test

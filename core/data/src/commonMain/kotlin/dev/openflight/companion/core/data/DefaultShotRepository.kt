@@ -270,8 +270,12 @@ internal class DefaultShotRepository(
 
     override suspend fun shutdownPi() {
         if (activeTransportType.value != TransportType.WIFI) throw PiShutdownUnsupportedException()
-        val host = settings.host.first()
-        piControl.shutdown(host)
+        shutdownPi(settings.host.first())
+    }
+
+    override suspend fun shutdownPi(target: String) {
+        if (activeTransportType.value != TransportType.WIFI) throw PiShutdownUnsupportedException()
+        piControl.shutdown(target)
     }
 
     /** One transport's lifetime: mirror its flows until cancelled, then disconnect it. */

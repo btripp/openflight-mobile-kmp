@@ -33,11 +33,14 @@ struct SettingsContent: View {
             unitsSection
             connectionSection
             profileSection
+            launchMonitorSection
+            if let power = state.power { powerStatusSection(power) }
             simulatorsSection
             radarSection
-            debugSection
+            // Hidden until the Pi reports its debug mode: never offer "Start" before that is known.
+            if state.debug.loaded { debugSection }
             cloudSection
-            powerSection
+            shutdownSection
         }
         .screenBackground()
         .onChange(of: state.shutdown.confirmationRequired, initial: true) { _, required in
@@ -101,6 +104,11 @@ struct SettingsContent: View {
             }
             .accessibilityElement(children: .combine)
             .accessibilityIdentifier("settings.liveSession")
+            if let problem = state.connectionProblem {
+                // Plan R8f: say what's wrong in words, not only with the pill's colour.
+                NoticeRow(title: problem.title, detail: problem.detail, tone: .problem)
+                    .accessibilityIdentifier("settings.connection.problem")
+            }
             if state.mockMode {
                 Text("The Pi runs in mock mode")
                     .font(.of(.subheadline, weight: .medium))
@@ -166,14 +174,6 @@ struct SettingsContent: View {
     private var radarSection: some View {
         let radar = state.radar
         return Section {
-            if let status = radar.triggerStatus {
-                row("Mode", status.mode)
-                row("Radar", status.radarConnected ? "Connected \(status.radarPort ?? "")" : "Not connected")
-                row(
-                    "Triggers",
-                    "\(status.triggersTotal) total · \(status.triggersAccepted) accepted · \(status.triggersRejected) rejected"
-                )
-            }
             if let notice = radar.tuningNotice {
                 Text(notice)
                     .font(.of(.subheadline, weight: .medium))
@@ -301,15 +301,103 @@ struct SettingsContent: View {
         .listRowBackground(Theme.bgCard)
     }
 
-    // MARK: Power
+    // MARK: Launch monitor and power (plan R8f, Expo `device.tsx`)
 
-    private var powerSection: some View {
+    private var launchMonitorSection: some View {
+        Section {
+            switch state.trigger {
+            case let loaded as TriggerCardLoaded:
+                ForEach(loaded.rows, id: \.label) { deviceRow in
+                    row(deviceRow.label, deviceRow.value)
+                }
+            case let unavailable as TriggerCardUnavailable:
+                DisabledReason(reason: unavailable.reason)
+            default:
+                Text(TriggerCardCompanion.shared.WAITING_TEXT)
+                    .font(.of(.subheadline))
+                    .foregroundStyle(Theme.creamDim)
+                    .accessibilityIdentifier("settings.trigger.waiting")
+            }
+        } header: {
+            header("LAUNCH MONITOR")
+        }
+        .listRowBackground(Theme.bgCard)
+    }
+
+    private func powerStatusSection(_ power: PowerCard) -> some View {
+        Section {
+            LabeledContent {
+                HStack(spacing: 6) {
+                    if power.warning {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(Theme.warning)
+                            .accessibilityLabel("Warning")
+                    }
+                    Text(power.stateLabel)
+                        .font(.of(.body, weight: .semibold))
+                        .foregroundStyle(Theme.cream)
+                }
+            } label: {
+                Text("State").font(.of(.body)).foregroundStyle(Theme.creamDim)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("settings.power.state")
+            ForEach(power.rows, id: \.label) { deviceRow in
+                row(deviceRow.label, deviceRow.value)
+            }
+        } header: {
+            header("POWER")
+        }
+        .listRowBackground(Theme.bgCard)
+    }
+
+    // MARK: Stopping OpenFlight (plan R8f shutdown phase machine)
+
+    @ViewBuilder
+    private var shutdownContent: some View {
+        switch state.shutdown.phase {
+        case let pending as ShutdownPhasePending:
+            NoticeRow(title: ShutdownPhaseCompanion.shared.PENDING_TEXT, detail: pending.target, tone: .busy)
+                .accessibilityIdentifier("settings.shutdown.pending")
+        case is ShutdownPhaseDone:
+            NoticeRow(
+                title: ShutdownPhaseCompanion.shared.DONE_TITLE,
+                detail: ShutdownPhaseCompanion.shared.DONE_DETAIL,
+                tone: .success
+            )
+            .accessibilityIdentifier("settings.shutdown.done")
+            Button("OK") { send(SettingsEventDismissShutdown.shared) }
+                .frame(minHeight: 44)
+                .accessibilityIdentifier("settings.shutdown.dismiss")
+        case let failed as ShutdownPhaseFailed:
+            NoticeRow(
+                title: ShutdownPhaseCompanion.shared.FAILED_TITLE,
+                detail: "\(failed.reason) \(ShutdownPhaseCompanion.shared.STILL_RUNNING)",
+                tone: .problem
+            )
+            .accessibilityIdentifier("settings.shutdown.failed")
+            Button("Try again") { send(SettingsEventRetryShutdown.shared) }
+                .frame(minHeight: 44)
+                .accessibilityIdentifier("settings.shutdown.retry")
+            Button("Dismiss") { send(SettingsEventDismissShutdown.shared) }
+                .frame(minHeight: 44)
+                .accessibilityIdentifier("settings.shutdown.dismiss")
+        default:
+            stopButton
+        }
+    }
+
+    private var stopButton: some View {
         let shutdown = state.shutdown.shutdown
-        return Section {
+        return Group {
+            Text("Stops the OpenFlight server. The Pi itself stays on.")
+                .font(.of(.footnote))
+                .foregroundStyle(Theme.creamDim)
             Button(role: .destructive) {
                 send(SettingsEventRequestShutdown.shared)
             } label: {
-                Label("Shut Down Pi", systemImage: "power")
+                Label("Stop OpenFlight", systemImage: "power")
+                    .frame(minHeight: 44)
             }
             .disabled(!shutdown.isAvailable)
             .accessibilityIdentifier("settings.shutdown")
@@ -319,19 +407,25 @@ struct SettingsContent: View {
                 isPresented: shutdownBinding,
                 titleVisibility: .visible
             ) {
-                Button("Shut Down", role: .destructive) { send(SettingsEventConfirmShutdown.shared) }
+                Button("Stop now", role: .destructive) { send(SettingsEventConfirmShutdown.shared) }
                     .accessibilityIdentifier("settings.shutdown.confirm")
                 Button("Cancel", role: .cancel) { send(SettingsEventCancelShutdown.shared) }
                     .accessibilityIdentifier("settings.shutdown.cancel")
             } message: {
-                Text("The Pi powers off. You'll need to switch it back on by hand to use OpenFlight again.")
+                Text(ShutdownPhaseCompanion.shared.CONFIRM_MESSAGE)
             }
             if let reason = shutdown.disabledReason {
                 DisabledReason(reason: reason)
                     .accessibilityIdentifier("settings.shutdown.reason")
             }
+        }
+    }
+
+    private var shutdownSection: some View {
+        Section {
+            shutdownContent
         } header: {
-            header("POWER")
+            header("OPENFLIGHT SERVER")
         }
         .listRowBackground(Theme.bgCard)
     }

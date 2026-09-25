@@ -104,6 +104,14 @@ interface ShotRepository {
      *   repository isn't started.
      */
     suspend fun shutdownPi(): Unit = throw PiShutdownUnsupportedException()
+
+    /**
+     * Like [shutdownPi], but posts to [target] (a `host[:port]` captured when the user confirmed)
+     * instead of the host saved now, so a retry can't drift to a Pi the user switched to later
+     * (plan R8f, Expo `device.tsx`). Needs the Wi-Fi transport active, like [shutdownPi].
+     * Returning means the server answered 200 and is about to exit; it doesn't wait for the exit.
+     */
+    suspend fun shutdownPi(target: String): Unit = throw PiShutdownUnsupportedException()
 }
 
 /** A control call was made while no transport is active (the repository is stopped). */

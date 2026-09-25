@@ -82,6 +82,62 @@ struct DisabledReason: View {
     }
 }
 
+/// A status message with an icon and words, never colour alone (plan R8f; Android's `OfNotice`):
+/// a spinner while busy, a check for success, a warning triangle otherwise. VoiceOver reads it as
+/// one element and hears it announced when it appears or its title changes.
+struct NoticeRow: View {
+    enum Tone {
+        case busy, success, warning, problem
+    }
+
+    let title: String
+    var detail: String?
+    let tone: Tone
+
+    private var color: Color {
+        switch tone {
+        case .busy, .warning: Theme.warning
+        case .success: Theme.success
+        case .problem: Theme.danger
+        }
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            switch tone {
+            case .busy:
+                ProgressView().tint(Theme.gold)
+            case .success:
+                Image(systemName: "checkmark.circle.fill").foregroundStyle(color)
+            case .warning, .problem:
+                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(color)
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.of(.subheadline, weight: .semibold))
+                    .foregroundStyle(Theme.cream)
+                if let detail {
+                    Text(detail)
+                        .font(.of(.caption))
+                        .foregroundStyle(Theme.creamDim)
+                }
+            }
+            .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
+        .padding(12)
+        .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
+        .accessibilityElement(children: .combine)
+        .onAppear { announce() }
+        .onChange(of: title) { _, _ in announce() }
+    }
+
+    private func announce() {
+        let text = [title, detail].compactMap { $0 }.joined(separator: ". ")
+        AccessibilityNotification.Announcement(text).post()
+    }
+}
+
 /// A selectable capsule with an optional count ("7-Iron 4").
 struct ChipButton: View {
     let label: String

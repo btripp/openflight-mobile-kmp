@@ -25,14 +25,20 @@ sealed interface SettingsEvent {
     /** `upload_cloud`. */
     data object UploadCloud : SettingsEvent
 
-    /** The power button: asks for confirmation first ([ShutdownSettings.confirmationRequired]). */
+    /** "Stop OpenFlight": asks for confirmation first ([ShutdownPhase.Confirming]). */
     data object RequestShutdown : SettingsEvent
 
-    /** The dialog's "Shut Down": sends `shutdown`. */
+    /** The confirmation's "Stop now": captures the Pi's address and posts `/api/shutdown` to it. */
     data object ConfirmShutdown : SettingsEvent
 
-    /** The dialog's "Cancel". */
+    /** The confirmation's "Cancel". */
     data object CancelShutdown : SettingsEvent
+
+    /** "Try again" after [ShutdownPhase.Failed]: posts to the same captured address. */
+    data object RetryShutdown : SettingsEvent
+
+    /** Clears a [ShutdownPhase.Done] or [ShutdownPhase.Failed] outcome. */
+    data object DismissShutdown : SettingsEvent
 }
 
 /** One-shot signals from [SettingsViewModel]. */

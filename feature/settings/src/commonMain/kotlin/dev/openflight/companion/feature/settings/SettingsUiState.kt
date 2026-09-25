@@ -3,6 +3,7 @@ package dev.openflight.companion.feature.settings
 
 import dev.openflight.companion.core.data.TransportType
 import dev.openflight.companion.core.insights.UnitSystem
+import dev.openflight.companion.core.model.ConnectionProblem
 import dev.openflight.companion.core.model.ConnectionState
 import dev.openflight.companion.core.model.pi.CloudUploadState
 import dev.openflight.companion.core.model.pi.PiFeatureAvailability
@@ -20,6 +21,9 @@ import dev.openflight.companion.core.model.pi.TriggerStatus
  * @property connectionState the shot stream's state (SSE or BLE).
  * @property linkState the Wi-Fi-only Socket.IO link; [linkDescription] is its display text.
  * @property mockMode the Pi runs `--mock` (from the on-connect `session_state`).
+ * @property connectionProblem why the phone can't reach the Pi, in words (plan R8f), or `null`.
+ * @property power the Pi's power card, or `null` until a `power_status` arrived (plan R8f).
+ * @property trigger the launch monitor card (plan R8f).
  */
 data class SettingsUiState(
     val transport: TransportType,
@@ -35,6 +39,9 @@ data class SettingsUiState(
     val cloud: CloudSettings,
     val shutdown: ShutdownSettings,
     val mockMode: Boolean,
+    val connectionProblem: ConnectionProblem? = null,
+    val power: PowerCard? = null,
+    val trigger: TriggerCard = TriggerCard.Waiting,
 )
 
 /**
@@ -131,11 +138,14 @@ data class TriggerDiagnosticRow(
 )
 
 /**
+ * @property loaded the Pi reported its debug mode. Debug mode is server-global, so until then the
+ *   card stays hidden rather than offer a "Start" that could stop a running capture (plan R8f).
  * @property logPath the server-side JSONL log file while debug mode is on.
  * @property toggle whether [SettingsEvent.ToggleDebug] can run.
  */
 data class DebugSettings(
     val enabled: Boolean,
+    val loaded: Boolean,
     val logPath: String?,
     val readingCount: Int,
     val shotLogCount: Int,
@@ -154,16 +164,19 @@ data class CloudSettings(
 )
 
 /**
- * Pi shutdown (`App.tsx`'s power button and "Shut down OpenFlight?" dialog).
+ * Stopping OpenFlight (plan R8f): the power card follows [phase]; [ShutdownPhase.Confirming]
+ * shows the confirmation.
  *
- * @property confirmationRequired show the confirmation dialog; [SettingsEvent.ConfirmShutdown]
- *   sends it, [SettingsEvent.CancelShutdown] dismisses it.
+ * @property shutdown whether [SettingsEvent.RequestShutdown] can run (the live link).
  */
 data class ShutdownSettings(
-    val confirmationRequired: Boolean,
+    val phase: ShutdownPhase,
     val shutdown: PiFeatureAvailability,
 ) {
+    /** Show the confirmation; [SettingsEvent.ConfirmShutdown] sends, [SettingsEvent.CancelShutdown] dismisses. */
+    val confirmationRequired: Boolean get() = phase == ShutdownPhase.Confirming
+
     companion object {
-        const val CONFIRMATION_TEXT: String = "Shut down OpenFlight?"
+        const val CONFIRMATION_TEXT: String = ShutdownPhase.CONFIRM_TITLE
     }
 }
