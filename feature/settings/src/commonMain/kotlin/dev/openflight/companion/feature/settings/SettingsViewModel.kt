@@ -239,8 +239,8 @@ class SettingsViewModel(
 
                 is PiNotice.SimSendFailed -> "${notice.target}: ${notice.message}"
 
-                // Shown by the training screen.
-                is PiNotice.TrainingImplementFailed -> null
+                // Shown by the training and camera screens.
+                is PiNotice.TrainingImplementFailed, is PiNotice.CameraSettingsFailed -> null
             }
     }
 }

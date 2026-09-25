@@ -45,6 +45,11 @@ sealed interface PiNotice {
         override val message: String,
     ) : PiNotice
 
+    /** `camera_capture_settings_error`, e.g. "High-speed camera capture is not running". */
+    data class CameraSettingsFailed(
+        override val message: String,
+    ) : PiNotice
+
     /** `training_implement_error`, e.g. "Unknown training implement". */
     data class TrainingImplementFailed(
         override val message: String,

@@ -1,27 +1,18 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 package dev.openflight.companion.core.data
 
+import dev.openflight.companion.core.model.pi.CameraPreview
+import dev.openflight.companion.core.model.pi.CameraReplay
 import dev.openflight.companion.core.network.EndpointUrl
+import dev.openflight.companion.core.network.PiCameraClient
 import dev.openflight.companion.core.socketio.EngineIoTransport
 import dev.openflight.companion.core.socketio.KtorWebSocketTransport
-import dev.openflight.companion.core.socketio.MjpegParser
 import dev.openflight.companion.core.socketio.SocketConnectionState
 import dev.openflight.companion.core.socketio.SocketEvent
 import dev.openflight.companion.core.socketio.SocketIoClient
-import dev.openflight.companion.core.socketio.mjpegBoundary
-import io.ktor.client.HttpClient
-import io.ktor.client.plugins.HttpTimeoutConfig
-import io.ktor.client.plugins.timeout
-import io.ktor.client.request.prepareGet
-import io.ktor.client.statement.bodyAsChannel
-import io.ktor.client.statement.bodyAsText
-import io.ktor.http.HttpHeaders
-import io.ktor.http.isSuccess
-import io.ktor.utils.io.readAvailable
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.channelFlow
 import kotlinx.serialization.json.JsonElement
 
 /** The Socket.IO connection [DefaultPiSessionRepository] drives (a seam for tests). */
@@ -47,9 +38,20 @@ internal fun interface PiSocketFactory {
     ): PiSocket?
 }
 
-/** Opens `GET /camera/stream` on one host as JPEG frames. */
-internal fun interface PiCameraSource {
-    fun frames(host: String): Flow<ByteArray>
+/** The Pi's camera HTTP API on one host (a seam for tests). */
+internal interface PiCameraSource {
+    suspend fun preview(host: String): CameraPreview
+
+    suspend fun prepareReplay(
+        host: String,
+        replayId: String,
+    ): CameraReplay
+
+    /** The absolute URL of [replay]'s MP4 on [host], or `null`. */
+    fun videoUrl(
+        host: String,
+        replay: CameraReplay,
+    ): String?
 }
 
 internal class SocketIoPiSocket(
@@ -81,41 +83,19 @@ internal fun socketIoPiSocketFactory(transport: EngineIoTransport): PiSocketFact
         }
     }
 
-/** [PiCameraSource] over [httpClient], parsing the multipart body with [MjpegParser]. */
+/** [PiCameraSource] over [PiCameraClient]. */
 internal class KtorPiCameraSource(
-    private val httpClient: HttpClient,
+    private val client: PiCameraClient,
 ) : PiCameraSource {
-    override fun frames(host: String): Flow<ByteArray> =
-        channelFlow {
-            val url =
-                EndpointUrl.build(host, CAMERA_STREAM_PATH)
-                    ?: throw WifiOnlyFeatureException(WifiOnlyFeatureException.Reason.NOT_CONNECTED)
-            httpClient
-                .prepareGet(url) {
-                    // The stream ends only when streaming stops.
-                    timeout { requestTimeoutMillis = HttpTimeoutConfig.INFINITE_TIMEOUT_MS }
-                }.execute { response ->
-                    if (!response.status.isSuccess()) {
-                        throw PiCameraUnavailableException(
-                            response.status.value,
-                            response.bodyAsText().ifBlank { response.status.description },
-                        )
-                    }
-                    val boundary = response.headers[HttpHeaders.ContentType]?.let(::mjpegBoundary) ?: DEFAULT_BOUNDARY
-                    val parser = MjpegParser(boundary)
-                    val channel = response.bodyAsChannel()
-                    val buffer = ByteArray(READ_BUFFER_BYTES)
-                    while (true) {
-                        val read = channel.readAvailable(buffer, 0, buffer.size)
-                        if (read < 0) break
-                        if (read > 0) parser.feed(buffer.copyOf(read)).forEach { send(it) }
-                    }
-                }
-        }
+    override suspend fun preview(host: String): CameraPreview = client.preview(host)
 
-    private companion object {
-        const val CAMERA_STREAM_PATH = "/camera/stream"
-        const val DEFAULT_BOUNDARY = "frame"
-        const val READ_BUFFER_BYTES = 16 * 1024
-    }
+    override suspend fun prepareReplay(
+        host: String,
+        replayId: String,
+    ): CameraReplay = client.prepareReplay(host, replayId)
+
+    override fun videoUrl(
+        host: String,
+        replay: CameraReplay,
+    ): String? = client.videoUrl(host, replay)
 }

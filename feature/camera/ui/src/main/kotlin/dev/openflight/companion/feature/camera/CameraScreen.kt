@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
@@ -22,33 +21,30 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.LiveRegionMode
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import dev.openflight.companion.core.designsystem.OfButton
 import dev.openflight.companion.core.designsystem.OfCard
 import dev.openflight.companion.core.designsystem.OfColorTokens
-import dev.openflight.companion.core.designsystem.OfLinearProgress
 import dev.openflight.companion.core.designsystem.OfMessageHostState
 import dev.openflight.companion.core.designsystem.OfOutlinedButton
 import dev.openflight.companion.core.designsystem.OfScaffold
 import dev.openflight.companion.core.designsystem.OfSpacing
 import dev.openflight.companion.core.designsystem.OfSpinner
-import dev.openflight.companion.core.designsystem.OfSwitchRow
 import dev.openflight.companion.core.designsystem.OfText
 import dev.openflight.companion.core.designsystem.OfTextRole
 import dev.openflight.companion.core.designsystem.OfTopBar
+import dev.openflight.companion.core.model.ShotMetricFormatter
 
 private const val FEED_ASPECT = 4f / 3f
-private const val PERCENT = 100f
 
 /**
- * The camera screen (plan R6c), ported from the web UI's `CameraFeed.tsx` and
- * `BallDetectionIndicator.tsx`: the live MJPEG feed ([frame], the newest decoded JPEG), the ball
- * detection status with its confidence, and the camera/stream toggles, each disabled with the VM's
- * reason. Stateless: everything comes from [uiState]/[frame] and goes out through [onEvent]/[onBack].
+ * The camera screen (plan R8c): the polled preview of the Pi's high-speed camera ([frame], the
+ * newest decoded still), the capture settings, and the shots whose captures can be replayed. A
+ * prepared replay opens in the system's video player. Stateless: everything comes from
+ * [uiState]/[frame] and goes out through [onEvent]/[onBack]. Polish is plan R8f.
  */
 @Composable
 fun CameraScreen(
@@ -85,9 +81,9 @@ fun CameraScreen(
                     .padding(horizontal = OfSpacing.Xl, vertical = OfSpacing.Sm),
             verticalArrangement = Arrangement.spacedBy(OfSpacing.Lg),
         ) {
-            Feed(uiState, frame, onRetry = { onEvent(CameraEvent.RetryStream) })
-            BallDetectionCard(uiState)
-            TogglesCard(uiState, onEvent)
+            Feed(uiState, frame)
+            CaptureCard(uiState, onEvent)
+            ReplaysCard(uiState, onEvent)
         }
     }
 }
@@ -96,7 +92,6 @@ fun CameraScreen(
 private fun Feed(
     uiState: CameraUiState,
     frame: ImageBitmap?,
-    onRetry: () -> Unit,
 ) {
     Box(
         modifier =
@@ -108,29 +103,29 @@ private fun Feed(
                 .testTag(CameraTestTags.FEED),
         contentAlignment = Alignment.Center,
     ) {
-        if (uiState.phase == CameraPhase.STREAMING) {
-            if (frame != null) {
+        when {
+            uiState.phase == CameraPhase.LIVE && frame != null -> {
                 Image(
                     bitmap = frame,
-                    contentDescription = "Live camera feed",
+                    contentDescription = "Camera preview",
                     contentScale = ContentScale.Fit,
                     modifier = Modifier.fillMaxSize().testTag(CameraTestTags.FRAME),
                 )
-            } else {
+            }
+
+            uiState.phase == CameraPhase.LOADING || uiState.phase == CameraPhase.LIVE -> {
                 OfSpinner(modifier = Modifier.size(32.dp))
             }
-        } else {
-            PhaseMessage(uiState, onRetry)
+
+            else -> {
+                PhaseMessage(uiState)
+            }
         }
     }
 }
 
-/** `CameraFeed.tsx`'s placeholder for every phase but streaming. */
 @Composable
-private fun PhaseMessage(
-    uiState: CameraUiState,
-    onRetry: () -> Unit,
-) {
+private fun PhaseMessage(uiState: CameraUiState) {
     val (title, body) = phaseCopy(uiState)
     Column(
         modifier = Modifier.padding(OfSpacing.Xl),
@@ -144,103 +139,133 @@ private fun PhaseMessage(
             modifier = Modifier.testTag(CameraTestTags.PHASE_TITLE),
         )
         OfText(text = body, role = OfTextRole.BodySmall, color = OfColorTokens.CreamDim, textAlign = TextAlign.Center)
-        uiState.cameraError?.let {
-            OfText(text = it, role = OfTextRole.BodySmall, color = OfColorTokens.Danger, textAlign = TextAlign.Center)
-        }
-        if (uiState.phase == CameraPhase.STREAM_ERROR) {
-            OfOutlinedButton(text = "Retry", onClick = onRetry, modifier = Modifier.testTag(CameraTestTags.RETRY))
-        }
     }
 }
 
-private fun phaseCopy(uiState: CameraUiState): Pair<String, String> =
+internal fun phaseCopy(uiState: CameraUiState): Pair<String, String> =
     when (uiState.phase) {
         CameraPhase.OFFLINE -> {
             "Camera Offline" to
                 "The camera needs the Pi's live Wi-Fi session (${uiState.availability.disabledReason.orEmpty()})."
         }
 
-        CameraPhase.UNAVAILABLE -> {
-            "Camera Not Available" to "Start the Pi's server with the --camera flag to enable camera support."
+        CameraPhase.NOT_ENABLED -> {
+            "Camera Capture Off" to "Start the Pi's server with high-speed camera capture to see its view here."
         }
 
-        CameraPhase.DISABLED -> {
-            "Camera Disabled" to "Turn on ball detection to start the camera."
+        CameraPhase.NOT_RUNNING -> {
+            "Camera Not Running" to "Capture is configured, but the camera isn't producing images."
         }
 
-        CameraPhase.PAUSED -> {
-            "Stream Paused" to "Ball detection is active. Turn on the live stream to watch the feed."
+        CameraPhase.ERROR -> {
+            "Preview Unavailable" to (uiState.previewError ?: CameraViewModel.PREVIEW_FAILED)
         }
 
-        CameraPhase.STREAM_ERROR -> {
-            "Stream Error" to (uiState.streamError ?: CameraViewModel.STREAM_FAILED)
-        }
-
-        CameraPhase.STREAMING -> {
+        CameraPhase.LOADING, CameraPhase.LIVE -> {
             "" to ""
         }
     }
 
-/** `BallDetectionIndicator.tsx`: a status dot, "Ball 87%" / "No Ball" / "Camera Off", and the confidence. */
+/** The Pi's `camera_capture_settings`: whether capture runs and is armed, and its format. */
 @Composable
-private fun BallDetectionCard(uiState: CameraUiState) {
+private fun CaptureCard(
+    uiState: CameraUiState,
+    onEvent: (CameraEvent) -> Unit,
+) {
     OfCard(modifier = Modifier.fillMaxWidth(), contentSpacing = OfSpacing.Md) {
-        OfText(text = "BALL DETECTION", role = OfTextRole.Eyebrow, color = OfColorTokens.Gold)
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(OfSpacing.Sm),
-            modifier =
-                Modifier
-                    .semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite }
-                    .testTag(CameraTestTags.BALL_STATUS),
-        ) {
-            val dot =
-                when {
-                    !uiState.enabled -> OfColorTokens.Neutral
-                    uiState.ballDetected -> OfColorTokens.Success
-                    else -> OfColorTokens.Warning
-                }
-            Box(modifier = Modifier.size(12.dp).background(dot, CircleShape))
-            OfText(text = uiState.statusText, role = OfTextRole.TitleSmall)
-        }
-        if (uiState.enabled) {
-            OfLinearProgress(
-                progress = uiState.ballConfidencePercent / PERCENT,
-                modifier = Modifier.fillMaxWidth(),
-            )
+        OfText(text = "CAPTURE", role = OfTextRole.Eyebrow, color = OfColorTokens.Gold)
+        val settings = uiState.settings
+        val status =
+            when {
+                settings == null -> "Not reported yet"
+                !settings.available -> "Not enabled on the Pi"
+                settings.armed == true -> "Armed"
+                settings.running == true -> "Running"
+                else -> "Stopped"
+            }
+        OfText(text = status, role = OfTextRole.TitleSmall, modifier = Modifier.testTag(CameraTestTags.CAPTURE_STATUS))
+        uiState.captureSummary?.let { OfText(text = it, role = OfTextRole.BodySmall, color = OfColorTokens.CreamDim) }
+        settings?.error?.let { OfText(text = it, role = OfTextRole.BodySmall, color = OfColorTokens.Danger) }
+        OfOutlinedButton(
+            text = "Refresh",
+            onClick = { onEvent(CameraEvent.RefreshSettings) },
+            enabled = uiState.availability.isAvailable,
+            modifier = Modifier.testTag(CameraTestTags.REFRESH),
+        )
+    }
+}
+
+/** Shots with a capture; a tap prepares the MP4 and opens it in the system player. */
+@Composable
+private fun ReplaysCard(
+    uiState: CameraUiState,
+    onEvent: (CameraEvent) -> Unit,
+) {
+    val uriHandler = LocalUriHandler.current
+    OfCard(modifier = Modifier.fillMaxWidth(), contentSpacing = OfSpacing.Md) {
+        OfText(text = "REPLAYS", role = OfTextRole.Eyebrow, color = OfColorTokens.Gold)
+        if (uiState.replays.isEmpty()) {
             OfText(
-                text = "Confidence ${uiState.ballConfidencePercent}%",
+                text = "Shots with a high-speed capture appear here.",
                 role = OfTextRole.BodySmall,
                 color = OfColorTokens.CreamDim,
             )
+        }
+        for (row in uiState.replays) {
+            ReplayRowItem(row, uiState.replay, uiState.availability.isAvailable, onEvent)
+        }
+        when (val replay = uiState.replay) {
+            is CameraReplayState.Ready -> {
+                OfButton(
+                    text = "Open replay video",
+                    onClick = { uriHandler.openUri(replay.videoUrl) },
+                    modifier = Modifier.fillMaxWidth().testTag(CameraTestTags.OPEN_REPLAY),
+                )
+            }
+
+            is CameraReplayState.Failed -> {
+                OfText(
+                    text = replay.message,
+                    role = OfTextRole.BodySmall,
+                    color = OfColorTokens.Danger,
+                    modifier = Modifier.testTag(CameraTestTags.REPLAY_ERROR),
+                )
+            }
+
+            else -> {
+                Unit
+            }
         }
     }
 }
 
 @Composable
-private fun TogglesCard(
-    uiState: CameraUiState,
+private fun ReplayRowItem(
+    row: ReplayRow,
+    replay: CameraReplayState,
+    enabled: Boolean,
     onEvent: (CameraEvent) -> Unit,
 ) {
-    OfCard(modifier = Modifier.fillMaxWidth(), contentSpacing = OfSpacing.Md) {
-        OfText(text = "CONTROLS", role = OfTextRole.Eyebrow, color = OfColorTokens.Gold)
-        OfSwitchRow(
-            label = "Ball detection",
-            detail = "Runs the camera and looks for the ball",
-            checked = uiState.enabled,
-            onCheckedChange = { onEvent(CameraEvent.ToggleCamera) },
-            enabled = uiState.toggleCamera.isAvailable,
-            disabledReason = uiState.toggleCamera.disabledReason,
-            modifier = Modifier.testTag(CameraTestTags.TOGGLE_CAMERA),
-        )
-        OfSwitchRow(
-            label = "Live stream",
-            detail = "Shows the camera's view above",
-            checked = uiState.streaming,
-            onCheckedChange = { onEvent(CameraEvent.ToggleStream) },
-            enabled = uiState.toggleStream.isAvailable,
-            disabledReason = uiState.toggleStream.disabledReason,
-            modifier = Modifier.testTag(CameraTestTags.TOGGLE_STREAM),
+    val preparing = replay is CameraReplayState.Preparing && replay.replayId == row.replayId
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(OfSpacing.Md),
+    ) {
+        OfText(text = replayLabel(row), role = OfTextRole.BodySmall, modifier = Modifier.weight(1f))
+        OfButton(
+            text = "Play",
+            onClick = { onEvent(CameraEvent.PlayReplay(row.replayId)) },
+            enabled = enabled && replay !is CameraReplayState.Preparing,
+            loading = preparing,
+            modifier = Modifier.testTag(CameraTestTags.replay(row.replayId)),
         )
     }
 }
+
+private fun replayLabel(row: ReplayRow): String =
+    listOfNotNull(
+        row.shotNumber?.let { "#$it" },
+        row.club,
+        row.ballSpeedMph?.let { "${ShotMetricFormatter.number(it, 1)} mph" },
+    ).joinToString(" · ")

@@ -2,7 +2,8 @@
 package dev.openflight.companion.core.data
 
 import dev.openflight.companion.core.model.ShotEvent
-import dev.openflight.companion.core.model.pi.CameraStatus
+import dev.openflight.companion.core.model.pi.CameraCaptureSettings
+import dev.openflight.companion.core.model.pi.CameraPreview
 import dev.openflight.companion.core.model.pi.ClearState
 import dev.openflight.companion.core.model.pi.CloudUploadStatus
 import dev.openflight.companion.core.model.pi.DebugState
@@ -21,7 +22,6 @@ import dev.openflight.companion.core.model.pi.SimState
 import dev.openflight.companion.core.model.pi.SwingSpeedReading
 import dev.openflight.companion.core.model.pi.TrainingImplement
 import dev.openflight.companion.core.model.pi.TriggerStatus
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 
@@ -108,7 +108,12 @@ interface PiSessionRepository {
     val latestSwingSpeed: StateFlow<SwingSpeedReading?>
 
     val triggerStatus: StateFlow<TriggerStatus?>
-    val cameraStatus: StateFlow<CameraStatus>
+
+    /**
+     * The high-speed capture's settings and state (`camera_capture_settings`), requested on every
+     * connect; `null` until the Pi answers.
+     */
+    val cameraCaptureSettings: StateFlow<CameraCaptureSettings?>
     val simState: StateFlow<SimState>
     val radarConfig: StateFlow<RadarConfig?>
     val debugState: StateFlow<DebugState>
@@ -193,14 +198,8 @@ interface PiSessionRepository {
     /** `set_training_implement` (a [TrainingImplement.KNOWN] key) → `training_implement_changed`. */
     suspend fun setTrainingImplement(implement: String)
 
-    /** `toggle_camera` → `camera_status`. */
-    suspend fun toggleCamera()
-
-    /** `toggle_camera_stream` → `camera_status`; while streaming, [cameraFrames] yields JPEGs. */
-    suspend fun toggleCameraStream()
-
-    /** `get_camera_status` → `camera_status`. */
-    suspend fun refreshCameraStatus()
+    /** `get_camera_capture_settings` → [cameraCaptureSettings]. Sent automatically on every connect. */
+    suspend fun refreshCameraCaptureSettings()
 
     /** `get_radar_config` → `radar_config`. Sent automatically on every connect. */
     suspend fun refreshRadarConfig()
@@ -218,13 +217,22 @@ interface PiSessionRepository {
     suspend fun shutdown()
 
     /**
-     * JPEG frames from `GET /camera/stream` (MJPEG) while the camera is enabled and streaming.
-     * Cold: each collection opens its own HTTP stream.
+     * One still from `GET /api/camera/preview.jpg` on the Wi-Fi host. The caller polls it, only
+     * while its screen is visible. Works whenever the host is set on Wi-Fi (plain HTTP, not the
+     * Socket.IO link).
      *
-     * @throws WifiOnlyFeatureException on Bluetooth or when stopped.
-     * @throws PiCameraUnavailableException when the Pi answers with an error (503 "Camera not available").
+     * @throws WifiOnlyFeatureException on Bluetooth or without a host; network failures propagate.
      */
-    fun cameraFrames(): Flow<ByteArray>
+    suspend fun cameraPreview(): CameraPreview
+
+    /**
+     * Prepares shot replay [replayId] (`ShotDetail.cameraReplay.id`) and returns the absolute URL
+     * of its MP4 for a native player.
+     *
+     * @throws WifiOnlyFeatureException on Bluetooth or without a host.
+     * @throws IllegalStateException when the Pi's answer carries no video URL; HTTP errors propagate.
+     */
+    suspend fun prepareReplay(replayId: String): String
 
     companion object {
         const val MAX_SESSION_SHOTS: Int = 200
@@ -257,9 +265,3 @@ class ProfileRuleException(
         ),
     }
 }
-
-/** `GET /camera/stream` failed: the Pi's camera is missing, disabled or not streaming. */
-class PiCameraUnavailableException(
-    val status: Int,
-    message: String,
-) : IllegalStateException(message)

@@ -17,7 +17,8 @@ import assertk.assertions.isTrue
 import assertk.assertions.prop
 import assertk.assertions.startsWith
 import dev.openflight.companion.core.model.ShotEvent
-import dev.openflight.companion.core.model.pi.CameraStatus
+import dev.openflight.companion.core.model.pi.CameraPreview
+import dev.openflight.companion.core.model.pi.CameraReplay
 import dev.openflight.companion.core.model.pi.CloudUploadState
 import dev.openflight.companion.core.model.pi.CloudUploadStatus
 import dev.openflight.companion.core.model.pi.PiLinkState
@@ -76,6 +77,7 @@ class PiSessionRepositoryTest {
                 "get_radar_config",
                 "get_debug_status",
                 "get_profiles",
+                "get_camera_capture_settings",
             )
         }
 
@@ -95,6 +97,7 @@ class PiSessionRepositoryTest {
                 "get_radar_config",
                 "get_debug_status",
                 "get_profiles",
+                "get_camera_capture_settings",
             )
         }
 
@@ -127,7 +130,8 @@ class PiSessionRepositoryTest {
                     { h.repository.clearSession("p1") },
                     { h.repository.setActiveProfile("p1") },
                     { h.repository.addProfile("Sam") },
-                    { h.repository.toggleCamera() },
+                    { h.repository.cameraPreview() },
+                    { h.repository.prepareReplay("r1") },
                     { h.repository.uploadCloud() },
                     { h.repository.shutdown() },
                 )
@@ -137,7 +141,6 @@ class PiSessionRepositoryTest {
                     .prop(WifiOnlyFeatureException::reason)
                     .isEqualTo(WifiOnlyFeatureException.Reason.BLUETOOTH)
             }
-            assertFailure { h.repository.cameraFrames().toList() }.isInstanceOf(WifiOnlyFeatureException::class)
         }
 
     @Test
@@ -181,6 +184,7 @@ class PiSessionRepositoryTest {
                 "get_radar_config",
                 "get_debug_status",
                 "get_profiles",
+                "get_camera_capture_settings",
             )
             h.repository.setActiveProfile("p2")
             assertThat(h.socket.emitted.last()).isEqualTo(
@@ -275,7 +279,7 @@ class PiSessionRepositoryTest {
                 DefaultPiSessionRepository(
                     settings = FakeSettingsRepository(transport = TransportType.WIFI, host = " "),
                     socketFactory = { _, _ -> null },
-                    cameraSource = { flowOf() },
+                    cameraSource = FakePiCameraSource(),
                     scope = backgroundScope,
                 )
             repository.start()
@@ -523,9 +527,7 @@ class PiSessionRepositoryTest {
 
             repository.simulateShot()
             repository.setTrainingImplement("stack-100g")
-            repository.toggleCamera()
-            repository.toggleCameraStream()
-            repository.refreshCameraStatus()
+            repository.refreshCameraCaptureSettings()
             repository.refreshRadarConfig()
             repository.toggleDebug()
             repository.refreshSession()
@@ -534,9 +536,7 @@ class PiSessionRepositoryTest {
             assertThat(socket.emitted).containsExactly(
                 "simulate_shot" to null,
                 "set_training_implement" to buildJsonObject { put("implement", "stack-100g") },
-                "toggle_camera" to null,
-                "toggle_camera_stream" to null,
-                "get_camera_status" to null,
+                "get_camera_capture_settings" to null,
                 "get_radar_config" to null,
                 "toggle_debug" to null,
                 "get_session" to null,
@@ -573,12 +573,23 @@ class PiSessionRepositoryTest {
         }
 
     @Test
-    fun cameraFramesStreamFromTheCurrentHost() =
+    fun theCameraPreviewAndReplaysUseTheWifiHostOverHttp() =
         runPiTest { h ->
-            val frames: Flow<ByteArray> = h.repository.cameraFrames()
+            // Plain HTTP: no Socket.IO ack needed.
+            assertThat(h.repository.cameraPreview()).isEqualTo(CameraPreview.Frame(byteArrayOf(1, 2)))
+            h.camera.preview = CameraPreview.CameraNotRunning
+            assertThat(h.repository.cameraPreview()).isEqualTo(CameraPreview.CameraNotRunning)
 
-            assertThat(frames.toList().map { it.toList() }).containsExactly(listOf<Byte>(1), listOf<Byte>(2))
-            assertThat(h.cameraHosts).containsExactly("pi.local:8080")
+            assertThat(h.repository.prepareReplay("r1")).isEqualTo("http://pi.local:8080/api/camera/replays/r1/video")
+            assertThat(h.camera.hosts).containsExactly("pi.local:8080", "pi.local:8080", "pi.local:8080")
+        }
+
+    @Test
+    fun aReplayWithoutAVideoUrlFails() =
+        runPiTest { h ->
+            h.camera.replay = { CameraReplay(id = it) }
+
+            assertFailure { h.repository.prepareReplay("r1") }.isInstanceOf(IllegalStateException::class)
         }
 
     @Test

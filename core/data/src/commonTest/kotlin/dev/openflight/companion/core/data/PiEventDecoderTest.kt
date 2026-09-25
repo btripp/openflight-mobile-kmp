@@ -262,11 +262,23 @@ class PiEventDecoderTest {
     }
 
     @Test
-    fun mergesOnlyThePresentCameraFields() {
-        val event = decode("camera_status", """{"enabled":false,"available":false,"error":"Camera not initialized"}""")
+    fun decodesCameraCaptureSettingsAndTheirErrors() {
+        val settings =
+            decodePiEvent(PiFixtures.event(PiFixtures.CAMERA_CAPTURE_SETTINGS_FRAME)) as PiEvent.CameraSettings
+        assertThat(settings.settings.available).isFalse()
+        assertThat(settings.settings.alignmentXPct).isEqualTo(50.0)
 
-        assertThat(event).isEqualTo(
-            PiEvent.Camera(CameraStatusPayload(available = false, enabled = false, error = "Camera not initialized")),
+        val running =
+            decode(
+                "camera_capture_settings",
+                """{"enabled":true,"available":true,"running":true,"armed":false,"width":1456,"height":1088,""" +
+                    """"fps":240,"exposure_us":400,"gain":2.0,"buffered_frames":10,"auto_exposure":{"x":1}}""",
+            ) as PiEvent.CameraSettings
+        assertThat(running.settings.fps).isEqualTo(240.0)
+        assertThat(running.settings.armed).isEqualTo(false)
+
+        assertThat(decodePiEvent(PiFixtures.event(PiFixtures.CAMERA_CAPTURE_SETTINGS_ERROR_FRAME))).isEqualTo(
+            PiEvent.Notice(PiNotice.CameraSettingsFailed("High-speed camera capture is not running")),
         )
     }
 

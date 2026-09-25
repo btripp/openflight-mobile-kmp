@@ -38,7 +38,7 @@ data class SettingsUiState(
 )
 
 /**
- * The Pi's active profile, read-only here (the server replaced `set_player` with profiles; the
+ * The Pi's active profile, read-only here (the server replaced the player name with profiles; the
  * picker is plan R8f).
  *
  * @property activeName the active profile's name, or `null` before the roster arrives.

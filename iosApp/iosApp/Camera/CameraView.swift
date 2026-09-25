@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import AVKit
 import KMPNativeCoroutinesAsync
 import Shared
 import SwiftUI
 import UIKit
 
-/// The Pi's camera (plan R6c), over the shared `CameraViewModel`: the live MJPEG feed while
-/// streaming, otherwise the web UI's `CameraFeed.tsx` state (offline, not available, disabled,
-/// paused, stream error), plus ball detection and the two toggles. Wi-Fi only. Android's
-/// `CameraScreen.kt` renders the same state.
+/// The Pi's camera (plan R8c), over the shared `CameraViewModel`: a preview of the high-speed
+/// camera polled while this screen is visible, the capture settings, and the shots whose captures
+/// can be replayed in `AVPlayer`. Wi-Fi only. Android's `CameraScreen.kt` renders the same state;
+/// polish is plan R8f.
 struct CameraView: View {
     @StateObject private var host = ViewModelHost(KoinHelper().cameraViewModel())
     @State private var frame: UIImage?
@@ -23,12 +24,11 @@ struct CameraView: View {
                     if let note = effect as? CameraEffectMessage { message = note.text }
                 }
             }
-            // Collect frames only while streaming and on screen. The Kotlin flow is conflated and
-            // the async sequence asks for the next frame only after this loop took the previous
-            // one, so a slow decode drops frames instead of queueing them; only the newest image
-            // is kept.
-            .task(id: host.state.phase == .streaming && scenePhase == .active) {
-                guard host.state.phase == .streaming, scenePhase == .active else {
+            // Collecting the stills is what makes the VM poll the Pi, so collect only while this
+            // screen is on screen and the app is active. The Kotlin flow is conflated and the
+            // async sequence asks for the next still only after this loop took the previous one.
+            .task(id: scenePhase == .active) {
+                guard scenePhase == .active else {
                     frame = nil
                     return
                 }
@@ -40,7 +40,7 @@ struct CameraView: View {
                         if let image { frame = image }
                     }
                 } catch {
-                    // Cancellation (left the screen or the stream stopped). Failures reach the state.
+                    // Cancellation (left the screen). Failures reach the state.
                 }
             }
     }
@@ -55,13 +55,21 @@ struct CameraContent: View {
         ScrollView {
             VStack(spacing: 16) {
                 feed
-                ballDetection
-                controls
+                capture
+                replays
             }
             .padding(.horizontal, 20)
             .padding(.bottom, 24)
         }
         .screenBackground()
+        .sheet(isPresented: Binding(
+            get: { state.replay is CameraReplayStateReady },
+            set: { shown in if !shown { send(CameraEventDismissReplay.shared) } }
+        )) {
+            if let ready = state.replay as? CameraReplayStateReady, let url = URL(string: ready.videoUrl) {
+                ReplayPlayer(url: url, mirrored: ready.mirrorHorizontal)
+            }
+        }
     }
 
     // MARK: Feed
@@ -72,16 +80,15 @@ struct CameraContent: View {
             ("Camera Offline",
              "The camera needs the Pi's live Wi-Fi session (\(state.availability.disabledReason ?? "")).",
              "wifi.slash")
-        case .unavailable:
-            ("Camera Not Available",
-             "Start the Pi's server with the --camera flag to enable camera support.",
+        case .notEnabled:
+            ("Camera Capture Off",
+             "Start the Pi's server with high-speed camera capture to see its view here.",
              "video.slash")
-        case .disabled:
-            ("Camera Disabled", "Turn on ball detection to start the camera.", "video.slash")
-        case .paused:
-            ("Stream Paused", "Ball detection is active. Turn on the live stream to watch the feed.", "pause.circle")
-        case .streamError:
-            ("Stream Error", state.streamError ?? CameraViewModel.companion.STREAM_FAILED, "exclamationmark.triangle")
+        case .notRunning:
+            ("Camera Not Running", "Capture is configured, but the camera isn't producing images.", "video.slash")
+        case .error:
+            ("Preview Unavailable", state.previewError ?? CameraViewModel.companion.PREVIEW_FAILED,
+             "exclamationmark.triangle")
         default:
             ("", "", "")
         }
@@ -91,16 +98,14 @@ struct CameraContent: View {
     private var feed: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 20).fill(.black.opacity(0.45))
-            if state.phase == .streaming {
-                if let frame {
-                    Image(uiImage: frame)
-                        .resizable()
-                        .scaledToFit()
-                        .clipShape(RoundedRectangle(cornerRadius: 20))
-                        .accessibilityLabel("Live camera feed")
-                } else {
-                    ProgressView().tint(Theme.gold)
-                }
+            if state.phase == .live, let frame {
+                Image(uiImage: frame)
+                    .resizable()
+                    .scaledToFit()
+                    .clipShape(RoundedRectangle(cornerRadius: 20))
+                    .accessibilityLabel("Camera preview")
+            } else if state.phase == .loading || state.phase == .live {
+                ProgressView().tint(Theme.gold)
             } else {
                 let copy = phaseCopy
                 VStack(spacing: 10) {
@@ -115,18 +120,6 @@ struct CameraContent: View {
                         .font(.of(.subheadline))
                         .foregroundStyle(Theme.creamDim)
                         .multilineTextAlignment(.center)
-                    if let error = state.cameraError {
-                        Text(error)
-                            .font(.of(.footnote, weight: .medium))
-                            .foregroundStyle(Theme.danger)
-                            .multilineTextAlignment(.center)
-                    }
-                    if state.phase == .streamError {
-                        Button("Retry") { send(CameraEventRetryStream.shared) }
-                            .buttonStyle(.bordered)
-                            .tint(Theme.gold)
-                            .accessibilityIdentifier("camera.retry")
-                    }
                 }
                 .padding(24)
                 .accessibilityElement(children: .contain)
@@ -137,56 +130,99 @@ struct CameraContent: View {
         .accessibilityIdentifier("camera.feed")
     }
 
-    // MARK: Ball detection
+    // MARK: Capture
 
-    private var dotColor: Color {
-        if !state.enabled { return Theme.neutral }
-        return state.ballDetected ? Theme.success : Theme.warning
+    private var captureStatus: String {
+        guard let settings = state.settings else { return "Not reported yet" }
+        if !settings.available { return "Not enabled on the Pi" }
+        if settings.armed?.boolValue == true { return "Armed" }
+        if settings.running?.boolValue == true { return "Running" }
+        return "Stopped"
     }
 
-    private var ballDetection: some View {
+    private var capture: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Eyebrow("BALL DETECTION")
-            HStack(spacing: 10) {
-                Circle().fill(dotColor).frame(width: 12, height: 12)
-                Text(state.statusText)
-                    .font(.of(.headline, weight: .semibold))
+            Eyebrow("CAPTURE")
+            Text(captureStatus)
+                .font(.of(.headline, weight: .semibold))
+                .accessibilityIdentifier("camera.captureStatus")
+            if let summary = state.captureSummary {
+                Text(summary).font(.of(.subheadline)).foregroundStyle(Theme.creamDim)
             }
-            .accessibilityElement(children: .combine)
-            .accessibilityIdentifier("camera.ballStatus")
-            if state.enabled {
-                ProgressView(value: Double(state.ballConfidencePercent), total: 100)
-                    .tint(Theme.gold)
-                Text("Confidence \(state.ballConfidencePercent)%")
+            if let error = state.settings?.error {
+                Text(error).font(.of(.footnote, weight: .medium)).foregroundStyle(Theme.danger)
+            }
+            Button("Refresh") { send(CameraEventRefreshSettings.shared) }
+                .buttonStyle(.bordered)
+                .tint(Theme.gold)
+                .disabled(!state.availability.isAvailable)
+                .accessibilityIdentifier("camera.refresh")
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .card()
+    }
+
+    // MARK: Replays
+
+    private var replays: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Eyebrow("REPLAYS")
+            if state.replays.isEmpty {
+                Text("Shots with a high-speed capture appear here.")
                     .font(.of(.subheadline))
                     .foregroundStyle(Theme.creamDim)
             }
+            ForEach(state.replays, id: \.replayId) { row in
+                HStack {
+                    Text(label(row)).font(.of(.subheadline))
+                    Spacer()
+                    if let preparing = state.replay as? CameraReplayStatePreparing, preparing.replayId == row.replayId {
+                        ProgressView().tint(Theme.gold)
+                    } else {
+                        Button("Play") { send(CameraEventPlayReplay(replayId: row.replayId)) }
+                            .buttonStyle(.borderedProminent)
+                            .tint(Theme.gold)
+                            .disabled(!state.availability.isAvailable || state.replay is CameraReplayStatePreparing)
+                            .accessibilityIdentifier("camera.replay.\(row.replayId)")
+                    }
+                }
+            }
+            if let failed = state.replay as? CameraReplayStateFailed {
+                Text(failed.message)
+                    .font(.of(.footnote, weight: .medium))
+                    .foregroundStyle(Theme.danger)
+                    .accessibilityIdentifier("camera.replayError")
+            }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .card()
     }
 
-    // MARK: Controls
+    private func label(_ row: ReplayRow) -> String {
+        var parts: [String] = []
+        if let number = row.shotNumber { parts.append("#\(number.intValue)") }
+        if let club = row.club { parts.append(club) }
+        if let speed = row.ballSpeedMph { parts.append(String(format: "%.1f mph", speed.doubleValue)) }
+        return parts.joined(separator: " · ")
+    }
+}
 
-    private var controls: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Eyebrow("CONTROLS")
-            ToggleRow(
-                label: "Ball detection",
-                detail: "Runs the camera and looks for the ball",
-                isOn: state.enabled,
-                availability: state.toggleCamera,
-                identifier: "camera.toggleCamera"
-            ) { send(CameraEventToggleCamera.shared) }
-            Divider().overlay(Theme.cream.opacity(0.1))
-            ToggleRow(
-                label: "Live stream",
-                detail: "Shows the camera's view above",
-                isOn: state.streaming,
-                availability: state.toggleStream,
-                identifier: "camera.toggleStream"
-            ) { send(CameraEventToggleStream.shared) }
-        }
-        .card()
+/// A prepared shot replay in `AVPlayer` (the Pi serves the MP4 with HTTP Range support).
+private struct ReplayPlayer: View {
+    let url: URL
+    let mirrored: Bool
+    @State private var player: AVPlayer?
+
+    var body: some View {
+        VideoPlayer(player: player)
+            .scaleEffect(x: mirrored ? -1 : 1, y: 1)
+            .onAppear {
+                let player = AVPlayer(url: url)
+                self.player = player
+                player.play()
+            }
+            .onDisappear { player?.pause() }
+            .accessibilityIdentifier("camera.player")
     }
 }
 

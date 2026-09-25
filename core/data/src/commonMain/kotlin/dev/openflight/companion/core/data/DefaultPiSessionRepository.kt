@@ -2,7 +2,8 @@
 package dev.openflight.companion.core.data
 
 import dev.openflight.companion.core.data.WifiOnlyFeatureException.Reason
-import dev.openflight.companion.core.model.pi.CameraStatus
+import dev.openflight.companion.core.model.pi.CameraCaptureSettings
+import dev.openflight.companion.core.model.pi.CameraPreview
 import dev.openflight.companion.core.model.pi.ClearState
 import dev.openflight.companion.core.model.pi.CloudUploadState
 import dev.openflight.companion.core.model.pi.CloudUploadStatus
@@ -33,7 +34,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -42,8 +42,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.emitAll
-import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -87,7 +85,7 @@ internal class DefaultPiSessionRepository(
     override val trainingImplement: StateFlow<TrainingImplement?> = store.trainingImplement.asStateFlow()
     override val latestSwingSpeed: StateFlow<SwingSpeedReading?> = store.latestSwingSpeed.asStateFlow()
     override val triggerStatus: StateFlow<TriggerStatus?> = store.triggerStatus.asStateFlow()
-    override val cameraStatus: StateFlow<CameraStatus> = store.cameraStatus.asStateFlow()
+    override val cameraCaptureSettings: StateFlow<CameraCaptureSettings?> = store.cameraCaptureSettings.asStateFlow()
     override val simState: StateFlow<SimState> = store.simState.asStateFlow()
     override val radarConfig: StateFlow<RadarConfig?> = store.radarConfig.asStateFlow()
     override val debugState: StateFlow<DebugState> = store.debugState.asStateFlow()
@@ -191,11 +189,7 @@ internal class DefaultPiSessionRepository(
     override suspend fun setTrainingImplement(implement: String) =
         command("set_training_implement", buildJsonObject { put("implement", implement) })
 
-    override suspend fun toggleCamera() = command("toggle_camera")
-
-    override suspend fun toggleCameraStream() = command("toggle_camera_stream")
-
-    override suspend fun refreshCameraStatus() = command("get_camera_status")
+    override suspend fun refreshCameraCaptureSettings() = command("get_camera_capture_settings")
 
     override suspend fun refreshRadarConfig() = command("get_radar_config")
 
@@ -223,13 +217,20 @@ internal class DefaultPiSessionRepository(
 
     override suspend fun shutdown() = command("shutdown")
 
-    override fun cameraFrames(): Flow<ByteArray> =
-        flow {
-            val key = currentKey
-            if (key?.type == TransportType.BLUETOOTH) throw WifiOnlyFeatureException(Reason.BLUETOOTH)
-            val host = key?.host ?: throw WifiOnlyFeatureException(Reason.NOT_CONNECTED)
-            emitAll(cameraSource.frames(host))
-        }
+    override suspend fun cameraPreview(): CameraPreview = cameraSource.preview(wifiHost())
+
+    override suspend fun prepareReplay(replayId: String): String {
+        val host = wifiHost()
+        val replay = cameraSource.prepareReplay(host, replayId)
+        return checkNotNull(cameraSource.videoUrl(host, replay)) { "The Pi returned no video for this replay." }
+    }
+
+    /** The Wi-Fi host the camera's HTTP API lives on. */
+    private fun wifiHost(): String {
+        val key = currentKey
+        if (key?.type == TransportType.BLUETOOTH) throw WifiOnlyFeatureException(Reason.BLUETOOTH)
+        return key?.host?.takeIf { it.isNotBlank() } ?: throw WifiOnlyFeatureException(Reason.NOT_CONNECTED)
+    }
 
     private fun validName(name: String): String =
         when (val check = ProfileRules.checkName(name)) {
@@ -364,7 +365,14 @@ internal class DefaultPiSessionRepository(
          * joining a running session can't rely on having seen the pushes (plan §9.1, §9.2).
          */
         val INITIAL_REQUESTS =
-            listOf("get_session", "get_trigger_status", "get_radar_config", "get_debug_status", "get_profiles")
+            listOf(
+                "get_session",
+                "get_trigger_status",
+                "get_radar_config",
+                "get_debug_status",
+                "get_profiles",
+                "get_camera_capture_settings",
+            )
     }
 }
 

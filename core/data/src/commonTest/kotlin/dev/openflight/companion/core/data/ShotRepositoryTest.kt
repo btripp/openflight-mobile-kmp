@@ -19,7 +19,6 @@ import dev.openflight.companion.core.model.pi.DeletionState
 import dev.openflight.companion.core.model.pi.PiLinkState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
@@ -45,7 +44,7 @@ class ShotRepositoryTest {
             DefaultPiSessionRepository(
                 settings = settings,
                 socketFactory = { socketHost, _ -> FakePiSocket(socketHost).also { sockets += it } },
-                cameraSource = { emptyFlow() },
+                cameraSource = FakePiCameraSource(),
                 scope = scope,
             )
         val repository =

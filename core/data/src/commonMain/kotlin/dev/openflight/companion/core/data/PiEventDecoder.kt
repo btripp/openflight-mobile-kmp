@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 package dev.openflight.companion.core.data
 
-import dev.openflight.companion.core.model.pi.BallDetection
+import dev.openflight.companion.core.model.pi.CameraCaptureSettings
 import dev.openflight.companion.core.model.pi.CloudUploadStatus
 import dev.openflight.companion.core.model.pi.DebugReading
 import dev.openflight.companion.core.model.pi.DebugShotLog
@@ -109,12 +109,8 @@ internal sealed interface PiEvent {
         val diagnostic: TriggerDiagnostic,
     ) : PiEvent
 
-    data class Camera(
-        val update: CameraStatusPayload,
-    ) : PiEvent
-
-    data class Ball(
-        val detection: BallDetection,
+    data class CameraSettings(
+        val settings: CameraCaptureSettings,
     ) : PiEvent
 
     data class Sim(
@@ -154,17 +150,6 @@ internal sealed interface PiEvent {
         val notice: PiNotice,
     ) : PiEvent
 }
-
-/** A partial `camera_status`: every field is optional and only present fields are merged. */
-@Serializable
-internal data class CameraStatusPayload(
-    val available: Boolean? = null,
-    val enabled: Boolean? = null,
-    val streaming: Boolean? = null,
-    @SerialName("ball_detected") val ballDetected: Boolean? = null,
-    @SerialName("ball_confidence") val ballConfidence: Double? = null,
-    val error: String? = null,
-)
 
 /** `shot` and `shot_update` (server.py:3260, 3398, 3426); `pending`/`enrichment` aren't read. */
 @Serializable
@@ -243,8 +228,8 @@ private val PI_EVENT_DECODERS: Map<String, (JsonElement) -> PiEvent> =
         },
         "trigger_status" to { data -> PiEvent.Trigger(data.decode(TriggerStatus.serializer())) },
         "trigger_diagnostic" to { data -> PiEvent.Diagnostic(data.decode(TriggerDiagnostic.serializer())) },
-        "camera_status" to { data -> PiEvent.Camera(data.decode(CameraStatusPayload.serializer())) },
-        "ball_detection" to { data -> PiEvent.Ball(data.decode(BallDetection.serializer())) },
+        "camera_capture_settings" to
+            { data -> PiEvent.CameraSettings(data.decode(CameraCaptureSettings.serializer())) },
         "sim_status" to { data -> PiEvent.Sim(data.decode(SimStatus.serializer())) },
         "sim_shot" to { data -> PiEvent.SimShotSent(data.decode(SimShot.serializer())) },
         "sim_player" to { data -> PiEvent.SimPlayerChanged(data.decode(SimPlayer.serializer())) },
@@ -256,6 +241,8 @@ private val PI_EVENT_DECODERS: Map<String, (JsonElement) -> PiEvent> =
         "cloud_upload_status" to { data -> PiEvent.Cloud(data.decode(CloudUploadStatus.serializer())) },
         "radar_config_error" to
             { data -> notice(PiNotice.RadarConfigFailed(data.decode(ErrorPayload.serializer()).error)) },
+        "camera_capture_settings_error" to
+            { data -> notice(PiNotice.CameraSettingsFailed(data.decode(ErrorPayload.serializer()).error)) },
         "training_implement_error" to { data ->
             notice(PiNotice.TrainingImplementFailed(data.decode(ErrorPayload.serializer()).error))
         },

@@ -3,7 +3,8 @@ package dev.openflight.companion.core.testing
 
 import dev.openflight.companion.core.data.PiSessionRepository
 import dev.openflight.companion.core.data.WifiOnlyFeatureException
-import dev.openflight.companion.core.model.pi.CameraStatus
+import dev.openflight.companion.core.model.pi.CameraCaptureSettings
+import dev.openflight.companion.core.model.pi.CameraPreview
 import dev.openflight.companion.core.model.pi.ClearState
 import dev.openflight.companion.core.model.pi.CloudUploadStatus
 import dev.openflight.companion.core.model.pi.DebugState
@@ -21,10 +22,8 @@ import dev.openflight.companion.core.model.pi.SimState
 import dev.openflight.companion.core.model.pi.SwingSpeedReading
 import dev.openflight.companion.core.model.pi.TrainingImplement
 import dev.openflight.companion.core.model.pi.TriggerStatus
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.emptyFlow
 
 /**
  * A [PiSessionRepository] whose flows tests set directly. Commands are recorded in [commands]
@@ -50,7 +49,7 @@ class FakePiSessionRepository(
     override val trainingImplement = MutableStateFlow<TrainingImplement?>(null)
     override val latestSwingSpeed = MutableStateFlow<SwingSpeedReading?>(null)
     override val triggerStatus = MutableStateFlow<TriggerStatus?>(null)
-    override val cameraStatus = MutableStateFlow(CameraStatus())
+    override val cameraCaptureSettings = MutableStateFlow<CameraCaptureSettings?>(null)
     override val simState = MutableStateFlow(SimState())
     override val radarConfig = MutableStateFlow<RadarConfig?>(null)
     override val debugState = MutableStateFlow(DebugState())
@@ -61,10 +60,13 @@ class FakePiSessionRepository(
     /** Every command that reached the "server", in order. */
     val commands = mutableListOf<String>()
 
-    /** What [cameraFrames] returns; each call counts in [cameraFrameCollections]. */
-    var frames: Flow<ByteArray> = emptyFlow()
-    var cameraFrameCollections = 0
+    /** Answers each [cameraPreview]; every call counts in [previewCalls]. */
+    var previewResponse: suspend () -> CameraPreview = { CameraPreview.CaptureNotEnabled }
+    var previewCalls = 0
         private set
+
+    /** Answers [prepareReplay] with the video URL for a replay id (or throws). */
+    var replayResponse: suspend (String) -> String = { "http://pi.local:8080/api/camera/replays/$it/video" }
 
     var started = false
         private set
@@ -118,11 +120,7 @@ class FakePiSessionRepository(
 
     override suspend fun setTrainingImplement(implement: String) = record("set_training_implement:$implement")
 
-    override suspend fun toggleCamera() = record("toggle_camera")
-
-    override suspend fun toggleCameraStream() = record("toggle_camera_stream")
-
-    override suspend fun refreshCameraStatus() = record("get_camera_status")
+    override suspend fun refreshCameraCaptureSettings() = record("get_camera_capture_settings")
 
     override suspend fun refreshRadarConfig() = record("get_radar_config")
 
@@ -134,9 +132,14 @@ class FakePiSessionRepository(
 
     override suspend fun shutdown() = record("shutdown")
 
-    override fun cameraFrames(): Flow<ByteArray> {
-        cameraFrameCollections++
-        return frames
+    override suspend fun cameraPreview(): CameraPreview {
+        previewCalls++
+        return previewResponse()
+    }
+
+    override suspend fun prepareReplay(replayId: String): String {
+        commands += "prepare_replay:$replayId"
+        return replayResponse(replayId)
     }
 
     private fun record(command: String) {

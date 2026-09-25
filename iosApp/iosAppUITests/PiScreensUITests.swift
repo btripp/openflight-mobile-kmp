@@ -52,7 +52,7 @@ final class PiScreensUITests: XCTestCase {
 
     // MARK: Camera
 
-    func testCameraShowsTheOfflineStateWithDisabledToggles() {
+    func testCameraShowsTheOfflineStateWithRefreshDisabled() {
         let app = launch()
         app.tabBars.buttons["Camera"].tap()
 
@@ -60,12 +60,11 @@ final class PiScreensUITests: XCTestCase {
         XCTAssertTrue(title.waitForExistence(timeout: 5))
         XCTAssertEqual(title.label, "Camera Offline")
         XCTAssertTrue(app.staticTexts["The camera needs the Pi's live Wi-Fi session (Not connected)."].exists)
-        XCTAssertEqual(app.descendants(matching: .any)["camera.ballStatus"].label, "Camera Off")
+        XCTAssertEqual(app.staticTexts["camera.captureStatus"].label, "Not reported yet")
 
-        let detection = app.switches["camera.toggleCamera"]
-        scroll(app, to: detection)
-        XCTAssertFalse(detection.isEnabled)
-        XCTAssertFalse(app.switches["camera.toggleStream"].isEnabled)
+        let refresh = app.buttons["camera.refresh"]
+        scroll(app, to: refresh)
+        XCTAssertFalse(refresh.isEnabled)
     }
 
     // MARK: Training
@@ -76,7 +75,7 @@ final class PiScreensUITests: XCTestCase {
 
         let player = app.staticTexts["training.player"]
         XCTAssertTrue(player.waitForExistence(timeout: 5))
-        XCTAssertEqual(player.label, "Player 1")
+        XCTAssertEqual(player.label, "—")
         XCTAssertEqual(app.staticTexts["training.count"].label, "No swings yet")
         XCTAssertEqual(app.descendants(matching: .any)["training.last"].value as? String, "no swings")
         XCTAssertTrue(app.staticTexts["Waiting for the Pi's trigger mode"].exists)

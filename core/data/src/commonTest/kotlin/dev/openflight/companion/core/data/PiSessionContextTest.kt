@@ -17,7 +17,7 @@ import assertk.assertions.isTrue
 import assertk.assertions.prop
 import assertk.assertions.startsWith
 import dev.openflight.companion.core.model.ShotEvent
-import dev.openflight.companion.core.model.pi.CameraStatus
+import dev.openflight.companion.core.model.pi.CameraCaptureSettings
 import dev.openflight.companion.core.model.pi.CloudUploadState
 import dev.openflight.companion.core.model.pi.CloudUploadStatus
 import dev.openflight.companion.core.model.pi.PiLinkState
@@ -272,22 +272,23 @@ class PiSessionContextTest {
         }
 
     @Test
-    fun cameraStatusMergesPartialUpdatesAndBallDetection() =
+    fun cameraCaptureSettingsMirrorTheServerAndErrorsAreNotices() =
         runPiTest { h ->
             val socket = h.connected()
-            socket.server("camera_status", """{"enabled":true,"available":true,"streaming":false}""")
-            socket.server("ball_detection", """{"detected":true,"confidence":0.83}""")
-            socket.server("camera_status", """{"enabled":true,"available":true,"streaming":true}""")
+            socket.serverFrame(PiFixtures.CAMERA_CAPTURE_SETTINGS_FRAME)
 
-            assertThat(h.repository.cameraStatus.value).isEqualTo(
-                CameraStatus(
-                    available = true,
-                    enabled = true,
-                    streaming = true,
-                    ballDetected = true,
-                    ballConfidence = 0.83,
-                ),
+            assertThat(h.repository.cameraCaptureSettings.value).isEqualTo(
+                CameraCaptureSettings(available = false, enabled = false, alignmentXPct = 50.0, alignmentYPct = 50.0),
             )
+            h.repository.notices.test {
+                socket.serverFrame(PiFixtures.CAMERA_CAPTURE_SETTINGS_ERROR_FRAME)
+                assertThat(awaitItem()).isEqualTo(
+                    PiNotice.CameraSettingsFailed("High-speed camera capture is not running"),
+                )
+            }
+
+            h.settings.hostState.value = "10.0.0.9:8080"
+            assertThat(h.repository.cameraCaptureSettings.value).isNull()
         }
 
     @Test

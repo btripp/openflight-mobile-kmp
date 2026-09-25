@@ -21,8 +21,8 @@ import kotlinx.coroutines.withContext
 import org.koin.androidx.compose.koinViewModel
 
 /**
- * The camera destination: owns the [CameraViewModel], decodes its MJPEG [CameraViewModel.frames]
- * into the latest [ImageBitmap], and hands [CameraScreen] both.
+ * The camera destination: owns the [CameraViewModel], decodes its polled preview stills
+ * ([CameraViewModel.frames]) into the latest [ImageBitmap], and hands [CameraScreen] both.
  */
 @Composable
 fun CameraRoute(
@@ -43,8 +43,8 @@ fun CameraRoute(
 }
 
 /**
- * The newest decodable JPEG from [frames], while the screen is at least STARTED (so the shared HTTP
- * stream closes in the background).
+ * The newest decodable JPEG from [frames], while the screen is at least STARTED: collecting is
+ * what makes the VM poll the Pi, so the polling stops in the background.
  *
  * Memory stays bounded: [conflate] keeps at most one undecoded frame waiting while another decodes
  * (older ones are dropped, never queued), and only the latest decoded bitmap is referenced; the
@@ -63,7 +63,7 @@ internal fun rememberLatestFrame(frames: Flow<ByteArray>): State<ImageBitmap?> {
     }
 }
 
-/** Decodes one MJPEG part; `null` for a corrupt or truncated JPEG. */
+/** Decodes one preview still; `null` for a corrupt or truncated JPEG. */
 internal fun decodeJpeg(jpeg: ByteArray): ImageBitmap? =
     BitmapFactory.decodeByteArray(jpeg, 0, jpeg.size)?.asImageBitmap()
 
@@ -73,8 +73,10 @@ object CameraTestTags {
     const val FEED = "camera.feed"
     const val FRAME = "camera.frame"
     const val PHASE_TITLE = "camera.phaseTitle"
-    const val RETRY = "camera.retry"
-    const val BALL_STATUS = "camera.ballStatus"
-    const val TOGGLE_CAMERA = "camera.toggleCamera"
-    const val TOGGLE_STREAM = "camera.toggleStream"
+    const val CAPTURE_STATUS = "camera.captureStatus"
+    const val REFRESH = "camera.refresh"
+    const val OPEN_REPLAY = "camera.openReplay"
+    const val REPLAY_ERROR = "camera.replayError"
+
+    fun replay(replayId: String): String = "camera.replay.$replayId"
 }

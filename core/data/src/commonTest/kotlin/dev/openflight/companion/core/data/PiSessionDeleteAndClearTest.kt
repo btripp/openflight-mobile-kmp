@@ -11,7 +11,6 @@ import dev.openflight.companion.core.model.pi.DeletionState
 import dev.openflight.companion.core.socketio.SocketConnectionState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
@@ -37,7 +36,7 @@ class PiSessionDeleteAndClearTest {
             DefaultPiSessionRepository(
                 settings = settings,
                 socketFactory = { host, _ -> FakePiSocket(host).also { sockets += it } },
-                cameraSource = { emptyFlow() },
+                cameraSource = FakePiCameraSource(),
                 scope = scope,
             )
         val socket: FakePiSocket get() = sockets.last()

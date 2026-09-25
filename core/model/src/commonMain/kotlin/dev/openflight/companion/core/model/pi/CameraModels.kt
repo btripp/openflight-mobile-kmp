@@ -25,6 +25,34 @@ data class CameraReplay(
 )
 
 /**
+ * One `GET /api/camera/preview.jpg` (server.py:1337): a still from the capture runtime's
+ * processed stream, served while the raw rolling buffer keeps running, so polling it never costs
+ * a shot.
+ */
+sealed interface CameraPreview {
+    /** `200 image/jpeg`. */
+    class Frame(
+        val jpeg: ByteArray,
+    ) : CameraPreview {
+        override fun equals(other: Any?): Boolean = other is Frame && jpeg.contentEquals(other.jpeg)
+
+        override fun hashCode(): Int = jpeg.contentHashCode()
+    }
+
+    /** `404 "Camera capture not enabled"`: the Pi runs without high-speed camera capture. */
+    data object CaptureNotEnabled : CameraPreview
+
+    /** `503 "Camera not running"`: capture is configured but the camera produced no still. */
+    data object CameraNotRunning : CameraPreview
+
+    /** Any other answer, with the server's text. */
+    data class Unavailable(
+        val status: Int,
+        val message: String,
+    ) : CameraPreview
+}
+
+/**
  * `camera_capture_settings` (server.py:1447 `_camera_capture_settings_payload`): the high-speed
  * capture's configuration and live state. Without `--camera-capture` it is just
  * `{enabled: false, available: false, alignment_x_pct, alignment_y_pct}`. Only the fields a screen

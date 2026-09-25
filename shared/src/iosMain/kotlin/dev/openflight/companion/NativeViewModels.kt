@@ -85,7 +85,8 @@ val CameraViewModel.sideEffects: Flow<CameraEffect>
     get() = effects
 
 /**
- * The live MJPEG feed for Swift, one JPEG per `NSData`. `conflate()` keeps only the newest frame
+ * The polled camera preview for Swift, one JPEG still per `NSData`; collecting it is what makes
+ * the VM poll the Pi. `conflate()` keeps only the newest frame
  * while Swift decodes the previous one (the async sequence is back-pressured), so a slow decoder
  * drops frames instead of buffering them.
  */

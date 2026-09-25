@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 package dev.openflight.companion.core.data
 
-import dev.openflight.companion.core.model.pi.CameraStatus
+import dev.openflight.companion.core.model.pi.CameraCaptureSettings
 import dev.openflight.companion.core.model.pi.ClearState
 import dev.openflight.companion.core.model.pi.CloudUploadStatus
 import dev.openflight.companion.core.model.pi.DebugState
@@ -48,7 +48,7 @@ internal class PiSessionStore(
     val trainingImplement = MutableStateFlow<TrainingImplement?>(null)
     val latestSwingSpeed = MutableStateFlow<SwingSpeedReading?>(null)
     val triggerStatus = MutableStateFlow<TriggerStatus?>(null)
-    val cameraStatus = MutableStateFlow(CameraStatus())
+    val cameraCaptureSettings = MutableStateFlow<CameraCaptureSettings?>(null)
     val simState = MutableStateFlow(SimState())
     val radarConfig = MutableStateFlow<RadarConfig?>(null)
     val debugState = MutableStateFlow(DebugState())
@@ -116,7 +116,7 @@ internal class PiSessionStore(
         trainingImplement.value = null
         latestSwingSpeed.value = null
         triggerStatus.value = null
-        cameraStatus.value = CameraStatus()
+        cameraCaptureSettings.value = null
         simState.value = SimState()
         radarConfig.value = null
         debugState.value = DebugState()
@@ -230,14 +230,8 @@ internal class PiSessionStore(
 
     private fun applyDeviceEvent(event: PiEvent) {
         when (event) {
-            is PiEvent.Camera -> {
-                cameraStatus.update { it.merge(event.update) }
-            }
-
-            is PiEvent.Ball -> {
-                cameraStatus.update {
-                    it.copy(ballDetected = event.detection.detected, ballConfidence = event.detection.confidence)
-                }
+            is PiEvent.CameraSettings -> {
+                cameraCaptureSettings.value = event.settings
             }
 
             is PiEvent.Sim -> {
@@ -393,13 +387,3 @@ internal class PiSessionStore(
         const val NOTICE_BUFFER = 16
     }
 }
-
-private fun CameraStatus.merge(update: CameraStatusPayload): CameraStatus =
-    copy(
-        available = update.available ?: available,
-        enabled = update.enabled ?: enabled,
-        streaming = update.streaming ?: streaming,
-        ballDetected = update.ballDetected ?: ballDetected,
-        ballConfidence = update.ballConfidence ?: ballConfidence,
-        error = update.error,
-    )

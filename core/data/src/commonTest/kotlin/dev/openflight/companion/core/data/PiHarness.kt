@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 package dev.openflight.companion.core.data
 
+import dev.openflight.companion.core.model.pi.CameraPreview
+import dev.openflight.companion.core.model.pi.CameraReplay
 import dev.openflight.companion.core.socketio.SocketConnectionState
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
@@ -16,16 +17,13 @@ internal class PiHarness(
 ) {
     val settings = FakeSettingsRepository(transport = transport, host = host)
     val sockets = mutableListOf<FakePiSocket>()
-    val cameraHosts = mutableListOf<String>()
+    val camera = FakePiCameraSource()
     val logs = mutableListOf<String>()
     val repository =
         DefaultPiSessionRepository(
             settings = settings,
             socketFactory = { socketHost, _ -> FakePiSocket(socketHost).also { sockets += it } },
-            cameraSource = { cameraHost ->
-                cameraHosts += cameraHost
-                flowOf(byteArrayOf(1), byteArrayOf(2))
-            },
+            cameraSource = camera,
             scope = scope,
             log = { logs += it },
         )
@@ -53,4 +51,29 @@ internal fun runPiTest(
     val harness = PiHarness(backgroundScope, transport, host)
     harness.repository.start()
     body(harness)
+}
+
+/** A scripted [PiCameraSource]: records every host it was asked on. */
+internal class FakePiCameraSource : PiCameraSource {
+    val hosts = mutableListOf<String>()
+    var preview: CameraPreview = CameraPreview.Frame(byteArrayOf(1, 2))
+    var replay: (String) -> CameraReplay = { CameraReplay(id = it, videoUrl = "/api/camera/replays/$it/video") }
+
+    override suspend fun preview(host: String): CameraPreview {
+        hosts += host
+        return preview
+    }
+
+    override suspend fun prepareReplay(
+        host: String,
+        replayId: String,
+    ): CameraReplay {
+        hosts += host
+        return replay(replayId)
+    }
+
+    override fun videoUrl(
+        host: String,
+        replay: CameraReplay,
+    ): String? = replay.videoUrl?.let { "http://$host$it" }
 }

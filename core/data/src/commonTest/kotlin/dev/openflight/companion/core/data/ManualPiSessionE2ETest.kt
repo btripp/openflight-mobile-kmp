@@ -8,6 +8,7 @@ import dev.openflight.companion.core.model.pi.DeletionState
 import dev.openflight.companion.core.model.pi.PiLinkState
 import dev.openflight.companion.core.model.pi.PiNotice
 import dev.openflight.companion.core.model.pi.RadarConfigUpdate
+import dev.openflight.companion.core.network.PiCameraClient
 import dev.openflight.companion.core.network.WifiShotTransport
 import dev.openflight.companion.core.network.openFlightHttpClient
 import dev.openflight.companion.core.socketio.KtorWebSocketTransport
@@ -51,7 +52,7 @@ class ManualPiSessionE2ETest {
                 DefaultPiSessionRepository(
                     settings = FakeSettingsRepository(transport = TransportType.WIFI, host = HOST),
                     socketFactory = socketIoPiSocketFactory(KtorWebSocketTransport(httpClient)),
-                    cameraSource = KtorPiCameraSource(httpClient),
+                    cameraSource = KtorPiCameraSource(PiCameraClient(httpClient)),
                     scope = scope,
                     log = { log("repository log: $it") },
                 )
@@ -144,19 +145,10 @@ class ManualPiSessionE2ETest {
             repository.toggleDebug()
             await("debug off") { !repository.debugState.value.enabled }
 
-            repository.toggleCamera()
-            repository.toggleCameraStream()
-            repository.refreshCameraStatus()
+            repository.refreshCameraCaptureSettings()
             delay(500)
-            log("camera: ${repository.cameraStatus.value}")
-            val frames =
-                runCatching { withTimeoutOrNull(5_000) { repository.cameraFrames().take(1).toList() } }
-            log(
-                "camera frames: ${frames.fold(
-                    { "got ${it?.size ?: "timeout"}" },
-                    { "failed: ${it::class.simpleName}: ${it.message}" },
-                )}",
-            )
+            log("camera capture settings: ${repository.cameraCaptureSettings.value}")
+            log("camera preview: ${runCatching { repository.cameraPreview() }}")
 
             repository.clearSession(repository.profiles.value.activeProfileId)
             await("clear") { repository.clearState.value is ClearState.Cleared }

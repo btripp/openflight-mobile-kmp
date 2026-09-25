@@ -2,6 +2,7 @@
 package dev.openflight.companion.core.data
 
 import dev.openflight.companion.core.ble.BleShotTransport
+import dev.openflight.companion.core.network.PiCameraClient
 import dev.openflight.companion.core.network.PiControlClient
 import dev.openflight.companion.core.network.WifiShotTransport
 import dev.openflight.companion.core.network.openFlightHttpClient
@@ -56,7 +57,7 @@ val dataModule: Module =
             DefaultPiSessionRepository(
                 settings = get(),
                 socketFactory = socketIoPiSocketFactory(KtorWebSocketTransport(httpClient)),
-                cameraSource = KtorPiCameraSource(httpClient),
+                cameraSource = KtorPiCameraSource(PiCameraClient(httpClient)),
                 scope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
             )
         }

@@ -43,27 +43,6 @@ data class TriggerDiagnostic(
 )
 
 /**
- * The camera's state, merged from `camera_status`, `ball_detection` and the on-connect
- * `session_state` (the server sends partial updates; the web UI merges them the same way).
- * [error] is the latest `camera_status` error, e.g. "Camera not initialized"; `null` otherwise.
- */
-data class CameraStatus(
-    val available: Boolean = false,
-    val enabled: Boolean = false,
-    val streaming: Boolean = false,
-    val ballDetected: Boolean = false,
-    val ballConfidence: Double = 0.0,
-    val error: String? = null,
-)
-
-/** `ball_detection`: the camera tracker's detection changed. */
-@Serializable
-data class BallDetection(
-    val detected: Boolean = false,
-    val confidence: Double = 0.0,
-)
-
-/**
  * `radar_config` (server.py `radar_config`): speed filters in mph, the magnitude filter, and
  * transmit power (0 = max, 7 = min).
  */

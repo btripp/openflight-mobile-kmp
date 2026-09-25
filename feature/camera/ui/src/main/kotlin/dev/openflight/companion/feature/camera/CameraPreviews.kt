@@ -4,65 +4,68 @@ package dev.openflight.companion.feature.camera
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.tooling.preview.Preview
 import dev.openflight.companion.core.designsystem.OfTheme
+import dev.openflight.companion.core.model.pi.CameraCaptureSettings
 import dev.openflight.companion.core.model.pi.PiFeatureAvailability
 
 internal fun previewCameraState(
     phase: CameraPhase,
     availability: PiFeatureAvailability = PiFeatureAvailability.Available,
-    cameraAvailable: Boolean = phase != CameraPhase.UNAVAILABLE,
-    enabled: Boolean =
-        phase == CameraPhase.PAUSED || phase == CameraPhase.STREAMING ||
-            phase == CameraPhase.STREAM_ERROR,
-    streaming: Boolean = phase == CameraPhase.STREAMING || phase == CameraPhase.STREAM_ERROR,
-    ballDetected: Boolean = false,
-    confidence: Int = 0,
-): CameraUiState {
-    val toggleCamera =
-        when {
-            !availability.isAvailable -> availability
-            !cameraAvailable -> PiFeatureAvailability.Unavailable(CameraUiState.CAMERA_NOT_AVAILABLE)
-            else -> PiFeatureAvailability.Available
-        }
-    return CameraUiState(
+    settings: CameraCaptureSettings? =
+        if (phase == CameraPhase.NOT_ENABLED) {
+            CameraCaptureSettings(available = false)
+        } else {
+            CameraCaptureSettings(
+                available = true,
+                enabled = true,
+                running = true,
+                armed = true,
+                width = 1456,
+                height = 1088,
+                fps = 240.0,
+            )
+        },
+    replays: List<ReplayRow> = listOf(previewReplayRow()),
+    replay: CameraReplayState = CameraReplayState.Idle,
+    previewError: String? = if (phase == CameraPhase.ERROR) "Camera exploded (HTTP 500)" else null,
+): CameraUiState =
+    CameraUiState(
         phase = phase,
         availability = availability,
-        cameraAvailable = cameraAvailable,
-        enabled = enabled,
-        streaming = streaming,
-        ballDetected = ballDetected,
-        ballConfidencePercent = confidence,
-        statusText =
-            when {
-                !enabled -> "Camera Off"
-                ballDetected -> "Ball $confidence%"
-                else -> "No Ball"
-            },
-        cameraError = null,
-        streamError = if (phase == CameraPhase.STREAM_ERROR) CameraUiState.CAMERA_NOT_AVAILABLE else null,
-        toggleCamera = toggleCamera,
-        toggleStream =
-            if (toggleCamera.isAvailable && !enabled) {
-                PiFeatureAvailability.Unavailable(CameraUiState.CAMERA_DISABLED)
-            } else {
-                toggleCamera
-            },
+        settings = settings,
+        previewError = previewError,
+        replays = replays,
+        replay = replay,
     )
-}
+
+internal fun previewReplayRow(id: String = "a1b2c3"): ReplayRow =
+    ReplayRow(
+        replayId = id,
+        shotNumber = 7,
+        timestamp = "2026-09-25T10:03:35.906612",
+        club = "driver",
+        ballSpeedMph = 151.4,
+        mirrorHorizontal = true,
+    )
 
 @Preview
 @Composable
-private fun CameraUnavailablePreview() {
+private fun CameraNotEnabledPreview() {
     OfTheme {
-        CameraScreen(uiState = previewCameraState(CameraPhase.UNAVAILABLE), frame = null, onEvent = {}, onBack = {})
+        CameraScreen(uiState = previewCameraState(CameraPhase.NOT_ENABLED), frame = null, onEvent = {}, onBack = {})
     }
 }
 
 @Preview
 @Composable
-private fun CameraPausedPreview() {
+private fun CameraReplayReadyPreview() {
     OfTheme {
         CameraScreen(
-            uiState = previewCameraState(CameraPhase.PAUSED, ballDetected = true, confidence = 87),
+            uiState =
+                previewCameraState(
+                    CameraPhase.LOADING,
+                    replay =
+                        CameraReplayState.Ready("a1b2c3", "http://pi.local:8080/api/camera/replays/a1b2c3/video", true),
+                ),
             frame = null,
             onEvent = {},
             onBack = {},

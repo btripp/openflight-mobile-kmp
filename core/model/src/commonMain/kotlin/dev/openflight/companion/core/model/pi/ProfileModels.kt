@@ -7,7 +7,7 @@ import kotlinx.serialization.json.JsonObject
 
 /**
  * One profile (`Profile.to_dict`, backend profiles.py:67): a named context shots are attributed
- * to, a person or a place. It replaced `set_player`/`player_name`.
+ * to, a person or a place. It replaced the old single player name.
  *
  * @property createdAt ISO-8601 UTC, seconds precision, `Z`-suffixed.
  * @property settings an open dict the server persists without interpreting it. Round-trip it and
