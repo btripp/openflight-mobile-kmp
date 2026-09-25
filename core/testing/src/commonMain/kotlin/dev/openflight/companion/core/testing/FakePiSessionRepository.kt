@@ -37,6 +37,7 @@ class FakePiSessionRepository(
     link: PiLinkState = PiLinkState.Connected,
 ) : PiSessionRepository {
     override val linkState = MutableStateFlow(link)
+    override val bluetoothSchemaV2 = MutableStateFlow(false)
     override val sessionShots = MutableStateFlow(emptyList<ShotDetail>())
     override val shotDetails = MutableStateFlow(emptyMap<String, ShotDetail>())
     override val stats = MutableStateFlow<SessionStats?>(null)
@@ -105,7 +106,14 @@ class FakePiSessionRepository(
         clearState.value = ClearState.Idle
     }
 
-    override suspend fun setActiveProfile(profileId: String) = record("set_active_profile:$profileId")
+    /** Like the real repository, this also works over a schema v2 Bluetooth link (plan R8e). */
+    override suspend fun setActiveProfile(profileId: String) {
+        if (linkState.value == PiLinkState.WifiOnly && bluetoothSchemaV2.value) {
+            commands += "set_active_profile:$profileId"
+        } else {
+            record("set_active_profile:$profileId")
+        }
+    }
 
     override suspend fun addProfile(name: String) = record("add_profile:$name")
 

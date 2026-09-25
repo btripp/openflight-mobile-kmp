@@ -83,6 +83,16 @@ internal sealed interface PiEvent {
         val snapshot: ProfilesSnapshot,
     ) : PiEvent
 
+    /** Plan R8e: a v2 shot over BLE; only indexed for [PiSessionRepository.detailFor]. */
+    data class BluetoothShot(
+        val detail: ShotDetail,
+    ) : PiEvent
+
+    /** Plan R8e: the v2 `shot_deleted {timestamp}` event (BLE v2, SSE `?schema=2`). */
+    data class ShotDeleted(
+        val timestamp: String,
+    ) : PiEvent
+
     data class Power(
         val status: PowerStatus,
     ) : PiEvent

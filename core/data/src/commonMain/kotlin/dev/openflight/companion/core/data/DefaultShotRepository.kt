@@ -12,6 +12,8 @@ import dev.openflight.companion.core.model.pi.ClearState
 import dev.openflight.companion.core.model.pi.DeletionState
 import dev.openflight.companion.core.model.pi.PiLinkState
 import dev.openflight.companion.core.network.PiControlClient
+import dev.openflight.companion.core.protocol.SchemaV2Commands
+import dev.openflight.companion.core.protocol.SchemaV2Event
 import dev.openflight.companion.core.protocol.ShotTransport
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -62,6 +64,12 @@ internal fun interface WifiTransportFactory {
  * [clearHistory] are **server-confirmed**: the request goes to [piSession] and [history] changes
  * only once its [PiSessionRepository.deletionState] / [PiSessionRepository.clearState] reports
  * success. Without a Pi link they stay local (optimistic) edits.
+ *
+ * Plan R8e (schema v2, BLE or SSE `?schema=2`): a final shot replaces its provisional version in
+ * [history] (same `event_id`), `shot_deleted` removes the shot with that timestamp, and
+ * `session_cleared` removes that profile's shots, whoever deleted or cleared them. After the club
+ * sync on connect, a v2 BLE link also asks for the profile roster and the power status (failures
+ * are logged: a Pi without `--battery` refuses the latter).
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 @Suppress("TooManyFunctions") // The ShotRepository surface (9) plus the session helpers.
@@ -245,6 +253,9 @@ internal class DefaultShotRepository(
                     // Subscribe before start() so no shot or state change is missed.
                     launch(start = CoroutineStart.UNDISPATCHED) { transport.shots.collect { record(it) } }
                     launch(start = CoroutineStart.UNDISPATCHED) {
+                        transport.schemaEvents.collect { applySchemaEvent(it) }
+                    }
+                    launch(start = CoroutineStart.UNDISPATCHED) {
                         transport.state.collect { mutableConnectionState.value = it }
                     }
                     launch(start = CoroutineStart.UNDISPATCHED) {
@@ -268,6 +279,23 @@ internal class DefaultShotRepository(
                 mutableActiveClub.value = null
             }
         }
+
+    private fun applySchemaEvent(event: SchemaV2Event) {
+        when (event) {
+            is SchemaV2Event.ShotDeleted -> {
+                removeLocally { it.timestamp == event.timestamp }
+            }
+
+            is SchemaV2Event.SessionCleared -> {
+                val profileId = event.profileId ?: return
+                removeLocally { (it.profileId ?: piSession?.detailFor(it)?.profileId) == profileId }
+            }
+
+            else -> {
+                Unit
+            }
+        }
+    }
 
     private fun record(shot: ShotEvent) {
         val updated = shotHistory.record(shot)
@@ -304,14 +332,25 @@ internal class DefaultShotRepository(
         }
     }
 
-    @Suppress("TooGenericExceptionCaught") // Any sync failure is logged, never surfaced as a connection error.
+    /** The on-connect sync: the club, then (schema v2 BLE) the roster and the power status. */
     private suspend fun syncClub(transport: ShotTransport) {
+        quietly("Club sync on connect") { readAndPersistClub(transport) }
+        val v2 = (transport as? SchemaV2Commands)?.takeIf { it.schemaV2Active.value } ?: return
+        quietly("get_profiles on connect") { controlMutex.withLock { v2.requestProfiles() } }
+        quietly("get_power_status on connect") { controlMutex.withLock { v2.requestPowerStatus() } }
+    }
+
+    @Suppress("TooGenericExceptionCaught") // Any sync failure is logged, never surfaced as a connection error.
+    private suspend fun quietly(
+        what: String,
+        request: suspend () -> Unit,
+    ) {
         try {
-            readAndPersistClub(transport)
+            request()
         } catch (cancellation: CancellationException) {
             throw cancellation
         } catch (error: Exception) {
-            log("Club sync on connect failed: ${error.message ?: error}")
+            log("$what failed: ${error.message ?: error}")
         }
     }
 

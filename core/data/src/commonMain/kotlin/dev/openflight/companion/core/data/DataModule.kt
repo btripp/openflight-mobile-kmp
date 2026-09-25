@@ -64,6 +64,8 @@ val dataModule: Module =
                 socketFactory = socketIoPiSocketFactory(KtorWebSocketTransport(httpClient)),
                 cameraSource = KtorPiCameraSource(PiCameraClient(httpClient)),
                 scope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
+                // R8e: profiles, club, processing and power over a schema v2 BLE link.
+                bluetooth = get<BleShotTransport>(),
             )
         }
     }

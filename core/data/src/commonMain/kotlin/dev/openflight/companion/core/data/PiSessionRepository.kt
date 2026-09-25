@@ -43,11 +43,19 @@ import kotlinx.coroutines.flow.StateFlow
  * them, so the last roster, power reading and club stay on screen until the reconnect's snapshots
  * replace them.
  *
+ * Plan R8e: over Bluetooth with a schema v2 Pi ([bluetoothSchemaV2]), [profiles], [club],
+ * [shotProcessing] and [powerStatus] follow the BLE link's events, [detailFor] knows each v2 shot,
+ * and [setActiveProfile] goes over Bluetooth. [linkState] stays [PiLinkState.WifiOnly] and every
+ * other command still needs Wi-Fi: BLE is read-and-select only (no delete, clear or profile edits).
+ *
  * Lifecycle methods must be called from one thread (the main thread), like a ViewModel's.
  */
 @Suppress("TooManyFunctions", "ComplexInterface") // One command per server event, as in socketService.ts.
 interface PiSessionRepository {
     val linkState: StateFlow<PiLinkState>
+
+    /** Plan R8e: `true` while the transport is Bluetooth and the Pi negotiated schema v2. */
+    val bluetoothSchemaV2: StateFlow<Boolean>
 
     /**
      * The Pi's current session for **every profile**, newest first, capped at [MAX_SESSION_SHOTS]
@@ -165,7 +173,10 @@ interface PiSessionRepository {
     /** Returns [clearState] to [ClearState.Idle] once its outcome was shown. */
     fun dismissClear()
 
-    /** `set_active_profile` → `profiles`. */
+    /**
+     * `set_active_profile` → `profiles`. Over Bluetooth this needs [bluetoothSchemaV2] and goes
+     * over BLE; the Pi's refusal ("Unknown profile") is thrown there.
+     */
     suspend fun setActiveProfile(profileId: String)
 
     /**
