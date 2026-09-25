@@ -68,6 +68,8 @@ struct SessionContent: View {
 
     private var units: UnitSystem { state.units }
     private var isPi: Bool { state.source == .pi }
+    /// Plan R8e: over Bluetooth (a read-and-select link) delete and clear are off, with a reason.
+    private var canEdit: Bool { state.editAvailability.isAvailable }
 
     var body: some View {
         List {
@@ -84,17 +86,19 @@ struct SessionContent: View {
                     ForEach(state.shots, id: \.id) { row in
                         SessionShotRowView(row: row, units: units)
                             .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                Button(role: .destructive) {
-                                    send(SessionEventDeleteShot(id: row.id))
-                                } label: {
-                                    Label("Delete", systemImage: "trash")
+                                if canEdit {
+                                    Button(role: .destructive) {
+                                        send(SessionEventDeleteShot(id: row.id))
+                                    } label: {
+                                        Label("Delete", systemImage: "trash")
+                                    }
+                                    .tint(.red)
                                 }
-                                .tint(.red)
                             }
                     }
                     .listRowBackground(Theme.bgCard)
                 } header: {
-                    Text("SHOTS · swipe left to delete")
+                    Text(canEdit ? "SHOTS · swipe left to delete" : "SHOTS")
                         .font(.ofEyebrow)
                         .tracking(1.4)
                         .foregroundStyle(Theme.gold)
@@ -233,6 +237,16 @@ struct SessionContent: View {
     // MARK: Actions
 
     private var actions: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            actionButtons
+            if let reason = state.editAvailability.disabledReason {
+                DisabledReason(reason: reason)
+                    .accessibilityIdentifier("session.edit.disabledReason")
+            }
+        }
+    }
+
+    private var actionButtons: some View {
         HStack(spacing: 12) {
             Group {
                 if let export {
@@ -257,6 +271,7 @@ struct SessionContent: View {
                     .frame(maxWidth: .infinity)
             }
             .tint(Theme.danger)
+            .disabled(!canEdit)
             .accessibilityIdentifier("session.clear")
             // Attached to the button, so where iOS shows it as a popover it points at Clear.
             .confirmationDialog("Clear session?", isPresented: $confirmingClear, titleVisibility: .visible) {

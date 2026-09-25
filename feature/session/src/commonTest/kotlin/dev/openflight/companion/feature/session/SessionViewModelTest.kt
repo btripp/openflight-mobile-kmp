@@ -12,6 +12,7 @@ import assertk.assertions.isFalse
 import assertk.assertions.isNotNull
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
+import dev.openflight.companion.core.data.TransportType
 import dev.openflight.companion.core.insights.ClubChip
 import dev.openflight.companion.core.insights.ConfidenceLevel
 import dev.openflight.companion.core.insights.UnitSystem
@@ -383,6 +384,42 @@ class SessionViewModelTest {
             }
             assertThat(viewModel.uiState.value.simulateAvailability)
                 .isEqualTo(PiFeatureAvailability.Unavailable(PiFeatureAvailability.NOT_CONNECTED))
+        }
+
+    // endregion
+
+    // region Bluetooth is read-and-select (plan R8e)
+
+    @Test
+    fun overBluetoothDeleteAndClearAreWifiOnlyAndExplainWhy() =
+        runTest {
+            settings.transport.value = TransportType.BLUETOOTH
+            piSession.linkState.value = PiLinkState.WifiOnly
+            shots.setHistory(listOf(shot(1)))
+
+            viewModel.uiState.testIgnoringRest {
+                val state = awaitUntil { it.hasShots }
+                assertThat(state.editAvailability)
+                    .isEqualTo(PiFeatureAvailability.Unavailable(PiFeatureAvailability.WIFI_ONLY_ON_BLUETOOTH))
+                viewModel.effects.test {
+                    viewModel.onEvent(SessionEvent.DeleteShot(shotId(1)))
+                    viewModel.onEvent(SessionEvent.ClearHistory)
+
+                    val message = SessionEffect.Message(PiFeatureAvailability.WIFI_ONLY_ON_BLUETOOTH)
+                    assertThat(awaitItem()).isEqualTo(message)
+                    assertThat(awaitItem()).isEqualTo(message)
+                }
+            }
+            assertThat(shots.deleteShotCalls).isEmpty()
+            assertThat(shots.clearHistoryCalls).isEqualTo(0)
+        }
+
+    @Test
+    fun onWifiDeleteAndClearStayAvailable() =
+        runTest {
+            viewModel.uiState.testIgnoringRest {
+                assertThat(awaitUntil { true }.editAvailability).isEqualTo(PiFeatureAvailability.Available)
+            }
         }
 
     // endregion

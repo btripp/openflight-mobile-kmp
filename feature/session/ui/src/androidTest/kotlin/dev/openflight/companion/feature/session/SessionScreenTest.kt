@@ -10,6 +10,7 @@ import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -193,5 +194,28 @@ class SessionScreenTest {
         show(withShots)
 
         composeRule.onAllNodes(hasTestTag(SessionTestTags.SIMULATE)).assertCountEquals(0)
+    }
+
+    // Plan R8e: Bluetooth is read-and-select, so delete and clear are disabled with a reason.
+    @Test
+    fun givenBluetooth_whenShown_thenClearIsDisabledWithAWifiOnlyReasonAndSwipingDeletesNothing() {
+        show(
+            withShots.copy(
+                editAvailability = PiFeatureAvailability.forDeleteAndClear(overBluetooth = true),
+            ),
+        )
+        composeRule.onNode(hasScrollToNodeAction()).performScrollToNode(hasTestTag(SessionTestTags.CLEAR))
+
+        composeRule.onNodeWithTag(SessionTestTags.CLEAR).assertIsNotEnabled()
+        composeRule
+            .onNodeWithTag(SessionTestTags.EDIT_DISABLED_REASON)
+            .assertIsDisplayed()
+            .assert(hasText(PiFeatureAvailability.WIFI_ONLY_ON_BLUETOOTH))
+        val row = SessionTestTags.shot(previewRows.first().id)
+        composeRule.onNode(hasScrollToNodeAction()).performScrollToNode(hasTestTag(row))
+        composeRule.onNodeWithTag(row).performTouchInput { swipeLeft() }
+        composeRule.waitForIdle()
+
+        assertEquals(emptyList<SessionEvent>(), events)
     }
 }
