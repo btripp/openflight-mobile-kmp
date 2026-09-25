@@ -3,6 +3,7 @@ package dev.openflight.companion.core.flight
 
 import kotlin.math.PI
 import kotlin.math.cos
+import kotlin.math.exp
 import kotlin.math.sin
 
 /**
@@ -13,9 +14,30 @@ class BallFlightSimulator(
     private val configuration: Configuration = Configuration.standard,
 ) {
     /**
+     * How drag and lift coefficients are computed.
+     * - [CONSTANT_DRAG_LINEAR_LIFT]: the reference renderer's model (constant
+     *   [Configuration.dragCoefficient]; lift = [Configuration.liftSlope] × spin parameter, capped at
+     *   [Configuration.maximumLiftCoefficient]).
+     * - [SPIN_PARAMETER_POLYNOMIAL]: the backend's model (`ballistics.py` `CD_POLY`/`CL_POLY` at
+     *   `7ca4b40`): second-order polynomials in the spin parameter Sp = r·ω/v with the coefficients
+     *   published by Ferguson, McNally & McPhee (2022, ISEA 14, doi:10.5703/1288284317493). Sp is
+     *   held at 0.75 beyond the fit range and Cl is clamped at ≥ 0. The drag and lift constants of
+     *   [Configuration] are ignored in this mode.
+     */
+    enum class Aerodynamics {
+        CONSTANT_DRAG_LINEAR_LIFT,
+        SPIN_PARAMETER_POLYNOMIAL,
+    }
+
+    /**
      * Tunable physics knobs, ported from `BallFlightSimulator.Configuration`. [standard] mirrors
      * OpenFlight air; [vacuum] strips out drag and lift, used as an independent closed-form
-     * oracle in tests.
+     * oracle in tests. [conditions] is the backend-equivalent air the conditions adjustment uses
+     * (plan F2); the renderer keeps [standard].
+     *
+     * [spinDecayPerSecond] is an exponential spin decay, ω(t) = ω₀·e^(−rate·t), applied between
+     * integration steps as the backend does (about 4 %/s, Kiratidis & Leinweber 2018). It is 0
+     * (off) by default, so the renderer's flight is unchanged.
      */
     data class Configuration(
         val timeStep: Double = DEFAULT_TIME_STEP,
@@ -26,6 +48,8 @@ class BallFlightSimulator(
         val liftSlope: Double = DEFAULT_LIFT_SLOPE,
         val maximumLiftCoefficient: Double = DEFAULT_MAXIMUM_LIFT_COEFFICIENT,
         val constrainToTargetCarry: Boolean = true,
+        val aerodynamics: Aerodynamics = Aerodynamics.CONSTANT_DRAG_LINEAR_LIFT,
+        val spinDecayPerSecond: Double = 0.0,
     ) {
         companion object {
             private const val DEFAULT_TIME_STEP = 1.0 / 120.0
@@ -35,8 +59,33 @@ class BallFlightSimulator(
             private const val DEFAULT_DRAG_COEFFICIENT = 0.24
             private const val DEFAULT_LIFT_SLOPE = 0.60
             private const val DEFAULT_MAXIMUM_LIFT_COEFFICIENT = 0.34
+            private const val CONDITIONS_TIME_STEP = 0.01
+            private const val BACKEND_GRAVITY = 9.81
+            private const val BACKEND_SPIN_DECAY_PER_SECOND = 0.04
 
             val standard = Configuration()
+
+            /**
+             * Backend-equivalent air for conditions adjustments: g = 9.81,
+             * [AirDensity.ISA_SEA_LEVEL] (the server's carry assumes 1.225, `ballistics.py:39`;
+             * the renderer's 1.204 is the reference app's warmer air), the Ferguson polynomial
+             * aerodynamics, 0.04/s spin decay and no rescaling to the server's carry.
+             *
+             * It steps at 100 Hz, not the backend's 500 Hz: in the backend's own simulator that
+             * moves carry and the mile-high density ratio by under 0.01 % for driver, 7-iron and
+             * PW, and it is five times cheaper (two runs per shot, on phones). No frames are
+             * resampled ([outputFramesPerSecond] 0); callers only read the landing.
+             */
+            val conditions =
+                Configuration(
+                    timeStep = CONDITIONS_TIME_STEP,
+                    outputFramesPerSecond = 0.0,
+                    gravity = BACKEND_GRAVITY,
+                    airDensity = AirDensity.ISA_SEA_LEVEL,
+                    constrainToTargetCarry = false,
+                    aerodynamics = Aerodynamics.SPIN_PARAMETER_POLYNOMIAL,
+                    spinDecayPerSecond = BACKEND_SPIN_DECAY_PER_SECOND,
+                )
 
             val vacuum =
                 Configuration(
@@ -75,6 +124,8 @@ class BallFlightSimulator(
             )
 
         var time = 0.0
+        var spinRpm = input.spinRpm
+        val spinDecayPerStep = exp(-configuration.spinDecayPerSecond * configuration.timeStep)
         val integrated =
             mutableListOf(
                 FlightPoint(time = 0.0, positionMeters = state.position, velocityMetersPerSecond = state.velocity),
@@ -83,8 +134,10 @@ class BallFlightSimulator(
         while (time < MAXIMUM_FLIGHT_TIME_SECONDS) {
             val previous = state
             val previousTime = time
-            state = rk4(state, input, configuration.timeStep)
+            val previousSpinRpm = spinRpm
+            state = rk4(state, input, spinRpm, configuration.timeStep)
             time += configuration.timeStep
+            spinRpm *= spinDecayPerStep
 
             if (state.position.y <= 0 && time > configuration.timeStep * LANDING_GUARD_STEP_COUNT) {
                 val denominator = previous.position.y - state.position.y
@@ -92,6 +145,7 @@ class BallFlightSimulator(
                 val landingTime = previousTime + configuration.timeStep * fraction
                 val landingPosition = previous.position + (state.position - previous.position) * fraction
                 val landingVelocity = previous.velocity + (state.velocity - previous.velocity) * fraction
+                spinRpm = previousSpinRpm + (spinRpm - previousSpinRpm) * fraction
                 integrated.add(
                     FlightPoint(
                         time = landingTime,
@@ -109,12 +163,18 @@ class BallFlightSimulator(
 
         val constrained = constrain(integrated, input.targetCarryMeters)
         val compact = resample(constrained)
-        return FlightTrajectory(eventId = input.eventId, points = compact, provenance = input.provenance)
+        return FlightTrajectory(
+            eventId = input.eventId,
+            points = compact,
+            provenance = input.provenance,
+            landingSpinRpm = spinRpm,
+        )
     }
 
     private fun acceleration(
         state: State,
         input: FlightInput,
+        spinRpm: Double,
     ): Vec3 {
         val relativeVelocity = state.velocity - input.windMetersPerSecond
         val speed = relativeVelocity.length()
@@ -124,9 +184,12 @@ class BallFlightSimulator(
 
         val area = PI * BALL_RADIUS_METERS * BALL_RADIUS_METERS
         val aerodynamicScale = AERODYNAMIC_SCALE_FACTOR * configuration.airDensity * area / BALL_MASS_KILOGRAMS
-        val drag = relativeVelocity * (-aerodynamicScale * configuration.dragCoefficient * speed)
+        val spinRadiansPerSecond = spinRpm * RPM_TO_RADIANS_PER_SECOND
+        val spinParameter = spinRadiansPerSecond * BALL_RADIUS_METERS / speed
+        val dragCoefficient = configuration.dragCoefficientAt(spinParameter)
+        val liftCoefficient = configuration.liftCoefficientAt(spinParameter)
+        val drag = relativeVelocity * (-aerodynamicScale * dragCoefficient * speed)
 
-        val spinRadiansPerSecond = input.spinRpm * RPM_TO_RADIANS_PER_SECOND
         val spinAxis = input.spinAxisDegrees * DEGREES_TO_RADIANS
         val angularVelocity =
             Vec3(
@@ -134,9 +197,6 @@ class BallFlightSimulator(
                 sin(spinAxis) * spinRadiansPerSecond,
                 0.0,
             )
-        val spinParameter = spinRadiansPerSecond * BALL_RADIUS_METERS / speed
-        val liftCoefficient =
-            (configuration.liftSlope * spinParameter).coerceIn(0.0, configuration.maximumLiftCoefficient)
         val liftDirectionVector = angularVelocity cross relativeVelocity
         val liftDirectionLength = liftDirectionVector.length()
         val lift =
@@ -152,12 +212,13 @@ class BallFlightSimulator(
     private fun rk4(
         state: State,
         input: FlightInput,
+        spinRpm: Double,
         step: Double,
     ): State {
-        val first = derivative(state, input)
-        val second = derivative(offset(state, first, step / RK4_HALF_STEP_DIVISOR), input)
-        val third = derivative(offset(state, second, step / RK4_HALF_STEP_DIVISOR), input)
-        val fourth = derivative(offset(state, third, step), input)
+        val first = derivative(state, input, spinRpm)
+        val second = derivative(offset(state, first, step / RK4_HALF_STEP_DIVISOR), input, spinRpm)
+        val third = derivative(offset(state, second, step / RK4_HALF_STEP_DIVISOR), input, spinRpm)
+        val fourth = derivative(offset(state, third, step), input, spinRpm)
 
         return State(
             position =
@@ -178,7 +239,8 @@ class BallFlightSimulator(
     private fun derivative(
         state: State,
         input: FlightInput,
-    ): Derivative = Derivative(position = state.velocity, velocity = acceleration(state, input))
+        spinRpm: Double,
+    ): Derivative = Derivative(position = state.velocity, velocity = acceleration(state, input, spinRpm))
 
     private fun offset(
         state: State,
@@ -272,4 +334,47 @@ class BallFlightSimulator(
         const val RK4_MIDDLE_WEIGHT = 2.0
         const val RK4_WEIGHT_DIVISOR = 6.0
     }
+}
+
+/** Cd at [spinParameter] under [BallFlightSimulator.Configuration.aerodynamics]. */
+private fun BallFlightSimulator.Configuration.dragCoefficientAt(spinParameter: Double): Double =
+    when (aerodynamics) {
+        BallFlightSimulator.Aerodynamics.CONSTANT_DRAG_LINEAR_LIFT -> {
+            dragCoefficient
+        }
+
+        BallFlightSimulator.Aerodynamics.SPIN_PARAMETER_POLYNOMIAL -> {
+            val bounded = minOf(spinParameter, FergusonPolynomials.SPIN_PARAMETER_MAX)
+            FergusonPolynomials.CD_0 + FergusonPolynomials.CD_1 * bounded + FergusonPolynomials.CD_2 * bounded * bounded
+        }
+    }
+
+/** Cl at [spinParameter] under [BallFlightSimulator.Configuration.aerodynamics]. */
+private fun BallFlightSimulator.Configuration.liftCoefficientAt(spinParameter: Double): Double =
+    when (aerodynamics) {
+        BallFlightSimulator.Aerodynamics.CONSTANT_DRAG_LINEAR_LIFT -> {
+            (liftSlope * spinParameter).coerceIn(0.0, maximumLiftCoefficient)
+        }
+
+        BallFlightSimulator.Aerodynamics.SPIN_PARAMETER_POLYNOMIAL -> {
+            val bounded = minOf(spinParameter, FergusonPolynomials.SPIN_PARAMETER_MAX)
+            val lift =
+                FergusonPolynomials.CL_0 + FergusonPolynomials.CL_1 * bounded +
+                    FergusonPolynomials.CL_2 * bounded * bounded
+            if (spinParameter <= 0) 0.0 else maxOf(0.0, lift)
+        }
+    }
+
+/**
+ * Ferguson, McNally & McPhee (2022) Cd/Cl polynomials in the spin parameter, as in the backend's
+ * `ballistics.py` CD_POLY, CL_POLY and SP_FIT_MAX at 7ca4b40.
+ */
+private object FergusonPolynomials {
+    const val CD_0 = 0.1304
+    const val CD_1 = 0.9287
+    const val CD_2 = -0.8259
+    const val CL_0 = 0.0504
+    const val CL_1 = 1.2031
+    const val CL_2 = -1.1490
+    const val SPIN_PARAMETER_MAX = 0.75
 }

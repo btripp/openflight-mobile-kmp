@@ -70,4 +70,12 @@ val dataModule: Module =
                 bluetooth = get<BleShotTransport>(),
             )
         }
+        // F2 (plan A2): manual playing conditions, in the settings DataStore.
+        single<ConditionsRepository> {
+            DataStoreConditionsRepository(
+                dataStore = get(),
+                scope =
+                    CoroutineScope(SupervisorJob() + Dispatchers.Default),
+            )
+        }
     }
