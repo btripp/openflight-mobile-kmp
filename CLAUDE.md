@@ -21,15 +21,23 @@ details from memory.
 
 ## Module graph (arrows point from a module to its dependencies; core never depends on feature/app)
 ```
-androidApp (Jetpack NavHost, permissions, launch extras, Koin start)
+androidApp (Jetpack NavHost, permissions, launch extras, Koin start, app icon)
     ├──> feature:dashboard:ui | feature:calibration:ui | feature:range:ui
+    │        feature:session:ui | feature:training:ui | feature:camera:ui | feature:settings:ui
     │        └──> its own feature:<name> + core:designsystem + core:* (never another feature)
     └──> shared (KMP: initKoin, LaunchOptions, PreviewShotRepository)
-iosApp (SwiftUI, Xcode) ──> Shared.framework = shared, exporting core:model/data/insights/flight + feature:*
-shared ──> feature:dashboard | feature:calibration | feature:range | feature:session (KMP, VMs)
-             └──> core:data ──> core:ble / core:network ──> core:protocol ──> core:model
-feature:range ──> core:flight ; feature:calibration ──> core:sensors ; dashboard/session ──> core:insights
+iosApp (SwiftUI, Xcode) ──> Shared.framework = shared, exporting core:model/data/insights/flight
+                             + feature:* + KoinHelper/NativeViewModels bridge; AppIcon asset catalog
+shared ──> feature:dashboard | calibration | range | session | training | camera | settings (KMP, VMs)
+             └──> core:data ──> core:ble / core:network / core:socketio ──> core:protocol ──> core:model
+feature:range ──> core:flight ; feature:calibration ──> core:sensors ; others ──> core:insights
+core:testing → fake repositories shared by VM tests (test-only, no app depends on it directly)
 ```
+
+Current leaf `core:*` modules: `model`, `protocol`, `ble`, `network`, `socketio`, `data`,
+`flight`, `sensors`, `insights`, `designsystem`, `testing`. Current `feature:*` modules:
+`dashboard`, `calibration`, `range`, `session`, `training`, `camera`, `settings` (each with a
+matching Android-only `feature:<name>:ui`).
 
 ## Adding a module
 1. Add `include(":core:foo")` to `settings.gradle.kts`.
@@ -69,3 +77,17 @@ Convention plugin ids: `openflight.kmp.library`, `openflight.android.library.com
 7. Don't commit generated screenshot goldens (they're gitignored).
 8. Every Kotlin file carries `// SPDX-License-Identifier: AGPL-3.0-or-later`. Spotless adds
    and enforces it.
+
+## Gate commits on exit code
+Never commit on the strength of a log that "looks clean" — grep/eyeballing build output for
+error strings is not a substitute for the process's actual exit status, and a piped command
+(`... | grep -v ...`, `... | tail`) silently swallows the left-hand side's exit code unless you
+capture it explicitly. Run verification so the exit code survives, e.g.:
+```bash
+./gradlew spotlessCheck detekt allTests :androidApp:assembleDebug \
+  :shared:linkDebugFrameworkIosSimulatorArm64 > log 2>&1; rc=$?
+```
+then branch on `rc` (or `${PIPESTATUS[0]}` if a pipe is unavoidable), and only commit when
+every command in the verification chain returned 0. This project's execution log records at
+least one case where a merge was created while a transient failure was masked this way; treat
+that as the failure mode to avoid, not a one-off.
