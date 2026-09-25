@@ -5,8 +5,12 @@ Wire protocol facts, client behaviour to preserve and the step plan live in
 details from memory.
 
 ## Build environment
-- There's no system JDK on the dev machine. Use
-  `export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"`.
+- Gradle runs on JDK 17+ (bytecode targets 17; CI uses Temurin 21). If there's no system
+  JDK, point `JAVA_HOME` at
+  Android Studio's bundled JBR, e.g. on macOS
+  `export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"`. Adjust the
+  path to your install. The Xcode build phase falls back to this same path when `JAVA_HOME`
+  is unset.
 - `local.properties` (gitignored) holds `sdk.dir`.
 - Package root and applicationId: `dev.openflight.companion`.
 
@@ -77,6 +81,29 @@ Convention plugin ids: `openflight.kmp.library`, `openflight.android.library.com
 7. Don't commit generated screenshot goldens (they're gitignored).
 8. Every Kotlin file carries `// SPDX-License-Identifier: AGPL-3.0-or-later`. Spotless adds
    and enforces it.
+9. If you touched `iosApp/` Swift code or the API that `shared` exports, the Xcode app builds:
+   ```bash
+   xcodebuild -project iosApp/iosApp.xcodeproj -scheme iosApp \
+     -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build
+   ```
+   The `iosApp` target's build phase runs `./gradlew :shared:embedAndSignAppleFrameworkForXcode`
+   itself, so there's no separate framework step. The same scheme runs the `iosAppTests` and
+   `iosAppUITests` targets. Use `test` with a concrete simulator,
+   `-destination 'platform=iOS Simulator,name=<device>'` (list them with `xcrun simctl list
+   devices available`).
+
+## CI
+`.github/workflows/ci.yml` runs on every push to `main` and on every PR. It mirrors the
+invariants above:
+- **jvm** (ubuntu): a grep guard against Compose in `feature/*/src/commonMain` and `shared/src`
+  and against Compose Multiplatform in the build, then
+  `./gradlew spotlessCheck detekt allTests :androidApp:assembleDebug -x iosSimulatorArm64Test`.
+- **ios** (macos): `./gradlew iosSimulatorArm64Test :shared:linkDebugFrameworkIosSimulatorArm64`,
+  then the `xcodebuild … build` above.
+
+CI doesn't run device UI tests (`connectedDebugAndroidTest`) or the Xcode test targets. Run
+those locally when a change affects UI. A green local run of invariants 1–3 and 9 should mean a
+green CI run. If they disagree, treat that as a bug to investigate, not noise.
 
 ## Gate commits on exit code
 Never commit on the strength of a log that "looks clean" — grep/eyeballing build output for
@@ -91,3 +118,8 @@ then branch on `rc` (or `${PIPESTATUS[0]}` if a pipe is unavoidable), and only c
 every command in the verification chain returned 0. This project's execution log records at
 least one case where a merge was created while a transient failure was masked this way; treat
 that as the failure mode to avoid, not a one-off.
+
+`.claude/hooks/commit-gate.sh` (wired in `.claude/settings.json`) enforces this: it runs the
+chain before any `git commit` and blocks the commit on a non-zero exit. If it blocks, fix the
+cause. Don't bypass it. `/verify` runs the same chain on demand. Path-scoped conventions for
+shared KMP code, Compose UI and SwiftUI live in `.claude/rules/`.
