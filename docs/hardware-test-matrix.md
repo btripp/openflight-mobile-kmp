@@ -1,12 +1,18 @@
 # Hardware test matrix
 
-**Status: PENDING — blocked on a Raspberry Pi.** As of this step (R4, 2026-09-24) the user
-does not yet have a Raspberry Pi running OpenFlight, so **every row below is
-BLOCKED-ON-HARDWARE** and none has been run. Everything so far has been verified on the
-Android emulator and iOS Simulator against `openflight-server --mock --web-port <port>`
-instead (see the plan's Execution Log for those simulator/emulator runs). Re-run this whole
-matrix, row by row, once a Pi is available, and flip each **Result** from
-BLOCKED-ON-HARDWARE to pass/fail as you go.
+**Status: PENDING — blocked on a Raspberry Pi.** As of R8g (2026-09-25) the user does not
+yet have a Raspberry Pi running OpenFlight, so **every row below is BLOCKED-ON-HARDWARE** and
+none has been run. Everything so far has been verified on the Android emulator and iOS
+Simulator against `openflight-server --mock --web-port <port>` instead (see the plan's
+Execution Log for those simulator/emulator runs), and the data layer by `MockServerIT` against
+upstream `main` and the `feat/phone-connectivity` fork branch (README "Integration test against
+a real mock server"). Re-run this whole matrix, row by row, once a Pi is available, and flip
+each **Result** from BLOCKED-ON-HARDWARE to pass/fail as you go.
+
+Which backend a row needs matters (README "Backend compatibility"): BLE, SSE, `/api/club` and
+phone calibration exist only on the fork branch
+[`btripp/openflight@feat/phone-connectivity`](https://github.com/btripp/openflight/tree/feat/phone-connectivity)
+(or, for BLE v1 only, jake-fishtech's `feat/iOS-ble`). Section 9 lists the rows added for R8.
 
 Everything below needs real hardware (a Raspberry Pi running the OpenFlight server, a
 physical Android phone, a physical iPhone, and — for two rows — a TI IWR6843 radar). None of
@@ -125,6 +131,22 @@ this row — that 409 path is already covered by the emulator screenshot from St
 |---|---|---|---|---|
 | 8.1 | Check the Pi's kernel: `uname -r`. | If it reports **`6.18.34+rpt-rpi-2712`**, BLE advertising/GATT is known to regress on that build (see the plan's S5 exit criteria, which explicitly calls this out and asks for a kernel other than this one). Record the actual kernel string here regardless of outcome. | | |
 | 8.2 | If running the flagged kernel, run the full §2 BLE matrix anyway and note which rows fail because of it, versus app-side bugs. If a different kernel is available, prefer it and note the version used. | A clear attribution: which BLE failures (if any) are the kernel regression, not an app defect. | | |
+
+## 9. Backend, BLE schema, permissions and setups (added in R8g)
+
+| # | Setup | Steps | Expected result | Android result | iOS result | Notes |
+|---|---|---|---|---|---|---|
+| 9.1 | **BLE v1 against jake-fishtech's Pi** (`jake-fishtech/openflight@feat/iOS-ble`, `b053194`, started with `--ble`) | Select Bluetooth, connect, fire a shot, change the club from the phone and from the Pi's web UI. | The v2 `hello` isn't offered (no v2 characteristics), so the app runs as v1: shots, `set_club`/`get_club` and `club_changed` work; profile, processing and power stay empty; Delete and Clear show "Wi-Fi only". | BLOCKED-ON-HARDWARE | BLOCKED-ON-HARDWARE | |
+| 9.2 | **BLE v2 against the fork backend** (`btripp/openflight@feat/phone-connectivity`, `07d5313`, `--ble`) | Connect over Bluetooth; switch the active profile on the phone and on the kiosk; fire shots; delete a shot and clear the session on the kiosk; unplug the battery HAT's power if fitted. | `hello` negotiates schema 2 and only the v2 pair is subscribed. Profiles select both ways; each shot is filed under the active profile; the processing indicator shows; `shot_deleted` and `session_cleared` remove the rows on the phone; power updates. Delete and Clear on the phone stay disabled ("Wi-Fi only"). | BLOCKED-ON-HARDWARE | BLOCKED-ON-HARDWARE | |
+| 9.3 | **BLE v2 phone against a v1 Pi and a v1 phone against a v2 Pi** | Connect this app to the jake-fishtech Pi, and jake-fishtech's own iOS app to the fork Pi. | Both fall back to v1 and work; neither side sees v2 traffic. | BLOCKED-ON-HARDWARE | BLOCKED-ON-HARDWARE | |
+| 9.4 | **iOS Local Network denied** | Fresh install on a real iPhone; deny the Local Network prompt; connect over Wi-Fi. | The connection card shows the local-network-denied state with a button to Settings (not a generic timeout). After allowing it in **Settings > Privacy & Security > Local Network** and returning, the app connects. | n/a | BLOCKED-ON-HARDWARE | |
+| 9.5 | **Android `ACCESS_LOCAL_NETWORK` denied** (Android 17+) | Fresh install; deny the local-network permission when connecting over Wi-Fi. | The card shows the open-settings state instead of timing out silently. Granting it in Settings and returning connects without a restart. | BLOCKED-ON-HARDWARE | n/a | |
+| 9.6 | **Phone as the only interface to a headless Pi** | Pi with no display (and, separately, as its own access point on `192.168.4.1:8080`). Run a session from the phone only: connect, profiles, shots, delete, clear, device cards, shut down. | Everything is reachable from the phone; nothing needs the kiosk. | BLOCKED-ON-HARDWARE | BLOCKED-ON-HARDWARE | |
+| 9.7 | **Phone plus the kiosk** | The Pi's touchscreen runs the web UI while the phone is connected over Wi-Fi. Change the club, the active profile and debug mode on each side; delete a shot and clear on each side. | Every change shows on the other side within a second (all server events are broadcasts). Units are the exception: each side keeps its own. | BLOCKED-ON-HARDWARE | BLOCKED-ON-HARDWARE | |
+| 9.8 | **Phone plus `/display`** | A TV or laptop browser shows `http://<pi>:8080/display` while the phone controls the session. | The display follows the phone's shots, club and profile; the phone is unaffected by the display. | BLOCKED-ON-HARDWARE | BLOCKED-ON-HARDWARE | |
+| 9.9 | **Provisional → final on real enrichment hardware** (IWR6843 or the high-speed camera configured, fork backend) | Hit shots over Wi-Fi and, separately, over BLE v2. | A provisional (OPS-only) shot appears first and is replaced in place by the final one within 20 s: one row, not two, the same `#n`, and the stored history keeps only the final version. A shot whose enrichment is skipped still gets its final version. | BLOCKED-ON-HARDWARE | BLOCKED-ON-HARDWARE | |
+| 9.10 | **Shutdown on a real Pi** | Device card > Shut down the Pi > confirm, over Wi-Fi. Repeat with the Pi unplugged from the network before confirming. | The phase goes pending → done after the Pi's `200`; the link drop that follows is not shown as an error, and the OpenFlight service stops (the Pi itself stays up). Unreachable: it fails after 10 s and Retry targets the same host. | BLOCKED-ON-HARDWARE | BLOCKED-ON-HARDWARE | |
+| 9.11 | **HTTPS with a private CA** (backend `feat/lan-https`, README "HTTPS with a private CA") | Install the CA on the phone, start the Pi with `--tls-cert/--tls-key`, enter `https://<host>:<port>`. | SSE (if served), HTTP control and Socket.IO (`wss://`) all connect. Without the CA installed the connection fails with a certificate error rather than falling back to HTTP. | BLOCKED-ON-HARDWARE | BLOCKED-ON-HARDWARE | |
 
 ---
 
