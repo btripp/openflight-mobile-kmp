@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -20,66 +21,29 @@ import dev.openflight.companion.core.designsystem.OfColorTokens
 import dev.openflight.companion.core.designsystem.OfSpacing
 import dev.openflight.companion.core.designsystem.OfText
 import dev.openflight.companion.core.designsystem.OfTextRole
-import dev.openflight.companion.core.insights.ClubStats
-import dev.openflight.companion.core.insights.SwingSpeedStats
 import dev.openflight.companion.core.insights.UnitSystem
-import dev.openflight.companion.core.insights.convertDistanceFromYards
 import dev.openflight.companion.core.insights.convertSpeedFromMph
-import dev.openflight.companion.core.insights.distanceUnitLabel
-import dev.openflight.companion.core.insights.speedUnitLabel
 import dev.openflight.companion.core.model.ShotMetricFormatter
 
-// The stats card (`StatsView.tsx`): ball-flight tiles, or swing-speed tiles for a swing session.
+// The stats card (`StatsView.tsx`, Expo `stats.tsx`): the shared [sessionStatTiles], three per row,
+// or two once the text is scaled up enough that three would squeeze the labels.
 
 @Composable
 internal fun StatsCard(uiState: SessionUiState) {
+    val perRow = if (LocalDensity.current.fontScale >= LARGE_FONT_SCALE) TILES_PER_ROW_LARGE_TEXT else TILES_PER_ROW
     OfCard(modifier = Modifier.fillMaxWidth().testTag(SessionTestTags.STATS), contentSpacing = OfSpacing.Md) {
-        val swing = uiState.swingStats
-        val tiles = if (swing != null) swingTiles(swing, uiState.units) else ballTiles(uiState.stats, uiState.units)
-        tiles.chunked(TILES_PER_ROW).forEach { row ->
+        uiState.statTiles.chunked(perRow).forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(OfSpacing.Sm)) {
-                row.forEach { (label, value) -> StatTile(label, value, Modifier.weight(1f)) }
-                repeat(TILES_PER_ROW - row.size) { Spacer(Modifier.weight(1f)) }
+                row.forEach { tile -> StatTile(tile, Modifier.weight(1f)) }
+                repeat(perRow - row.size) { Spacer(Modifier.weight(1f)) }
             }
         }
     }
 }
 
 private const val TILES_PER_ROW = 3
-
-/** `StatsView.tsx`'s ball-flight tiles; club speed and smash only when some shot reported them. */
-private fun ballTiles(
-    stats: ClubStats,
-    units: UnitSystem,
-): List<Pair<String, String>> {
-    val speed = speedUnitLabel(units)
-    val distance = distanceUnitLabel(units)
-    return buildList {
-        add("Shots" to stats.shotCount.toString())
-        add("Avg Ball ($speed)" to speedValue(stats.avgBallSpeedMph, units))
-        add("Max Ball ($speed)" to speedValue(stats.maxBallSpeedMph, units))
-        add(
-            "Avg Carry ($distance)" to
-                ShotMetricFormatter.number(convertDistanceFromYards(stats.avgCarryYards, units), 0),
-        )
-        stats.avgClubSpeedMph?.let { add("Avg Club ($speed)" to speedValue(it, units)) }
-        stats.avgSmashFactor?.let { add("Avg Smash" to ShotMetricFormatter.number(it, 2)) }
-    }
-}
-
-/** `StatsView.tsx`'s swing-speed tiles: Swings, Last, Best and Average. */
-private fun swingTiles(
-    stats: SwingSpeedStats,
-    units: UnitSystem,
-): List<Pair<String, String>> {
-    val speed = speedUnitLabel(units)
-    return listOf(
-        "Swings" to stats.count.toString(),
-        "Last ($speed)" to speedValue(stats.lastSpeedMph, units),
-        "Best ($speed)" to speedValue(stats.bestSpeedMph, units),
-        "Average ($speed)" to speedValue(stats.avgSpeedMph, units),
-    )
-}
+private const val TILES_PER_ROW_LARGE_TEXT = 2
+private const val LARGE_FONT_SCALE = 1.5f
 
 internal fun speedValue(
     mph: Double,
@@ -88,20 +52,19 @@ internal fun speedValue(
 
 @Composable
 private fun StatTile(
-    label: String,
-    value: String,
+    tile: SessionStatTile,
     modifier: Modifier,
 ) {
     Column(
         modifier =
             modifier
                 .background(OfColorTokens.BgElevated, RoundedCornerShape(14.dp))
-                .semantics(mergeDescendants = true) { contentDescription = "$label, $value" }
-                .testTag(SessionTestTags.stat(label))
+                .semantics(mergeDescendants = true) { contentDescription = tile.spoken }
+                .testTag(SessionTestTags.stat(tile.label))
                 .padding(OfSpacing.Md),
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
-        OfText(text = value, role = OfTextRole.Title, color = OfColorTokens.Cream, maxLines = 1)
-        OfText(text = label, role = OfTextRole.Label, color = OfColorTokens.CreamDim, maxLines = 2)
+        OfText(text = tile.value, role = OfTextRole.Title, color = OfColorTokens.Cream)
+        OfText(text = tile.label, role = OfTextRole.Label, color = OfColorTokens.CreamDim)
     }
 }

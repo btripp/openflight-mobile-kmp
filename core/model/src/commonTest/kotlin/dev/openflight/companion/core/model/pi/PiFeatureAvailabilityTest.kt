@@ -40,7 +40,8 @@ class PiFeatureAvailabilityTest {
 
     @Test
     fun deleteAndClearAreWifiOnlyOverBluetoothAndAvailableOtherwise() {
-        assertThat(PiFeatureAvailability.forDeleteAndClear(overBluetooth = true)).isEqualTo(wifiOnly)
+        assertThat(PiFeatureAvailability.forDeleteAndClear(overBluetooth = true))
+            .isEqualTo(PiFeatureAvailability.Unavailable(PiFeatureAvailability.DELETE_AND_CLEAR_NEED_WIFI))
         assertThat(PiFeatureAvailability.forDeleteAndClear(overBluetooth = false))
             .isEqualTo(PiFeatureAvailability.Available)
     }

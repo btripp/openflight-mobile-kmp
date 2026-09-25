@@ -18,10 +18,14 @@ final class SessionUITests: XCTestCase {
         XCTAssertTrue(source.waitForExistence(timeout: 5))
         XCTAssertTrue(source.label.contains("This phone"), "source: \(source.label)")
 
+        // VoiceOver reads the value with its unit (the shared `SessionStatTile.spokenValue`).
         XCTAssertEqual(stat(app, "Shots").value as? String, "1")
-        XCTAssertEqual(stat(app, "Avg Ball (mph)").value as? String, "151.4")
-        XCTAssertEqual(stat(app, "Avg Carry (yds)").value as? String, "264")
+        XCTAssertEqual(stat(app, "Avg Ball (mph)").value as? String, "151.4 mph")
+        XCTAssertEqual(stat(app, "Avg Carry (yds)").value as? String, "264 yds")
         XCTAssertEqual(stat(app, "Avg Smash").value as? String, "1.47")
+        XCTAssertEqual(stat(app, "Min Ball (mph)").value as? String, "151.4 mph")
+        // One shot has no spread: "—", read as "not available".
+        XCTAssertEqual(stat(app, "Ball Std Dev (mph)").value as? String, "not available")
         XCTAssertTrue(app.buttons["session.tab.all"].exists)
         XCTAssertTrue(app.buttons["session.tab.driver"].exists)
         XCTAssertTrue(Self.reveal(app.descendants(matching: .any)[Self.previewShotRow], in: app))
@@ -48,7 +52,8 @@ final class SessionUITests: XCTestCase {
         XCTAssertTrue(card.waitForNonExistence(timeout: 5))
     }
 
-    func testDeleteOnTheShotCardRemovesTheShot() {
+    /// Plan R8f: a delete asks first, then says it's done.
+    func testDeleteOnTheShotCardAsksThenRemovesTheShot() {
         let app = Self.openSession()
         let row = app.descendants(matching: .any)[Self.previewShotRow]
         XCTAssertTrue(Self.reveal(row, in: app))
@@ -58,10 +63,16 @@ final class SessionUITests: XCTestCase {
 
         delete.tap()
 
+        XCTAssertTrue(app.staticTexts["Delete shot #1?"].waitForExistence(timeout: 5))
+        Self.confirmDialog(app)
         XCTAssertTrue(app.staticTexts["No shots recorded yet"].waitForExistence(timeout: 5))
+        let done = app.descendants(matching: .any)["session.action.done"]
+        XCTAssertTrue(Self.reveal(done, in: app, scrollingUp: true))
+        app.buttons["session.action.dismiss"].tap()
+        XCTAssertTrue(done.waitForNonExistence(timeout: 5))
     }
 
-    func testSwipeToDeleteRemovesTheRow() {
+    func testSwipeToDeleteAsksAndCancelKeepsTheRow() {
         let app = Self.openSession()
 
         let row = app.descendants(matching: .any)[Self.previewShotRow]
@@ -71,6 +82,14 @@ final class SessionUITests: XCTestCase {
         XCTAssertTrue(delete.waitForExistence(timeout: 5))
         delete.tap()
 
+        XCTAssertTrue(app.staticTexts["Delete shot #1?"].waitForExistence(timeout: 5))
+        Self.cancelDialog(app)
+        XCTAssertTrue(Self.reveal(row, in: app))
+
+        row.swipeLeft()
+        XCTAssertTrue(app.buttons["Delete"].waitForExistence(timeout: 5))
+        app.buttons["Delete"].tap()
+        Self.confirmDialog(app)
         XCTAssertTrue(app.staticTexts["No shots recorded yet"].waitForExistence(timeout: 5))
         XCTAssertFalse(row.exists)
     }
@@ -83,14 +102,17 @@ final class SessionUITests: XCTestCase {
         clear.tap()
 
         XCTAssertTrue(app.staticTexts["Clear session?"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["Every shot is removed from this phone."].exists)
+        XCTAssertTrue(
+            app.staticTexts["This session's list on this phone is emptied. Saved sessions stay in History."].exists
+        )
         Self.cancelDialog(app)
         XCTAssertTrue(Self.reveal(app.descendants(matching: .any)[Self.previewShotRow], in: app))
 
         clear.tap()
         XCTAssertTrue(app.staticTexts["Clear session?"].waitForExistence(timeout: 5))
-        app.buttons["session.clear.confirm"].firstMatch.tap()
+        Self.confirmDialog(app)
         XCTAssertTrue(app.staticTexts["No shots recorded yet"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["This phone's list is cleared."].waitForExistence(timeout: 5))
     }
 
     /// Plan R8e: over Bluetooth (a read-and-select link) delete and clear are disabled with a reason.
@@ -140,6 +162,13 @@ final class SessionUITests: XCTestCase {
         XCTAssertTrue(tab.waitForExistence(timeout: 10))
         tab.tap()
         return app
+    }
+
+    /// Taps the open confirmation dialog's destructive button.
+    static func confirmDialog(_ app: XCUIApplication) {
+        let confirm = app.buttons["session.action.confirm"].firstMatch
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        confirm.tap()
     }
 
     /// Cancels the open confirmation dialog: its Cancel button where the system shows one, or a

@@ -47,11 +47,12 @@ class SessionScreenTest {
         composeRule.setContent { OfTheme { SessionScreen(uiState = state, onEvent = { events += it }, onBack = {}) } }
     }
 
+    /** Asserts a tile's spoken description: its label spelled out, then its value and unit. */
     private fun assertStat(
         label: String,
-        value: String,
+        spoken: String,
     ) {
-        composeRule.onNodeWithTag(SessionTestTags.stat(label)).assert(hasContentDescription("$label, $value"))
+        composeRule.onNodeWithTag(SessionTestTags.stat(label)).assert(hasContentDescription(spoken))
     }
 
     private val withShots =
@@ -85,20 +86,28 @@ class SessionScreenTest {
         show(withShots)
 
         composeRule.onNodeWithTag(SessionTestTags.ALL_TAB).assertIsSelected()
-        assertStat("Shots", "2")
-        assertStat("Avg Ball (mph)", "134.8")
-        assertStat("Max Ball (mph)", "151.4")
-        assertStat("Avg Carry (yds)", "215")
-        // No club speed or smash was reported, so those tiles are left out (StatsView.tsx).
-        composeRule.onAllNodes(hasTestTag(SessionTestTags.stat("Avg Club (mph)"))).assertCountEquals(0)
+        assertStat("Shots", "Shots, 2")
+        assertStat("Avg Ball (mph)", "Average ball speed, 134.8 mph")
+        assertStat("Max Ball (mph)", "Maximum ball speed, 151.4 mph")
+        assertStat("Avg Carry (yds)", "Average carry, 215 yds")
+        // No club speed or smash was reported: an em dash, like the kiosk (Expo `stats.tsx`).
+        assertStat("Avg Club (mph)", "Average club speed, not available")
+    }
+
+    @Test
+    fun givenShots_whenShown_thenMinimumAndStandardDeviationAreShown() {
+        show(withShots.copy(stats = withShots.stats.copy(minBallSpeedMph = 118.2, stdDevBallSpeedMph = 23.4)))
+
+        assertStat("Min Ball (mph)", "Minimum ball speed, 118.2 mph")
+        assertStat("Ball Std Dev (mph)", "Ball speed standard deviation, 23.4 mph")
     }
 
     @Test
     fun givenMetricUnits_whenShown_thenStatsAreConverted() {
         show(withShots.copy(units = UnitSystem.METRIC))
 
-        assertStat("Max Ball (km/h)", "243.7")
-        assertStat("Avg Carry (m)", "196")
+        assertStat("Max Ball (km/h)", "Maximum ball speed, 243.7 km/h")
+        assertStat("Avg Carry (m)", "Average carry, 196 m")
     }
 
     @Test
@@ -106,8 +115,8 @@ class SessionScreenTest {
         val swing = SwingSpeedStats(count = 3, lastSpeedMph = 101.0, bestSpeedMph = 108.4, avgSpeedMph = 104.0)
         show(withShots.copy(swingStats = swing))
 
-        assertStat("Swings", "3")
-        assertStat("Best (mph)", "108.4")
+        assertStat("Swings", "Swings, 3")
+        assertStat("Best (mph)", "Best swing speed, 108.4 mph")
         composeRule.onAllNodes(hasTestTag(SessionTestTags.stat("Shots"))).assertCountEquals(0)
     }
 
@@ -134,27 +143,119 @@ class SessionScreenTest {
     }
 
     @Test
-    fun whenClearIsTappedAndConfirmed_thenTheHistoryIsCleared() {
+    fun whenClearIsTapped_thenTheViewModelIsAskedToConfirm() {
         show(withShots)
+        composeRule.onNode(hasScrollToNodeAction()).performScrollToNode(hasTestTag(SessionTestTags.CLEAR))
 
         composeRule.onNodeWithTag(SessionTestTags.CLEAR).performClick()
-        composeRule.onNodeWithText("Clear session?").assertIsDisplayed()
-        composeRule.onNodeWithTag(SessionTestTags.CLEAR_CONFIRM).performClick()
 
         assertEquals(listOf<SessionEvent>(SessionEvent.ClearHistory), events)
-        composeRule.onAllNodes(hasTestTag(SessionTestTags.CLEAR_CONFIRM)).assertCountEquals(0)
+    }
+
+    // region destructive action states (plan R8f)
+
+    private val clearAnn = SessionAction.ClearSession("ann", "Ann")
+
+    @Test
+    fun givenAClearToConfirm_whenConfirmed_thenConfirmActionIsSent() {
+        show(withShots.copy(action = SessionActionCopy.confirmClear(clearAnn)))
+
+        composeRule.onNodeWithText("Clear Ann's session?").assertIsDisplayed()
+        composeRule.onNodeWithTag(SessionActionTestTags.CONFIRM).performClick()
+
+        assertEquals(listOf<SessionEvent>(SessionEvent.ConfirmAction), events)
     }
 
     @Test
-    fun whenClearIsTappedAndCancelled_thenNothingIsCleared() {
-        show(withShots)
+    fun givenAClearToConfirm_whenCancelled_thenCancelActionIsSent() {
+        show(withShots.copy(action = SessionActionCopy.confirmClear(clearAnn)))
 
-        composeRule.onNodeWithTag(SessionTestTags.CLEAR).performClick()
-        composeRule.onNodeWithTag(SessionTestTags.CLEAR_CANCEL).performClick()
+        composeRule.onNodeWithTag(SessionActionTestTags.CANCEL).performClick()
 
-        assertEquals(emptyList(), events)
-        composeRule.onAllNodes(hasTestTag(SessionTestTags.CLEAR_CONFIRM)).assertCountEquals(0)
+        assertEquals(listOf<SessionEvent>(SessionEvent.CancelAction), events)
     }
+
+    @Test
+    fun givenAPendingClear_whenShown_thenItSpinsAndEditingIsDisabled() {
+        show(withShots.copy(action = SessionActionState.Pending(clearAnn, SessionActionCopy.pending(clearAnn))))
+
+        composeRule.onNodeWithTag(SessionActionTestTags.PENDING).assertIsDisplayed()
+        composeRule.onNodeWithText("Clearing Ann's session…").assertIsDisplayed()
+        composeRule.onNode(hasScrollToNodeAction()).performScrollToNode(hasTestTag(SessionTestTags.CLEAR))
+        composeRule.onNodeWithTag(SessionTestTags.CLEAR).assertIsNotEnabled().performClick()
+        val row = SessionTestTags.shot(previewRows.first().id)
+        composeRule.onNode(hasScrollToNodeAction()).performScrollToNode(hasTestTag(row))
+        composeRule.onNodeWithTag(row).performTouchInput { swipeLeft() }
+        composeRule.waitForIdle()
+
+        // No double submit: neither another clear nor a delete gets through.
+        assertEquals(
+            emptyList<SessionEvent>(),
+            events.filter { it is SessionEvent.ClearHistory || it is SessionEvent.DeleteShot },
+        )
+    }
+
+    @Test
+    fun givenAFailedClear_whenRetryIsTapped_thenRetryActionIsSent() {
+        show(
+            withShots.copy(
+                action =
+                    SessionActionState.Failed(
+                        clearAnn,
+                        SessionActionCopy.failedTitle(clearAnn),
+                        "The Pi didn't confirm the clear.",
+                        canRetry = true,
+                    ),
+            ),
+        )
+
+        composeRule.onNodeWithText("Clear not confirmed").assertIsDisplayed()
+        composeRule.onNodeWithTag(SessionActionTestTags.RETRY).performClick()
+        composeRule.onNodeWithTag(SessionActionTestTags.DISMISS).performClick()
+
+        assertEquals(listOf<SessionEvent>(SessionEvent.RetryAction, SessionEvent.DismissAction), events)
+    }
+
+    @Test
+    fun givenAFailureThatCantBeRetried_whenShown_thenOnlyDismissIsOffered() {
+        show(
+            withShots.copy(
+                action =
+                    SessionActionState.Failed(
+                        clearAnn,
+                        SessionActionCopy.failedTitle(clearAnn),
+                        "The connection dropped. ${SessionActionCopy.RECONNECT_TO_RETRY}",
+                        canRetry = false,
+                    ),
+            ),
+        )
+
+        composeRule.onAllNodes(hasTestTag(SessionActionTestTags.RETRY)).assertCountEquals(0)
+        composeRule.onNodeWithTag(SessionActionTestTags.DISMISS).assertIsDisplayed()
+    }
+
+    @Test
+    fun givenADoneDelete_whenOkIsTapped_thenItIsDismissed() {
+        val delete = SessionAction.DeleteShot(previewRows.first().id, 2, "7-Iron")
+        show(withShots.copy(action = SessionActionState.Done(delete, SessionActionCopy.done(delete))))
+
+        composeRule.onNodeWithText("Shot #2 deleted.").assertIsDisplayed()
+        composeRule.onNodeWithTag(SessionActionTestTags.DISMISS).performClick()
+
+        assertEquals(listOf<SessionEvent>(SessionEvent.DismissAction), events)
+    }
+
+    @Test
+    fun givenNothingConnected_whenShown_thenTheStaleNoteShows() {
+        show(withShots.copy(staleNote = SessionUiState.STALE_NOTE))
+
+        composeRule
+            .onNodeWithTag(SessionActionTestTags.STALE_NOTE)
+            .assertIsDisplayed()
+            .assert(hasText("Not connected — showing the last session received."))
+    }
+
+    // endregion
 
     @Test
     fun whenExportIsTapped_thenTheCsvIsRequested() {
@@ -216,7 +317,7 @@ class SessionScreenTest {
         composeRule
             .onNodeWithTag(SessionTestTags.EDIT_DISABLED_REASON)
             .assertIsDisplayed()
-            .assert(hasText(PiFeatureAvailability.WIFI_ONLY_ON_BLUETOOTH))
+            .assert(hasText(PiFeatureAvailability.DELETE_AND_CLEAR_NEED_WIFI))
         val row = SessionTestTags.shot(previewRows.first().id)
         composeRule.onNode(hasScrollToNodeAction()).performScrollToNode(hasTestTag(row))
         composeRule.onNodeWithTag(row).performTouchInput { swipeLeft() }

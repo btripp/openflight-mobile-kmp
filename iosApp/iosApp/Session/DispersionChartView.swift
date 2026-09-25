@@ -196,15 +196,16 @@ struct SelectedShotCardView: View {
             HStack {
                 Text("Shot \(card.shotNumber) · \(card.clubName)")
                     .font(.of(.headline, weight: .semibold))
-                    .lineLimit(1)
+                    .lineLimit(2)
                 Spacer()
-                Button("Delete", role: .destructive, action: onDelete)
+                // 44 pt targets; the delete asks for confirmation first (plan R8f).
+                Button(role: .destructive, action: onDelete) { targetLabel("Delete") }
                     .font(.of(.subheadline, weight: .semibold))
                     .tint(Theme.danger)
                     .buttonStyle(.borderless)
                     .disabled(!deletable)
                     .accessibilityIdentifier("session.selected.delete")
-                Button("Close", action: onClose)
+                Button(action: onClose) { targetLabel("Close") }
                     .font(.of(.subheadline, weight: .semibold))
                     .tint(Theme.gold)
                     .buttonStyle(.borderless)
@@ -225,6 +226,13 @@ struct SelectedShotCardView: View {
         .padding(.vertical, 4)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("session.selected")
+    }
+
+    /// A text button label padded out to a 44 pt target.
+    private func targetLabel(_ text: String) -> some View {
+        Text(text)
+            .frame(minWidth: 44, minHeight: 44)
+            .contentShape(Rectangle())
     }
 
     private func metric(_ title: String, _ value: String, _ unit: String) -> some View {

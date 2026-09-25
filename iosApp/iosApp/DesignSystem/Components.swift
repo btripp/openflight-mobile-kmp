@@ -88,6 +88,7 @@ struct ChipButton: View {
     var count: Int32?
     let isSelected: Bool
     var isEnabled = true
+    var minTouchTarget = false
     let action: () -> Void
 
     var body: some View {
@@ -106,7 +107,10 @@ struct ChipButton: View {
             .foregroundStyle(isSelected ? Theme.bgDeep : Theme.cream)
             .background(isSelected ? Theme.gold : Theme.cream.opacity(0.06), in: Capsule())
             .overlay { Capsule().stroke(isSelected ? .clear : Theme.cream.opacity(0.14), lineWidth: 1) }
-            .contentShape(Capsule())
+            // With `minTouchTarget`, a 44 pt tall touch target around the capsule; the capsule
+            // itself keeps its size (plan R8f accessibility pass).
+            .frame(minHeight: minTouchTarget ? 44 : nil)
+            .contentShape(minTouchTarget ? AnyShape(Rectangle()) : AnyShape(Capsule()))
         }
         .buttonStyle(.plain)
         .disabled(!isEnabled)

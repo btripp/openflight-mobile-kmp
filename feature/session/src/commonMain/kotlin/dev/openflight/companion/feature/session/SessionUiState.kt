@@ -41,6 +41,9 @@ enum class SessionSource {
  * @property simulateAvailability why [SessionEvent.SimulateShot] can't run, if it can't.
  * @property editAvailability whether [SessionEvent.DeleteShot] and [SessionEvent.ClearHistory]
  *   can run: not over Bluetooth, a read-and-select link (plan R8e).
+ * @property action the delete or clear in progress, from its confirmation to its outcome (plan R8f).
+ * @property profileName the active Pi profile whose shots and stats are shown, on [SessionSource.PI].
+ * @property staleNote set while nothing is connected: the shots shown are the last ones received.
  */
 data class SessionUiState(
     val units: UnitSystem = UnitSystem.IMPERIAL,
@@ -60,12 +63,27 @@ data class SessionUiState(
             PiFeatureAvailability.NOT_CONNECTED,
         ),
     val editAvailability: PiFeatureAvailability = PiFeatureAvailability.Available,
+    val action: SessionActionState = SessionActionState.Idle,
+    val profileName: String? = null,
+    val staleNote: String? = null,
 ) {
     val hasShots: Boolean get() = allCount > 0
+
+    /**
+     * Whether delete and clear controls are enabled: not over Bluetooth, and not while an action is
+     * pending (so nothing is sent twice).
+     */
+    val canEdit: Boolean get() = editAvailability.isAvailable && !action.isBusy
+
+    /** The stats card's tiles for the selected tab ([sessionStatTiles]). */
+    val statTiles: List<SessionStatTile> get() = sessionStatTiles(stats, swingStats, units)
 
     companion object {
         const val SIMULATE_SHOT: String = "Simulate Shot"
         const val SIMULATE_SWING: String = "Simulate Swing"
+
+        /** Expo `stats.tsx`: a dropped connection keeps the last session on screen, labelled as such. */
+        const val STALE_NOTE: String = "Not connected — showing the last session received."
     }
 }
 

@@ -16,10 +16,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -31,7 +27,6 @@ import dev.openflight.companion.core.designsystem.OfButton
 import dev.openflight.companion.core.designsystem.OfCard
 import dev.openflight.companion.core.designsystem.OfChip
 import dev.openflight.companion.core.designsystem.OfColorTokens
-import dev.openflight.companion.core.designsystem.OfConfirmDialog
 import dev.openflight.companion.core.designsystem.OfDisabledReason
 import dev.openflight.companion.core.designsystem.OfMessageHostState
 import dev.openflight.companion.core.designsystem.OfOutlinedButton
@@ -55,9 +50,9 @@ import dev.openflight.companion.core.model.pi.PiFeatureAvailability
 
 /**
  * The session/stats screen (plans R5b/R6c), ported from the web UI's `StatsView.tsx` (club tabs and
- * stats) and `ShotList.tsx` (swipe-to-delete rows, clear, CSV export). Stateless apart from the
- * clear-confirmation dialog's visibility: everything else comes from [uiState] and goes out through
- * [onEvent] or [onBack].
+ * stats) and `ShotList.tsx` (swipe-to-delete rows, clear, CSV export). Stateless: everything comes
+ * from [uiState] (including a delete or clear's confirmation and outcome, plan R8f) and goes out
+ * through [onEvent] or [onBack].
  */
 @Composable
 fun SessionScreen(
@@ -68,7 +63,7 @@ fun SessionScreen(
     messages: OfMessageHostState? = null,
     onOpenHistory: (() -> Unit)? = null,
 ) {
-    var confirmingClear by rememberSaveable { mutableStateOf(false) }
+    val canEdit = uiState.canEdit
     OfScaffold(
         modifier = modifier,
         messages = messages,
@@ -100,6 +95,25 @@ fun SessionScreen(
             verticalArrangement = Arrangement.spacedBy(OfSpacing.Lg),
         ) {
             item(key = "header") { SourceRow(uiState, onEvent) }
+            if (uiState.action !is SessionActionState.Idle) {
+                item(key = "action") {
+                    SessionActionPanel(
+                        state = uiState.action,
+                        onRetry = { onEvent(SessionEvent.RetryAction) },
+                        onDismiss = { onEvent(SessionEvent.DismissAction) },
+                    )
+                }
+            }
+            uiState.staleNote?.let { note ->
+                item(key = "stale") {
+                    OfText(
+                        text = note,
+                        role = OfTextRole.BodySmall,
+                        color = OfColorTokens.Warning,
+                        modifier = Modifier.testTag(SessionActionTestTags.STALE_NOTE),
+                    )
+                }
+            }
             if (!uiState.hasShots) {
                 item(key = "empty") { EmptySession() }
             } else {
@@ -121,7 +135,7 @@ fun SessionScreen(
                             units = uiState.units,
                             onClose = { onEvent(SessionEvent.SelectShot(null)) },
                             onDelete = { onEvent(SessionEvent.DeleteShot(card.id)) },
-                            deletable = uiState.editAvailability.isAvailable,
+                            deletable = canEdit,
                         )
                     }
                 }
@@ -129,13 +143,14 @@ fun SessionScreen(
                 item(key = "actions") {
                     ActionsRow(
                         editAvailability = uiState.editAvailability,
+                        canEdit = canEdit,
                         onExport = { onEvent(SessionEvent.ExportCsv) },
-                        onClear = { confirmingClear = true },
+                        onClear = { onEvent(SessionEvent.ClearHistory) },
                     )
                 }
                 item(key = "shotsHeader") {
                     OfText(
-                        text = if (uiState.editAvailability.isAvailable) "SHOTS · swipe left to delete" else "SHOTS",
+                        text = if (canEdit) "SHOTS · swipe left to delete" else "SHOTS",
                         role = OfTextRole.Eyebrow,
                         color = OfColorTokens.Gold,
                     )
@@ -148,34 +163,18 @@ fun SessionScreen(
                         onSelect = { onEvent(SessionEvent.SelectShot(shot.id)) },
                         onDelete = { onEvent(SessionEvent.DeleteShot(shot.id)) },
                         modifier = Modifier.animateItem(),
-                        deletable = uiState.editAvailability.isAvailable,
+                        deletable = canEdit,
                     )
                 }
             }
         }
     }
-    if (confirmingClear) {
-        OfConfirmDialog(
-            title = "Clear session?",
-            message = clearMessage(uiState.source),
-            confirmLabel = "Clear",
-            destructive = true,
-            onConfirm = {
-                confirmingClear = false
-                onEvent(SessionEvent.ClearHistory)
-            },
-            onDismiss = { confirmingClear = false },
-            confirmTag = SessionTestTags.CLEAR_CONFIRM,
-            dismissTag = SessionTestTags.CLEAR_CANCEL,
-        )
-    }
+    SessionActionDialog(
+        state = uiState.action,
+        onConfirm = { onEvent(SessionEvent.ConfirmAction) },
+        onCancel = { onEvent(SessionEvent.CancelAction) },
+    )
 }
-
-private fun clearMessage(source: SessionSource): String =
-    when (source) {
-        SessionSource.PI -> "Every shot is removed from this phone and from the Pi's session."
-        SessionSource.LOCAL -> "Every shot is removed from this phone."
-    }
 
 /** The source badge ("Pi session" or "This phone") and, on a `--mock` Pi, "Simulate Shot". */
 @Composable
@@ -187,8 +186,17 @@ private fun SourceRow(
         Row(verticalAlignment = Alignment.CenterVertically) {
             val (label, detail) =
                 when (uiState.source) {
-                    SessionSource.PI -> "Pi session" to "Shots and stats from the OpenFlight Pi"
-                    SessionSource.LOCAL -> "This phone" to "Shots this phone received"
+                    SessionSource.PI -> {
+                        "Pi session" to
+                            (
+                                uiState.profileName?.let { "$it's shots and stats from the OpenFlight Pi" }
+                                    ?: "Shots and stats from the OpenFlight Pi"
+                            )
+                    }
+
+                    SessionSource.LOCAL -> {
+                        "This phone" to "Shots this phone received"
+                    }
                 }
             OfPill(
                 label = label,
@@ -241,6 +249,7 @@ internal fun ClubTabs(
             label = "All",
             count = uiState.allCount,
             selected = uiState.selectedClub == null,
+            minTouchTarget = true,
             onClick = { onSelectClub(null) },
             modifier = Modifier.testTag(SessionTestTags.ALL_TAB),
         )
@@ -249,6 +258,7 @@ internal fun ClubTabs(
                 label = clubLabel(chip.club),
                 count = chip.count,
                 selected = uiState.selectedClub == chip.club,
+                minTouchTarget = true,
                 onClick = { onSelectClub(chip.club) },
                 modifier = Modifier.testTag(SessionTestTags.tab(chip.club)),
             )
@@ -259,6 +269,7 @@ internal fun ClubTabs(
 @Composable
 private fun ActionsRow(
     editAvailability: PiFeatureAvailability,
+    canEdit: Boolean,
     onExport: () -> Unit,
     onClear: () -> Unit,
 ) {
@@ -272,7 +283,7 @@ private fun ActionsRow(
             OfOutlinedButton(
                 text = "Clear",
                 onClick = onClear,
-                enabled = editAvailability.isAvailable,
+                enabled = canEdit,
                 modifier = Modifier.weight(1f).testTag(SessionTestTags.CLEAR),
             )
         }

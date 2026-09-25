@@ -56,7 +56,10 @@ internal fun SessionShotRowItem(
 ) {
     val tagged = modifier.testTag(SessionTestTags.shot(shot.id))
     if (deletable) {
-        OfSwipeToDelete(onDelete = onDelete, modifier = tagged) { ShotRowContent(shot, units, selected, onSelect) }
+        // The delete asks for confirmation first (plan R8f), so the row slides back meanwhile.
+        OfSwipeToDelete(onDelete = onDelete, modifier = tagged, snapBack = true) {
+            ShotRowContent(shot, units, selected, onSelect)
+        }
     } else {
         Row(modifier = tagged) { ShotRowContent(shot, units, selected, onSelect) }
     }
@@ -83,7 +86,8 @@ private fun ShotRowContent(
                             .clickable(onClickLabel = "Show on chart", onClick = onSelect)
                             .semantics { this.selected = selected }
                     } else {
-                        Modifier
+                        // One TalkBack stop per row, like the selectable rows.
+                        Modifier.semantics(mergeDescendants = true) {}
                     },
                 ).padding(horizontal = OfSpacing.Lg, vertical = OfSpacing.Md),
         verticalAlignment = Alignment.CenterVertically,
@@ -91,12 +95,13 @@ private fun ShotRowContent(
     ) {
         OfText(text = "#${shot.shotNumber}", role = OfTextRole.Label, color = OfColorTokens.Gold)
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            OfText(text = shot.implementLabel ?: clubLabel(shot.club), role = OfTextRole.TitleSmall, maxLines = 1)
+            // Two lines, so large text wraps instead of cutting the club or the time off.
+            OfText(text = shot.implementLabel ?: clubLabel(shot.club), role = OfTextRole.TitleSmall, maxLines = 2)
             OfText(
                 text = listOfNotNull(clockTime(shot.timestamp), shot.profileName).joinToString(" · "),
                 role = OfTextRole.BodySmall,
                 color = OfColorTokens.CreamDim,
-                maxLines = 1,
+                maxLines = 2,
             )
         }
         if (shot.isSwingSpeed) {

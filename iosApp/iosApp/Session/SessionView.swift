@@ -70,16 +70,34 @@ struct SessionContent: View {
     let send: (SessionEvent) -> Void
     let export: CsvExport?
 
-    @State private var confirmingClear = false
-
     private var units: UnitSystem { state.units }
     private var isPi: Bool { state.source == .pi }
     /// Plan R8e: over Bluetooth (a read-and-select link) delete and clear are off, with a reason.
-    private var canEdit: Bool { state.editAvailability.isAvailable }
+    /// Plan R8f: they're also off while a delete or clear is pending, so nothing is sent twice.
+    private var canEdit: Bool { state.canEdit }
 
     var body: some View {
         List {
             Section { sourceBadge }
+            if !(state.action is SessionActionStateIdle) && !(state.action is SessionActionStateConfirming) {
+                Section {
+                    SessionActionPanel(
+                        state: state.action,
+                        onRetry: { send(SessionEventRetryAction.shared) },
+                        onDismiss: { send(SessionEventDismissAction.shared) }
+                    )
+                }
+                .listRowBackground(Theme.bgElevated)
+            }
+            if let note = state.staleNote {
+                Section {
+                    Label(note, systemImage: "wifi.slash")
+                        .font(.of(.subheadline))
+                        .foregroundStyle(Theme.warning)
+                        .accessibilityIdentifier(SessionActionTestTags.shared.STALE_NOTE)
+                }
+                .listRowBackground(Theme.bgCard)
+            }
             if state.showSimulateShot {
                 Section { simulateButton }.listRowBackground(Theme.bgCard)
             }
@@ -121,7 +139,9 @@ struct SessionContent: View {
                             .accessibilityHint("Shows this shot on the chart")
                             .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                                 if canEdit {
-                                    Button(role: .destructive) {
+                                    // Not `.destructive`: the row stays until the delete is
+                                    // confirmed (plan R8f), so it must not animate away here.
+                                    Button {
                                         send(SessionEventDeleteShot(id: row.id))
                                     } label: {
                                         Label("Delete", systemImage: "trash")
@@ -151,6 +171,11 @@ struct SessionContent: View {
         .listStyle(.insetGrouped)
         .listSectionSpacing(.compact)
         .screenBackground()
+        .sessionActionDialog(
+            state.action,
+            onConfirm: { send(SessionEventConfirmAction.shared) },
+            onCancel: { send(SessionEventCancelAction.shared) }
+        )
     }
 
     // MARK: Source
@@ -163,7 +188,7 @@ struct SessionContent: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(isPi ? "Pi session" : "This phone")
                     .font(.of(.headline, weight: .semibold))
-                Text(isPi ? "Shots and stats from the OpenFlight Pi" : "Shots this phone received")
+                Text(sourceDetail)
                     .font(.of(.subheadline))
                     .foregroundStyle(Theme.creamDim)
             }
@@ -171,6 +196,12 @@ struct SessionContent: View {
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("session.source")
         .listRowBackground((isPi ? Theme.success : Theme.cream).opacity(0.08))
+    }
+
+    private var sourceDetail: String {
+        guard isPi else { return "Shots this phone received" }
+        if let name = state.profileName { return "\(name)'s shots and stats from the OpenFlight Pi" }
+        return "Shots and stats from the OpenFlight Pi"
     }
 
     private var simulateButton: some View {
@@ -224,8 +255,9 @@ struct SessionContent: View {
             }
             .accessibilityIdentifier("session.export")
 
+            // The ViewModel asks for confirmation (plan R8f), shown by `sessionActionDialog`.
             Button(role: .destructive) {
-                confirmingClear = true
+                send(SessionEventClearHistory.shared)
             } label: {
                 Label("Clear", systemImage: "trash")
                     .frame(maxWidth: .infinity)
@@ -233,23 +265,11 @@ struct SessionContent: View {
             .tint(Theme.danger)
             .disabled(!canEdit)
             .accessibilityIdentifier("session.clear")
-            // Attached to the button, so where iOS shows it as a popover it points at Clear.
-            .confirmationDialog("Clear session?", isPresented: $confirmingClear, titleVisibility: .visible) {
-                Button("Clear", role: .destructive) { send(SessionEventClearHistory.shared) }
-                    .accessibilityIdentifier("session.clear.confirm")
-                Button("Cancel", role: .cancel) {}
-                    .accessibilityIdentifier("session.clear.cancel")
-            } message: {
-                Text(
-                    isPi
-                        ? "Every shot is removed from this phone and from the Pi's session."
-                        : "Every shot is removed from this phone."
-                )
-            }
         }
         .font(.of(.body, weight: .semibold))
         .buttonStyle(.bordered)
         .tint(Theme.gold)
+        .controlSize(.large)
     }
 }
 
@@ -262,7 +282,12 @@ struct SessionClubTabs: View {
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                ChipButton(label: "All", count: state.allCount, isSelected: state.selectedClub == nil) {
+                ChipButton(
+                    label: "All",
+                    count: state.allCount,
+                    isSelected: state.selectedClub == nil,
+                    minTouchTarget: true
+                ) {
                     onSelect(nil)
                 }
                 .accessibilityIdentifier("session.tab.all")
@@ -270,7 +295,8 @@ struct SessionClubTabs: View {
                     ChipButton(
                         label: Units.clubLabel(chip.club),
                         count: chip.count,
-                        isSelected: state.selectedClub == chip.club
+                        isSelected: state.selectedClub == chip.club,
+                        minTouchTarget: true
                     ) {
                         onSelect(chip.club)
                     }
@@ -283,54 +309,36 @@ struct SessionClubTabs: View {
     }
 }
 
-/// The selected tab's stats tiles, or swing-speed tiles for a swing session.
+/// The selected tab's stats tiles (the shared `statTiles`: the kiosk's six plus minimum ball speed
+/// and its standard deviation), or swing-speed tiles for a swing session. Two columns at the
+/// accessibility text sizes, so the labels aren't squeezed.
 struct SessionStatsGrid: View {
     let state: SessionUiState
-
-    private var units: UnitSystem { state.units }
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
-        let speed = Units.speedUnit(units)
-        let tiles: [(String, String)]
-        if let swing = state.swingStats {
-            tiles = [
-                ("Swings", "\(swing.count)"),
-                ("Last (\(speed))", Units.speed(swing.lastSpeedMph, units)),
-                ("Best (\(speed))", Units.speed(swing.bestSpeedMph, units)),
-                ("Average (\(speed))", Units.speed(swing.avgSpeedMph, units)),
-            ]
-        } else {
-            let stats = state.stats
-            tiles = [
-                ("Shots", "\(stats.shotCount)"),
-                ("Avg Ball (\(speed))", Units.speed(stats.avgBallSpeedMph, units)),
-                ("Max Ball (\(speed))", Units.speed(stats.maxBallSpeedMph, units)),
-                ("Avg Carry (\(Units.distanceUnit(units)))", Units.distance(stats.avgCarryYards, units)),
-                ("Avg Club (\(speed))", Units.speed(stats.avgClubSpeedMph, units)),
-                ("Avg Smash", ShotFormat.number(stats.avgSmashFactor, decimals: 2)),
-            ]
-        }
-        return LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 3), spacing: 10) {
-            ForEach(tiles, id: \.0) { label, value in
+        let columns = dynamicTypeSize.isAccessibilitySize ? 2 : 3
+        return LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: columns), spacing: 10) {
+            ForEach(state.statTiles, id: \.label) { tile in
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(value)
+                    Text(tile.value)
                         .font(.ofDisplay(.title2))
                         .monospacedDigit()
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
-                    Text(label)
+                    Text(tile.label)
                         .font(.of(.caption, weight: .semibold))
                         .foregroundStyle(Theme.creamDim)
-                        .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .frame(maxWidth: .infinity, minHeight: 64, alignment: .topLeading)
                 .padding(10)
                 .background(.black.opacity(0.22), in: RoundedRectangle(cornerRadius: 12))
                 .accessibilityElement(children: .ignore)
-                .accessibilityLabel(label)
-                .accessibilityValue(value)
-                .accessibilityIdentifier("session.stat.\(label)")
+                // "Average ball speed", "151.4 mph": spelled out, with the unit.
+                .accessibilityLabel(tile.spokenLabel)
+                .accessibilityValue(tile.spokenValue)
+                .accessibilityIdentifier("session.stat.\(tile.label)")
             }
         }
         .padding(.vertical, 4)
@@ -352,13 +360,14 @@ struct SessionShotRowView: View {
                 .foregroundStyle(Theme.gold)
                 .frame(minWidth: 30, alignment: .leading)
             VStack(alignment: .leading, spacing: 3) {
+                // Two lines, so large text wraps instead of cutting the club or the time off.
                 Text(row.implementLabel ?? Units.clubLabel(row.club))
                     .font(.of(.headline, weight: .semibold))
-                    .lineLimit(1)
+                    .lineLimit(2)
                 Text([Units.clockTime(row.timestamp), row.profileName].compactMap { $0 }.joined(separator: " · "))
                     .font(.of(.caption))
                     .foregroundStyle(Theme.creamDim)
-                    .lineLimit(1)
+                    .lineLimit(2)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             if row.isSwingSpeed {

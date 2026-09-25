@@ -36,6 +36,12 @@ sealed interface PiFeatureAvailability {
          */
         const val WIFI_ONLY_ON_BLUETOOTH: String = "Wi-Fi only: Bluetooth can't delete or edit on the Pi"
 
+        /**
+         * Plan R8f: the Session screen's shorter wording for [forDeleteAndClear], shown under its
+         * Clear button and on its shot list.
+         */
+        const val DELETE_AND_CLEAR_NEED_WIFI: String = "Delete and Clear need Wi-Fi. Bluetooth is read-only."
+
         /** [link]'s availability: only [PiLinkState.Connected] allows Wi-Fi-only actions. */
         fun of(link: PiLinkState): PiFeatureAvailability =
             when (link) {
@@ -52,7 +58,7 @@ sealed interface PiFeatureAvailability {
          * act on the Pi's session over Socket.IO, or on the phone's own history without it.
          */
         fun forDeleteAndClear(overBluetooth: Boolean): PiFeatureAvailability =
-            if (overBluetooth) Unavailable(WIFI_ONLY_ON_BLUETOOTH) else Available
+            if (overBluetooth) Unavailable(DELETE_AND_CLEAR_NEED_WIFI) else Available
 
         /** Adding, renaming and removing profiles: Socket.IO only, never over Bluetooth. */
         fun forProfileEdits(link: PiLinkState): PiFeatureAvailability =

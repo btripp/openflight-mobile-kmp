@@ -6,8 +6,6 @@ object SessionTestTags {
     const val DONE = "session.done"
     const val EXPORT = "session.export"
     const val CLEAR = "session.clear"
-    const val CLEAR_CONFIRM = "session.clear.confirm"
-    const val CLEAR_CANCEL = "session.clear.cancel"
     const val EDIT_DISABLED_REASON = "session.edit.disabledReason"
     const val SIMULATE = "session.simulate"
     const val SOURCE = "session.source"

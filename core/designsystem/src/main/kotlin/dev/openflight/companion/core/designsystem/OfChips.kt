@@ -15,6 +15,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -34,6 +35,9 @@ private const val DISABLED_ALPHA = 0.45f
  * A pill with an optional count, for example a club tab "Driver 3" (`StatsView.tsx`) or an
  * implement in the training picker. [onClick] `null` makes it display-only (the dashboard's club
  * chips); [selected] fills it gold.
+ *
+ * @param minTouchTarget pads a tappable chip's touch area out to 48 dp (the pill keeps its size),
+ *   for screens that have been through the plan R8f accessibility pass.
  */
 @Composable
 fun OfChip(
@@ -42,6 +46,7 @@ fun OfChip(
     count: Int? = null,
     selected: Boolean = false,
     enabled: Boolean = true,
+    minTouchTarget: Boolean = false,
     onClick: (() -> Unit)? = null,
 ) {
     val container = if (selected) OfColorTokens.Gold else OfColorTokens.BgElevated
@@ -50,16 +55,18 @@ fun OfChip(
     Row(
         modifier =
             modifier
-                .alpha(if (enabled) 1f else DISABLED_ALPHA)
-                .background(container, ChipShape)
-                .border(BorderStroke(1.dp, border), ChipShape)
                 .then(
                     if (onClick != null) {
-                        Modifier.clickable(enabled = enabled, role = Role.Tab, onClick = onClick)
+                        Modifier
+                            .clickable(enabled = enabled, role = Role.Tab, onClick = onClick)
+                            .then(if (minTouchTarget) Modifier.minimumInteractiveComponentSize() else Modifier)
                     } else {
                         Modifier
                     },
-                ).semantics { this.selected = selected }
+                ).alpha(if (enabled) 1f else DISABLED_ALPHA)
+                .background(container, ChipShape)
+                .border(BorderStroke(1.dp, border), ChipShape)
+                .semantics { this.selected = selected }
                 .padding(horizontal = OfSpacing.Md, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),

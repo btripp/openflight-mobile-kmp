@@ -13,6 +13,7 @@ import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
@@ -28,16 +29,25 @@ import androidx.compose.ui.semantics.semantics
  *
  * The caller keys this composable by the row's id, so a deleted row's state never carries over to
  * the row that takes its place.
+ *
+ * @param snapBack slides the row back once [onDelete] ran, for a caller that asks for confirmation
+ *   first: the row then only disappears once the delete really happened.
  */
 @Composable
 fun OfSwipeToDelete(
     onDelete: () -> Unit,
     modifier: Modifier = Modifier,
     deleteLabel: String = "Delete",
+    snapBack: Boolean = false,
     content: @Composable RowScope.() -> Unit,
 ) {
     val currentOnDelete by rememberUpdatedState(onDelete)
     val state = rememberSwipeToDismissBoxState()
+    if (snapBack) {
+        LaunchedEffect(state.currentValue) {
+            if (state.currentValue != SwipeToDismissBoxValue.Settled) state.reset()
+        }
+    }
     SwipeToDismissBox(
         state = state,
         modifier =

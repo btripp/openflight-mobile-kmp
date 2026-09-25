@@ -18,6 +18,8 @@ import dev.openflight.companion.core.data.TransportType
 import dev.openflight.companion.core.insights.ClubChip
 import dev.openflight.companion.core.insights.ConfidenceLevel
 import dev.openflight.companion.core.insights.UnitSystem
+import dev.openflight.companion.core.insights.computeDetailStats
+import dev.openflight.companion.core.model.ConnectionState
 import dev.openflight.companion.core.model.pi.ClearState
 import dev.openflight.companion.core.model.pi.DeletionState
 import dev.openflight.companion.core.model.pi.PiFeatureAvailability
@@ -148,25 +150,6 @@ class SessionViewModelTest {
         }
 
     @Test
-    fun deletingALocalRowGoesToTheRepositoryByEventId() =
-        runTest {
-            shots.setHistory(listOf(shot(2), shot(1)))
-
-            viewModel.onEvent(SessionEvent.DeleteShot(shotId(1)))
-
-            assertThat(shots.deleteShotCalls).containsExactly(shotId(1))
-            assertThat(shots.deleteShotByTimestampCalls).isEmpty()
-        }
-
-    @Test
-    fun clearHistoryEventGoesToTheRepository() =
-        runTest {
-            viewModel.onEvent(SessionEvent.ClearHistory)
-
-            assertThat(shots.clearHistoryCalls).isEqualTo(1)
-        }
-
-    @Test
     fun exportCsvProducesTheFullHistoryOldestFirstRegardlessOfTheSelectedTab() =
         runTest {
             shots.setHistory(listOf(shot(2, club = "7-iron"), shot(1, club = "driver")))
@@ -283,40 +266,9 @@ class SessionViewModelTest {
             }
         }
 
-    @Test
-    fun deletingAPiRowGoesToTheRepositoryByTimestamp() =
-        runTest {
-            shots.setHistory(listOf(shot(9)))
-            piSession.linkState.value = PiLinkState.Connected
-            piSession.setSession(listOf(detail(1)))
+    // endregion
 
-            viewModel.onEvent(SessionEvent.DeleteShot(timestamp(1)))
-
-            assertThat(shots.deleteShotByTimestampCalls).containsExactly(timestamp(1))
-            assertThat(shots.deleteShotCalls).isEmpty()
-        }
-
-    @Test
-    fun aFailedPiDeleteBecomesAMessageOnce() =
-        runTest {
-            viewModel.effects.test {
-                piSession.deletionState.value = DeletionState.Failed(timestamp(1), "Shot not found")
-
-                assertThat(awaitItem()).isEqualTo(SessionEffect.Message("Shot not found"))
-                assertThat(piSession.deletionState.value).isEqualTo(DeletionState.Idle)
-            }
-        }
-
-    @Test
-    fun anUnconfirmedPiClearBecomesAMessageOnce() =
-        runTest {
-            viewModel.effects.test {
-                piSession.clearState.value = ClearState.Failed("p1", ClearState.NO_CONFIRMATION)
-
-                assertThat(awaitItem()).isEqualTo(SessionEffect.Message(ClearState.NO_CONFIRMATION))
-                assertThat(piSession.clearState.value).isEqualTo(ClearState.Idle)
-            }
-        }
+    // region Pi session: export and simulate (plan R6b)
 
     @Test
     fun exportWhileConnectedUsesThePiSessionWithTheWebExportColumns() =
@@ -403,12 +355,12 @@ class SessionViewModelTest {
             viewModel.uiState.testIgnoringRest {
                 val state = awaitUntil { it.hasShots }
                 assertThat(state.editAvailability)
-                    .isEqualTo(PiFeatureAvailability.Unavailable(PiFeatureAvailability.WIFI_ONLY_ON_BLUETOOTH))
+                    .isEqualTo(PiFeatureAvailability.Unavailable(PiFeatureAvailability.DELETE_AND_CLEAR_NEED_WIFI))
                 viewModel.effects.test {
                     viewModel.onEvent(SessionEvent.DeleteShot(shotId(1)))
                     viewModel.onEvent(SessionEvent.ClearHistory)
 
-                    val message = SessionEffect.Message(PiFeatureAvailability.WIFI_ONLY_ON_BLUETOOTH)
+                    val message = SessionEffect.Message(PiFeatureAvailability.DELETE_AND_CLEAR_NEED_WIFI)
                     assertThat(awaitItem()).isEqualTo(message)
                     assertThat(awaitItem()).isEqualTo(message)
                 }
@@ -672,7 +624,7 @@ class SessionViewModelTest {
                     viewModel.onEvent(SessionEvent.DeleteShot(shotId(1)))
 
                     assertThat(awaitItem())
-                        .isEqualTo(SessionEffect.Message(PiFeatureAvailability.WIFI_ONLY_ON_BLUETOOTH))
+                        .isEqualTo(SessionEffect.Message(PiFeatureAvailability.DELETE_AND_CLEAR_NEED_WIFI))
                 }
             }
             assertThat(shots.deleteShotCalls).isEmpty()

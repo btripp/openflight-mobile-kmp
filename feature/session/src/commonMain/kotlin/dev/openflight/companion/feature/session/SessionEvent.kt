@@ -9,15 +9,32 @@ sealed interface SessionEvent {
     ) : SessionEvent
 
     /**
-     * Deletes one shot by its [SessionShotRow.id]. The shot is removed from the phone's history,
-     * and from the Pi's session (by timestamp) while the Pi's Socket.IO link is connected.
+     * Asks to delete one shot by its [SessionShotRow.id]: [SessionUiState.action] becomes a
+     * confirmation. Once confirmed ([ConfirmAction]) the shot is removed from the phone's history,
+     * and from the Pi's session (by timestamp, once the Pi confirms) while its link is connected.
      */
     data class DeleteShot(
         val id: String,
     ) : SessionEvent
 
-    /** Clears the phone's history, and the Pi's session (`clear_session`) while its link is connected. */
+    /**
+     * Asks to clear the session: a confirmation first, like [DeleteShot]. Confirmed, it clears the
+     * active profile's shots from the Pi's session (`clear_session`) while its link is connected,
+     * else the phone's own list.
+     */
     data object ClearHistory : SessionEvent
+
+    /** Runs the action [SessionUiState.action] is confirming. */
+    data object ConfirmAction : SessionEvent
+
+    /** Drops the confirmation without doing anything. */
+    data object CancelAction : SessionEvent
+
+    /** Runs a failed action again, when [SessionActionState.Failed.canRetry]. */
+    data object RetryAction : SessionEvent
+
+    /** Hides a finished action's outcome ([SessionActionState.Done] or [SessionActionState.Failed]). */
+    data object DismissAction : SessionEvent
 
     /** Builds the CSV export; the result arrives through [SessionEffect.CsvReady]. */
     data object ExportCsv : SessionEvent

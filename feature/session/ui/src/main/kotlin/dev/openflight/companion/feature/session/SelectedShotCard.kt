@@ -47,7 +47,7 @@ internal fun SelectedShotCardView(
                 text = "Shot ${card.shotNumber} · ${card.clubName}",
                 role = OfTextRole.TitleSmall,
                 modifier = Modifier.weight(1f),
-                maxLines = 1,
+                maxLines = 2,
             )
             OfTextButton(
                 text = "Delete",
