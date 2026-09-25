@@ -10,8 +10,11 @@ import dev.openflight.companion.core.data.TransportType
 import dev.openflight.companion.core.insights.ShotEnrichment
 import dev.openflight.companion.core.insights.computeClubChips
 import dev.openflight.companion.core.insights.computeClubStats
+import dev.openflight.companion.core.model.ConnectionErrorKind
+import dev.openflight.companion.core.model.ConnectionState
 import dev.openflight.companion.core.model.GolfClub
 import dev.openflight.companion.core.model.ShotEvent
+import dev.openflight.companion.core.model.pi.PiLinkState
 import dev.openflight.companion.core.model.pi.ShotDetail
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.Channel
@@ -40,6 +43,7 @@ class DashboardViewModel(
     private val shots: ShotRepository,
     private val settings: SettingsRepository,
     private val piSession: PiSessionRepository,
+    private val clubConfirmation: ClubConfirmation = ClubConfirmation(),
 ) : ViewModel() {
     /** The host field's text while the user edits it; `null` shows the saved host. */
     private val hostDraft = MutableStateFlow<String?>(null)
@@ -48,8 +52,25 @@ class DashboardViewModel(
     private val savedSettings =
         combine(settings.transport, settings.host, settings.selectedClub, ::SavedSettings)
 
+    /** The Socket.IO link as the card needs it: up, or refused for a denied Local Network. */
+    private val piLink =
+        piSession.linkState.map { link ->
+            PiLinkFlags(
+                connected = link == PiLinkState.Connected,
+                localNetworkDenied = link is PiLinkState.Reconnecting && link.localNetworkDenied,
+            )
+        }
+
+    private val prompts = combine(piLink, clubConfirmation.phase, ::Pair)
+
     private val panel =
-        combine(savedSettings, shots.connectionState, hostDraft, clubRequest) { saved, state, draft, request ->
+        combine(savedSettings, shots.connectionState, hostDraft, clubRequest, prompts) {
+            saved,
+            state,
+            draft,
+            request,
+            (link, confirmation),
+            ->
             ConnectionPanelState(
                 transport = saved.transport,
                 hostText = draft ?: saved.host,
@@ -57,6 +78,11 @@ class DashboardViewModel(
                 club = saved.club,
                 isChangingClub = request.inFlight,
                 clubError = request.error,
+                piLinkConnected = link.connected,
+                localNetworkDenied =
+                    link.localNetworkDenied ||
+                        (state as? ConnectionState.Error)?.kind == ConnectionErrorKind.LOCAL_NETWORK_DENIED,
+                showClubConfirmation = confirmation == ClubConfirmation.Phase.SHOWING,
             )
         }
 
@@ -96,6 +122,13 @@ class DashboardViewModel(
     val effects: Flow<DashboardEffect> = newShotEffects.receiveAsFlow()
 
     init {
+        // Plan R8d: the first connection of the launch (either link) opens the club confirmation.
+        viewModelScope.launch {
+            combine(shots.connectionState, piSession.linkState) { state, link ->
+                state == ConnectionState.Connected || link == PiLinkState.Connected
+            }.first { it }
+            clubConfirmation.onConnected()
+        }
         viewModelScope.launch {
             var lastEventId: String? = null
             var seenFirstHistory = false
@@ -121,12 +154,39 @@ class DashboardViewModel(
 
     fun onEvent(event: DashboardEvent) {
         when (event) {
-            is DashboardEvent.TransportChanged -> viewModelScope.launch { settings.setTransport(event.transport) }
-            is DashboardEvent.HostEdited -> hostDraft.value = event.text
-            DashboardEvent.HostSubmitted -> submitHost()
-            DashboardEvent.Retry -> shots.retry()
-            is DashboardEvent.ClubSelected -> changeClub(event.club)
-            DashboardEvent.DismissError -> clubRequest.update { it.copy(error = null) }
+            is DashboardEvent.TransportChanged -> {
+                viewModelScope.launch { settings.setTransport(event.transport) }
+            }
+
+            is DashboardEvent.HostEdited -> {
+                hostDraft.value = event.text
+            }
+
+            DashboardEvent.HostSubmitted -> {
+                submitHost()
+            }
+
+            DashboardEvent.Retry -> {
+                shots.retry()
+            }
+
+            is DashboardEvent.ClubSelected -> {
+                // Picking a club answers the confirmation too.
+                clubConfirmation.dismiss()
+                changeClub(event.club)
+            }
+
+            DashboardEvent.DismissError -> {
+                clubRequest.update { it.copy(error = null) }
+            }
+
+            is DashboardEvent.HostHintSelected -> {
+                hostDraft.value = event.host
+            }
+
+            DashboardEvent.ClubConfirmed -> {
+                clubConfirmation.dismiss()
+            }
         }
     }
 
@@ -183,6 +243,11 @@ class DashboardViewModel(
         val transport: TransportType,
         val host: String,
         val club: GolfClub,
+    )
+
+    private data class PiLinkFlags(
+        val connected: Boolean,
+        val localNetworkDenied: Boolean,
     )
 
     private data class ClubRequest(

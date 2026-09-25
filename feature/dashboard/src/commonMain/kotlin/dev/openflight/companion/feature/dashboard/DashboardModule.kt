@@ -8,5 +8,7 @@ import org.koin.dsl.module
 /** Koin bindings for this feature. Needs `core:data`'s `dataModule` in the same graph. */
 val dashboardModule: Module =
     module {
+        // Plan R8d: one per process, so the club confirmation shows once per launch, not per screen.
+        single { ClubConfirmation() }
         viewModelOf(::DashboardViewModel)
     }

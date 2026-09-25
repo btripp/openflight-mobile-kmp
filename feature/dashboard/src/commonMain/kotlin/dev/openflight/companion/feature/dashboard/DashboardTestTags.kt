@@ -13,6 +13,14 @@ object DashboardTestTags {
     const val EMPTY_STATE = "dashboard.emptyState"
     const val LATEST_SHOT = "dashboard.latestShot"
     const val PREVIOUS_SHOTS = "dashboard.previousShots"
+    const val HELP_LINK = "dashboard.helpLink"
+    const val CLUB_CONFIRMATION = "dashboard.clubConfirmation"
+    const val CLUB_CONFIRM = "dashboard.clubConfirm"
+    const val LOCAL_NETWORK_DENIED = "dashboard.localNetworkDenied"
+    const val OPEN_SETTINGS = "dashboard.openSettings"
+
+    /** A tap-to-fill host hint, by its host (for example "192.168.4.1:8080"). */
+    fun hostHint(host: String): String = "dashboard.hostHint.$host"
 
     /** A detail metric in the latest-shot grid, by its title (for example "Smash"). */
     fun metric(title: String): String = "dashboard.metric.$title"

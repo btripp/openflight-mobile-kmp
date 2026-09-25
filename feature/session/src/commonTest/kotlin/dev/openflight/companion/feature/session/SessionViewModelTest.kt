@@ -342,6 +342,19 @@ class SessionViewModelTest {
         }
 
     @Test
+    fun simulateShotIsHiddenOnARealPiEvenWhileConnected() =
+        runTest {
+            // Plan R8d: only an explicit mock_mode == true offers it (Expo showed it always).
+            piSession.linkState.value = PiLinkState.Connected
+            viewModel.uiState.testIgnoringRest {
+                piSession.mockMode.value = true
+                awaitUntil { it.showSimulateShot }
+                piSession.mockMode.value = false
+                awaitUntil { !it.showSimulateShot }
+            }
+        }
+
+    @Test
     fun simulateShotIsVisibleOnlyInMockModeAndSendsTheCommand() =
         runTest {
             piSession.linkState.value = PiLinkState.Connected

@@ -187,13 +187,17 @@ private fun ConnectionCard(
                 onSubmit = { onEvent(DashboardEvent.HostSubmitted) },
                 modifier = Modifier.fillMaxWidth().testTag(DashboardTestTags.HOST_FIELD),
             )
+            HostHints(panel.hostHints, onEvent)
         }
+        if (panel.localNetworkDenied) LocalNetworkDenied()
+        if (panel.showClubConfirmation) ClubConfirmationPrompt(panel.club, onEvent)
         ClubSelector(panel, onEvent)
         OfOutlinedButton(
             text = "Calibrate TI Radar",
             onClick = onOpenCalibration,
             modifier = Modifier.fillMaxWidth().testTag(DashboardTestTags.CALIBRATE_RADAR),
         )
+        panel.helpLink?.let { HelpLink(it) }
     }
 }
 

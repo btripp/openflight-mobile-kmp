@@ -155,6 +155,16 @@ struct DashboardContent: View {
                 .font(.system(.callout, design: .monospaced))
                 .padding(12)
                 .background(.black.opacity(0.22), in: RoundedRectangle(cornerRadius: 12))
+
+                hostHints
+            }
+
+            if connection.localNetworkDenied {
+                localNetworkDenied
+            }
+
+            if connection.showClubConfirmation {
+                clubConfirmation
             }
 
             clubSelector
@@ -168,9 +178,86 @@ struct DashboardContent: View {
             .buttonStyle(.bordered)
             .tint(Theme.gold)
             .accessibilityIdentifier(DashboardTestTags.shared.CALIBRATE_RADAR)
+
+            if let helpLink = connection.helpLink, let url = URL(string: helpLink.url) {
+                // Plan R8d: the build guide before a connection, troubleshooting after a failure.
+                Link(helpLink.label, destination: url)
+                    .font(.of(.footnote, weight: .semibold))
+                    .tint(Theme.gold)
+                    .frame(minHeight: 44)
+                    .accessibilityIdentifier(DashboardTestTags.shared.HELP_LINK)
+            }
         }
         .padding(16)
         .background(Theme.cream.opacity(0.07), in: RoundedRectangle(cornerRadius: 18))
+    }
+
+    /// Plan R8d: tap-to-fill suggestions; they fill the field, Go still connects.
+    private var hostHints: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(connection.hostHints, id: \.host) { hint in
+                    Button {
+                        send(DashboardEventHostHintSelected(host: hint.host))
+                    } label: {
+                        Text("\(hint.label) \(hint.host)")
+                            .font(.of(.caption, weight: .semibold))
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .frame(minHeight: 44)
+                            .background(Theme.cream.opacity(0.08), in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier(DashboardTestTags.shared.hostHint(host: hint.host))
+                }
+            }
+        }
+    }
+
+    /// Plan R8d: iOS refused the connection because Local Network access is off. Retry can't fix
+    /// that, so offer the app's page in Settings, where the Local Network switch lives.
+    private var localNetworkDenied: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("Local Network access is off", systemImage: "wifi.exclamationmark")
+                .font(.of(.subheadline, weight: .semibold))
+                .foregroundStyle(Theme.danger)
+            Text("OpenFlight needs Local Network access to reach your Pi. Turn it on in Settings, then come back.")
+                .font(.of(.caption))
+                .foregroundStyle(Theme.creamDim)
+            Button("Open Settings") {
+                if let url = URL(string: UIApplication.openSettingsURLString) {
+                    UIApplication.shared.open(url)
+                }
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(Theme.gold)
+            .accessibilityIdentifier(DashboardTestTags.shared.OPEN_SETTINGS)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(Theme.danger.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier(DashboardTestTags.shared.LOCAL_NETWORK_DENIED)
+    }
+
+    /// Plan R8d: once per launch, after the first connection, confirm the club shots are filed under.
+    private var clubConfirmation: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Is \(connection.club.displayName) the right club?")
+                .font(.of(.subheadline, weight: .semibold))
+            Text("The Pi files every shot under this club. Pick another below if it's wrong.")
+                .font(.of(.caption))
+                .foregroundStyle(Theme.creamDim)
+            Button("Looks right") { send(DashboardEventClubConfirmed.shared) }
+                .buttonStyle(.borderedProminent)
+                .tint(Theme.gold)
+                .accessibilityIdentifier(DashboardTestTags.shared.CLUB_CONFIRM)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(Theme.gold.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier(DashboardTestTags.shared.CLUB_CONFIRMATION)
     }
 
     private var statusRow: some View {

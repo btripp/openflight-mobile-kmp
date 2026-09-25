@@ -50,6 +50,33 @@ final class DashboardUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Connect to your OpenFlight Pi, then hit a ball."].exists)
     }
 
+    /// Plan R8d: the first connection of a launch asks once whether the club is right.
+    func testClubConfirmationShowsOnceAndIsDismissible() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing", "--preview-shot"]
+        app.launch()
+
+        let confirm = app.buttons["dashboard.clubConfirm"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 10))
+        // Connected: no help link.
+        XCTAssertFalse(app.descendants(matching: .any)["dashboard.helpLink"].exists)
+        confirm.tap()
+        XCTAssertFalse(confirm.waitForExistence(timeout: 2))
+    }
+
+    /// Plan R8d: on Wi-Fi the host field offers tap-to-fill hints that fill it without connecting.
+    func testHostHintFillsTheHostField() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing", "--transport", "wifi"]
+        app.launch()
+
+        let hint = app.buttons["dashboard.hostHint.192.168.4.1:8080"]
+        XCTAssertTrue(hint.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["dashboard.hostHint.192.168.1.100:8080"].exists)
+        hint.tap()
+        XCTAssertEqual(app.textFields["dashboard.host"].value as? String, "192.168.4.1:8080")
+    }
+
     func testCalibrateAndRangeOpenTheirScreensAndGoBack() {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-testing", "--preview-shot"]

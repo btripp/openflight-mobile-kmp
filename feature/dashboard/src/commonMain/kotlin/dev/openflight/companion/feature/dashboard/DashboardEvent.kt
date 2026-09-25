@@ -27,4 +27,12 @@ sealed interface DashboardEvent {
 
     /** Clears the club error under the menu. */
     data object DismissError : DashboardEvent
+
+    /** A host hint was tapped: fills the field (like typing it); nothing connects until [HostSubmitted]. */
+    data class HostHintSelected(
+        val host: String,
+    ) : DashboardEvent
+
+    /** "Looks right" on the once-per-launch club confirmation; it won't show again this launch. */
+    data object ClubConfirmed : DashboardEvent
 }

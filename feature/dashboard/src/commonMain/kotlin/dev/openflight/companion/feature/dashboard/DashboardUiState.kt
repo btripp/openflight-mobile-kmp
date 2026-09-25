@@ -71,6 +71,11 @@ sealed interface DashboardEffect {
  * @property hostText the host field's text: the user's unsubmitted edit, or else the saved host.
  * @property isChangingClub a `set_club` request is in flight.
  * @property clubError the last club request's failure, shown under the menu until dismissed or retried.
+ * @property piLinkConnected the Pi's Socket.IO link is up (a Pi without the SSE stream still
+ *   counts as reachable for the help link and the club confirmation).
+ * @property localNetworkDenied iOS refused the connection because Local Network access is off
+ *   (plan R8d): the card offers to open Settings instead of only Retry.
+ * @property showClubConfirmation the once-per-launch "is this the right club?" prompt (plan R8d).
  */
 data class ConnectionPanelState(
     val transport: TransportType = SettingsRepository.DEFAULT_TRANSPORT,
@@ -79,7 +84,26 @@ data class ConnectionPanelState(
     val club: GolfClub = SettingsRepository.DEFAULT_CLUB,
     val isChangingClub: Boolean = false,
     val clubError: String? = null,
+    val piLinkConnected: Boolean = false,
+    val localNetworkDenied: Boolean = false,
+    val showClubConfirmation: Boolean = false,
 ) {
+    /** Tap-to-fill suggestions under the host field (Wi-Fi only). */
+    val hostHints: List<HostHint>
+        get() = if (showHostField) HOST_HINTS else emptyList()
+
+    /**
+     * The docs link on the card (Expo `openflight-docs-link`): the build guide while nothing is
+     * connected, the troubleshooting guide after a failed attempt, none once connected.
+     */
+    val helpLink: ConnectionHelpLink?
+        get() =
+            when {
+                state == ConnectionState.Connected || piLinkConnected -> null
+                state is ConnectionState.Error -> ConnectionHelpLink.TROUBLESHOOTING
+                else -> ConnectionHelpLink.BUILD_GUIDE
+            }
+
     /**
      * The club menu is enabled only while connected and not already changing clubs (plan §0.3,
      * ContentView.swift:282).
@@ -104,7 +128,32 @@ data class ConnectionPanelState(
 
     companion object {
         const val CONNECTED_TITLE = "OpenFlight Pi"
+
+        /** Plan R8d: the Pi's own access point, then a typical home-router address. */
+        val HOST_HINTS: List<HostHint> =
+            listOf(
+                HostHint(host = "192.168.4.1:8080", label = "Pi access point"),
+                HostHint(host = "192.168.1.100:8080", label = "Home network"),
+            )
     }
+}
+
+/** A tap-to-fill host suggestion: [host] goes into the field, [label] says what it is. */
+data class HostHint(
+    val host: String,
+    val label: String,
+)
+
+/** The connection card's documentation link (plan R8d, Expo `ConnectionBar`). */
+enum class ConnectionHelpLink(
+    val label: String,
+    val url: String,
+) {
+    BUILD_GUIDE("New to OpenFlight? Build one", "https://open-flight.github.io/openflight/get-started/"),
+    TROUBLESHOOTING(
+        "Can't connect? Troubleshooting guide",
+        "https://open-flight.github.io/openflight/troubleshooting/",
+    ),
 }
 
 /** The transport picker's label, matching the reference's `ShotTransport.label`. */
