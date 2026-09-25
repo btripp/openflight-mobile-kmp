@@ -3,6 +3,7 @@ package dev.openflight.companion.core.network
 
 import dev.openflight.companion.core.model.CalibrationResult
 import dev.openflight.companion.core.model.ClubSelection
+import dev.openflight.companion.core.model.ConnectionErrorKind
 import dev.openflight.companion.core.model.ConnectionState
 import dev.openflight.companion.core.model.GolfClub
 import dev.openflight.companion.core.model.PhoneOrientationMeasurement
@@ -102,11 +103,18 @@ class WifiShotTransport(
 
     override fun start() {
         if (streamJob?.isActive == true) return
-        val url = EndpointUrl.build(host, STREAM_PATH)
-        if (url == null) {
-            _state.value = ConnectionState.Error(OpenFlightHttpError.InvalidHost(host).message.orEmpty())
-            return
-        }
+        val url =
+            when (val decision = EndpointPolicy.evaluate(host)) {
+                is EndpointDecision.Allowed -> {
+                    decision.endpoint.url(STREAM_PATH)
+                }
+
+                is EndpointDecision.Rejected -> {
+                    // Plan R8d: a refused address never reaches Ktor; say why instead.
+                    _state.value = ConnectionState.Error(decision.reason, ConnectionErrorKind.ENDPOINT_REJECTED)
+                    return
+                }
+            }
         streamJob = scope.launch { run(url) }
     }
 
@@ -139,7 +147,7 @@ class WifiShotTransport(
                 // Any failure -- a bad status, a decode error surfaced as an exception, or the
                 // stream ending cleanly -- is retryable, so it is reported the same way here.
                 if (!coroutineContext.isActive) return
-                _state.value = ConnectionState.Error(error.message ?: error.toString())
+                _state.value = error.toConnectionError()
                 delay(reconnectDelay)
                 reconnectDelay = (reconnectDelay * 2).coerceAtMost(MAXIMUM_RECONNECT_DELAY)
             }
@@ -226,7 +234,7 @@ class WifiShotTransport(
         path: String,
         crossinline configure: HttpRequestBuilder.() -> Unit,
     ): T {
-        val url = EndpointUrl.build(host, path) ?: throw OpenFlightHttpError.InvalidHost(host)
+        val url = EndpointUrl.require(host, path)
         val response =
             httpClient.request(url) {
                 configure()
@@ -252,6 +260,14 @@ class WifiShotTransport(
         private val MAXIMUM_RECONNECT_DELAY = 15.seconds
     }
 }
+
+/** A stream failure as a state; a denied iOS Local Network permission gets its own, actionable kind. */
+private fun Throwable.toConnectionError(): ConnectionState.Error =
+    if (LocalNetworkDenial.isDenied(this)) {
+        ConnectionState.Error(LocalNetworkDenial.MESSAGE, ConnectionErrorKind.LOCAL_NETWORK_DENIED)
+    } else {
+        ConnectionState.Error(message ?: toString())
+    }
 
 private suspend fun serverErrorMessage(response: HttpResponse): String? =
     runCatching { response.body<ServerErrorBody>().error }.getOrNull()

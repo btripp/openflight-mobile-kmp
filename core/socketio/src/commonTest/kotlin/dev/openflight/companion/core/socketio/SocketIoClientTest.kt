@@ -10,6 +10,7 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isTrue
+import dev.openflight.companion.core.network.LocalNetworkDenial
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
@@ -161,6 +162,26 @@ class SocketIoClientTest {
             runCurrent()
             // Opened but no connect ack yet.
             assertFailure { client.emit("simulate_shot") }.isInstanceOf(SocketNotConnectedException::class)
+        }
+
+    @Test
+    fun aLocalNetworkDenialIsFlaggedWithAnActionableReason() =
+        runClientTest { (transport, client) ->
+            transport.failures +=
+                IllegalStateException(
+                    "Exception in http request: Error Domain=NSURLErrorDomain Code=-1009 " +
+                        "UserInfo={_NSURLErrorNWPathKey=unsatisfied (Local network prohibited)}",
+                )
+            client.connect()
+            runCurrent()
+            assertThat(client.state.value).isEqualTo(
+                SocketConnectionState.Reconnecting(
+                    attempt = 1,
+                    retryInMillis = 500,
+                    reason = LocalNetworkDenial.MESSAGE,
+                    localNetworkDenied = true,
+                ),
+            )
         }
 
     @Test

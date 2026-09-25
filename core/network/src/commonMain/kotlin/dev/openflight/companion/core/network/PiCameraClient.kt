@@ -33,7 +33,7 @@ class PiCameraClient(
      * @throws OpenFlightHttpError.InvalidHost for an unusable host; transport failures propagate.
      */
     suspend fun preview(host: String): CameraPreview {
-        val url = EndpointUrl.build(host, PREVIEW_PATH) ?: throw OpenFlightHttpError.InvalidHost(host)
+        val url = EndpointUrl.require(host, PREVIEW_PATH)
         val response = httpClient.get(url) { timeout { requestTimeoutMillis = PREVIEW_TIMEOUT_MILLIS } }
         return when (response.status) {
             HttpStatusCode.OK -> {
@@ -68,8 +68,7 @@ class PiCameraClient(
         replayId: String,
     ): CameraReplay {
         require(REPLAY_ID.matches(replayId)) { "Not a camera replay id: $replayId" }
-        val url =
-            EndpointUrl.build(host, "$REPLAYS_PATH/$replayId/prepare") ?: throw OpenFlightHttpError.InvalidHost(host)
+        val url = EndpointUrl.require(host, "$REPLAYS_PATH/$replayId/prepare")
         val response = httpClient.post(url) { timeout { requestTimeoutMillis = PREPARE_TIMEOUT_MILLIS } }
         if (response.status != HttpStatusCode.OK) {
             val message = runCatching { response.body<CameraErrorBody>().error }.getOrNull()

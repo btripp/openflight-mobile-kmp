@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 package dev.openflight.companion.core.socketio
 
+import dev.openflight.companion.core.network.LocalNetworkDenial
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -105,6 +106,7 @@ class SocketIoClient(
         var attempt = 1
         while (true) {
             mutableState.value = SocketConnectionState.Connecting(attempt)
+            var denied = false
             val reason =
                 try {
                     var wasConnected = false
@@ -114,11 +116,17 @@ class SocketIoClient(
                 } catch (cancellation: CancellationException) {
                     throw cancellation
                 } catch (error: Throwable) {
+                    denied = LocalNetworkDenial.isDenied(error)
                     error.message ?: error.toString()
                 }
             connected = null
             val retryIn = reconnectPolicy.delayFor(attempt)
-            mutableState.value = SocketConnectionState.Reconnecting(attempt, retryIn, reason)
+            mutableState.value =
+                if (denied || LocalNetworkDenial.isDeniedMessage(reason)) {
+                    SocketConnectionState.Reconnecting(attempt, retryIn, LocalNetworkDenial.MESSAGE, true)
+                } else {
+                    SocketConnectionState.Reconnecting(attempt, retryIn, reason)
+                }
             delay(retryIn)
             attempt++
         }

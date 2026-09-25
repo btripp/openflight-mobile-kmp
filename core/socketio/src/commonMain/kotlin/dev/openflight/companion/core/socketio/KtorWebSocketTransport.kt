@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 package dev.openflight.companion.core.socketio
 
+import dev.openflight.companion.core.network.EndpointUrl
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.websocket.DefaultClientWebSocketSession
 import io.ktor.client.plugins.websocket.WebSockets
@@ -26,7 +27,15 @@ class KtorWebSocketTransport(
 ) : EngineIoTransport {
     private val client = httpClient.config { install(WebSockets) }
 
-    override suspend fun open(url: String): EngineIoConnection = KtorWebSocketConnection(client.webSocketSession(url))
+    /**
+     * @throws dev.openflight.companion.core.network.OpenFlightHttpError.InvalidHost when
+     *   the endpoint policy (`core:network`'s `EndpointPolicy`) refuses [url]'s address (plan
+     *   R8d); nothing is sent then.
+     */
+    override suspend fun open(url: String): EngineIoConnection {
+        EndpointUrl.require(httpEquivalent(url), "/")
+        return KtorWebSocketConnection(client.webSocketSession(url))
+    }
 
     /** Builds the Engine.IO WebSocket URL (`ws[s]://host:port/socket.io/?EIO=4&transport=websocket`). */
     companion object {
@@ -46,6 +55,14 @@ class KtorWebSocketTransport(
         }
 
         const val DEFAULT_PATH: String = "/socket.io/"
+
+        /** `ws[s]://` as `http[s]://`, so the endpoint policy judges the address the HTTP API uses. */
+        internal fun httpEquivalent(url: String): String =
+            when {
+                url.startsWith("wss://", ignoreCase = true) -> "https://" + url.substring("wss://".length)
+                url.startsWith("ws://", ignoreCase = true) -> "http://" + url.substring("ws://".length)
+                else -> url
+            }
     }
 }
 

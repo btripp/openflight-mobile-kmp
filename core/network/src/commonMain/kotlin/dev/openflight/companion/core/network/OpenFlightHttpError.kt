@@ -9,10 +9,14 @@ package dev.openflight.companion.core.network
 sealed class OpenFlightHttpError(
     message: String,
 ) : Exception(message) {
-    /** [host] could not be turned into a usable URL; see [EndpointUrl.build]. */
+    /**
+     * [host] could not be turned into a usable URL, or [EndpointPolicy] refused it; [reason] is the
+     * user-facing sentence (see [EndpointDecision.Rejected.reason]).
+     */
     data class InvalidHost(
         val host: String,
-    ) : OpenFlightHttpError(invalidHostMessage(host))
+        val reason: String = EndpointPolicy.rejectionReason(host) ?: "\"$host\" is not a valid address.",
+    ) : OpenFlightHttpError(reason)
 
     /**
      * A non-200 response. [serverMessage] is the `error` field from a `{"error":"..."}` body when
@@ -28,13 +32,6 @@ sealed class OpenFlightHttpError(
     data object StreamEnded : OpenFlightHttpError("OpenFlight closed the connection.")
 
     private companion object {
-        fun invalidHostMessage(host: String): String =
-            if (host.trim().isEmpty()) {
-                "Enter the address of your OpenFlight Pi."
-            } else {
-                "\"$host\" is not a valid address."
-            }
-
         fun defaultStatusMessage(statusCode: Int): String =
             if (statusCode == HTTP_TOO_MANY_DEVICES) {
                 "Too many devices are streaming shots."

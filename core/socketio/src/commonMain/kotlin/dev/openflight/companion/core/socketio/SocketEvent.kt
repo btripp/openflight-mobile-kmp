@@ -27,11 +27,15 @@ sealed interface SocketConnectionState {
         val sid: String?,
     ) : SocketConnectionState
 
-    /** The last attempt failed or the connection dropped; the next attempt starts in [retryInMillis]. */
+    /**
+     * The last attempt failed or the connection dropped; the next attempt starts in [retryInMillis].
+     * [localNetworkDenied]: iOS refused the connection because Local Network access is off.
+     */
     data class Reconnecting(
         val attempt: Int,
         val retryInMillis: Long,
         val reason: String,
+        val localNetworkDenied: Boolean = false,
     ) : SocketConnectionState
 }
 

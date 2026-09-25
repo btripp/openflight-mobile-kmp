@@ -34,8 +34,11 @@ sealed interface PiFeatureAvailability {
         fun of(link: PiLinkState): PiFeatureAvailability =
             when (link) {
                 PiLinkState.Connected -> Available
+
                 PiLinkState.WifiOnly -> Unavailable(REQUIRES_WIFI)
-                PiLinkState.Idle, PiLinkState.Connecting, is PiLinkState.Reconnecting -> Unavailable(NOT_CONNECTED)
+
+                PiLinkState.Idle, PiLinkState.Connecting, is PiLinkState.Reconnecting, is PiLinkState.Rejected,
+                -> Unavailable(NOT_CONNECTED)
             }
     }
 }

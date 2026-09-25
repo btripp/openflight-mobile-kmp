@@ -23,13 +23,24 @@ sealed interface PiLinkState {
         override val description: String = "Connected"
     }
 
-    /** The link dropped or couldn't open; it retries on its own after [retryInMillis]. */
+    /**
+     * The link dropped or couldn't open; it retries on its own after [retryInMillis].
+     * [localNetworkDenied] (iOS) means it can't succeed until the user allows Local Network access.
+     */
     data class Reconnecting(
         val attempt: Int,
         val retryInMillis: Long,
         val reason: String,
+        val localNetworkDenied: Boolean = false,
     ) : PiLinkState {
         override val description: String = "Reconnecting: $reason"
+    }
+
+    /** The configured address was refused before connecting (plan R8d endpoint policy). */
+    data class Rejected(
+        val reason: String,
+    ) : PiLinkState {
+        override val description: String = reason
     }
 }
 

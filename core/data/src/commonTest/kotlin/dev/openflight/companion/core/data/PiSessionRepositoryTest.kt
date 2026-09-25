@@ -273,7 +273,7 @@ class PiSessionRepositoryTest {
         }
 
     @Test
-    fun anUnusableHostLeavesTheLinkIdle() =
+    fun anUnusableHostIsReportedAsRejectedWithTheReason() =
         runTest(UnconfinedTestDispatcher()) {
             val repository =
                 DefaultPiSessionRepository(
@@ -284,7 +284,9 @@ class PiSessionRepositoryTest {
                 )
             repository.start()
 
-            assertThat(repository.linkState.value).isEqualTo(PiLinkState.Idle)
+            // Plan R8d: the endpoint policy's reason, not a silent Idle.
+            assertThat(repository.linkState.value)
+                .isEqualTo(PiLinkState.Rejected("Enter the address of your OpenFlight Pi."))
         }
 
     // endregion

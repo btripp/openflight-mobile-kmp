@@ -86,6 +86,7 @@ struct SettingsContent: View {
         switch state.linkState {
         case is PiLinkStateConnected: Theme.success
         case is PiLinkStateConnecting, is PiLinkStateReconnecting: Theme.warning
+        case is PiLinkStateRejected: Theme.danger
         default: Theme.neutral
         }
     }

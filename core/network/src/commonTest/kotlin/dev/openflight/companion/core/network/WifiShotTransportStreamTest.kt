@@ -8,6 +8,7 @@ import assertk.assertions.isFalse
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
+import dev.openflight.companion.core.model.ConnectionErrorKind
 import dev.openflight.companion.core.model.ConnectionState
 import dev.openflight.companion.core.model.GolfClub
 import io.ktor.client.engine.mock.MockEngine
@@ -148,7 +149,7 @@ class WifiShotTransportStreamTest {
                 assertThat(awaitItem()).isEqualTo(ConnectionState.Idle)
                 transport.start()
                 assertThat(awaitItem()).isEqualTo(
-                    ConnectionState.Error(OpenFlightHttpError.InvalidHost(" ").message.orEmpty()),
+                    ConnectionState.Error(EndpointDecision.Blank.reason, ConnectionErrorKind.ENDPOINT_REJECTED),
                 )
                 cancelAndIgnoreRemainingEvents()
             }

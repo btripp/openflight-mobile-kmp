@@ -24,6 +24,7 @@ import dev.openflight.companion.core.model.pi.SimState
 import dev.openflight.companion.core.model.pi.SwingSpeedReading
 import dev.openflight.companion.core.model.pi.TrainingImplement
 import dev.openflight.companion.core.model.pi.TriggerStatus
+import dev.openflight.companion.core.network.EndpointPolicy
 import dev.openflight.companion.core.socketio.SocketConnectionState
 import dev.openflight.companion.core.socketio.SocketEvent
 import dev.openflight.companion.core.socketio.SocketNotConnectedException
@@ -283,7 +284,9 @@ internal class DefaultPiSessionRepository(
         coroutineScope {
             val socket = socketFactory.create(key.host.orEmpty(), this)
             if (socket == null) {
-                mutableLinkState.value = PiLinkState.Idle
+                // Plan R8d: the endpoint policy refused the host, so nothing was opened; say why.
+                val host = key.host.orEmpty()
+                mutableLinkState.value = PiLinkState.Rejected(EndpointPolicy.rejectionReason(host) ?: UNUSABLE_HOST)
                 awaitCancellation()
             }
             activeSocket.value = socket
@@ -359,6 +362,8 @@ internal class DefaultPiSessionRepository(
     )
 
     private companion object {
+        const val UNUSABLE_HOST = "This address can't be used."
+
         /**
          * Requested on every (re)connect. The server pushes `profiles`, `session_state` and
          * `trigger_status` on connect but not `radar_config` or the debug state, and a phone
@@ -378,8 +383,24 @@ internal class DefaultPiSessionRepository(
 
 private fun SocketConnectionState.toLinkState(): PiLinkState =
     when (this) {
-        SocketConnectionState.Idle -> PiLinkState.Idle
-        is SocketConnectionState.Connecting -> PiLinkState.Connecting
-        is SocketConnectionState.Connected -> PiLinkState.Connected
-        is SocketConnectionState.Reconnecting -> PiLinkState.Reconnecting(attempt, retryInMillis, reason)
+        SocketConnectionState.Idle -> {
+            PiLinkState.Idle
+        }
+
+        is SocketConnectionState.Connecting -> {
+            PiLinkState.Connecting
+        }
+
+        is SocketConnectionState.Connected -> {
+            PiLinkState.Connected
+        }
+
+        is SocketConnectionState.Reconnecting -> {
+            PiLinkState.Reconnecting(
+                attempt,
+                retryInMillis,
+                reason,
+                localNetworkDenied,
+            )
+        }
     }

@@ -169,6 +169,7 @@ private fun PiLinkState.tone(): StatusTone =
         PiLinkState.Connected -> StatusTone.Positive
         PiLinkState.Connecting, is PiLinkState.Reconnecting -> StatusTone.InProgress
         PiLinkState.Idle, PiLinkState.WifiOnly -> StatusTone.Neutral
+        is PiLinkState.Rejected -> StatusTone.Negative
     }
 
 /** The Pi's active profile (read-only until the profile picker, plan R8f). */

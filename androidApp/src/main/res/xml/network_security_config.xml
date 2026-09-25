@@ -2,12 +2,19 @@
 <!--
   The OpenFlight Pi serves shots over plain HTTP on the local network, at a host the
   user types in (a .local name or a bare IP). Android cannot allow-list arbitrary
-  user-entered IPs, so cleartext is permitted app-wide. See README "Network security".
+  user-entered IPs, so cleartext is permitted app-wide here and gated in code instead:
+  core:network's EndpointPolicy refuses http:// to anything but loopback, .local names,
+  RFC 1918, link-local and IPv6 unique-local addresses before a request is made
+  (plan R8d). See README "Network security".
+
+  "user" trust anchors let HTTPS to a Pi with an operator-provisioned certificate
+  (backend feat/lan-https, a private CA the user installed in Android settings) work.
 -->
 <network-security-config>
     <base-config cleartextTrafficPermitted="true">
         <trust-anchors>
             <certificates src="system" />
+            <certificates src="user" />
         </trust-anchors>
     </base-config>
 </network-security-config>

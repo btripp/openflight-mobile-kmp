@@ -27,7 +27,7 @@ class PiControlClient(
 ) {
     /** @throws OpenFlightHttpError.InvalidHost or [OpenFlightHttpError.UnexpectedStatus] on failure. */
     suspend fun shutdown(host: String): PiShutdownResult {
-        val url = EndpointUrl.build(host, SHUTDOWN_PATH) ?: throw OpenFlightHttpError.InvalidHost(host)
+        val url = EndpointUrl.require(host, SHUTDOWN_PATH)
         val response =
             httpClient.request(url) {
                 method = HttpMethod.Post
