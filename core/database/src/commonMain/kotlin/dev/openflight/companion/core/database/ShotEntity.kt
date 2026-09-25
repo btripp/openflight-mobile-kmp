@@ -89,6 +89,10 @@ data class ShotEntity(
     @ColumnInfo(name = "training_implement_label") val trainingImplementLabel: String? = null,
     @ColumnInfo(name = "has_detail") val hasDetail: Boolean = false,
     @ColumnInfo(name = "raw_json") val rawJson: String,
+    /** The user's star (schema v2); the phone's own mark, never from the payload. */
+    @ColumnInfo(defaultValue = "0") val starred: Boolean = false,
+    /** The user's note on the shot (schema v2); the phone's own, never from the payload. */
+    val note: String? = null,
 ) {
     /**
      * Whether [incoming] is this row's shot arriving on the **other** channel, matched on the
@@ -104,8 +108,8 @@ data class ShotEntity(
     /**
      * This row updated with [incoming]: every measurement [incoming] carries replaces the stored
      * one, and one it lacks keeps the stored value (a Socket.IO detail and an SSE event each know
-     * things the other doesn't). The row keeps its id and session; [rawJson] prefers the Socket.IO
-     * payload, the richer one.
+     * things the other doesn't). The row keeps its id, session, [starred] and [note]; [rawJson]
+     * prefers the Socket.IO payload, the richer one.
      */
     @Suppress("CyclomaticComplexMethod") // One elvis per column.
     fun mergedWith(incoming: ShotEntity): ShotEntity =
@@ -144,5 +148,8 @@ data class ShotEntity(
             trainingImplementLabel = incoming.trainingImplementLabel ?: trainingImplementLabel,
             hasDetail = hasDetail || incoming.hasDetail,
             rawJson = if (incoming.hasDetail || !hasDetail) incoming.rawJson else rawJson,
+            // The user's marks survive a later copy of the shot (a `shot_update`, the other channel).
+            starred = starred,
+            note = note,
         )
 }

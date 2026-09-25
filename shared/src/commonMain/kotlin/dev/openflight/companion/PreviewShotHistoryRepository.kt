@@ -3,9 +3,12 @@ package dev.openflight.companion
 
 import dev.openflight.companion.core.data.HistorySession
 import dev.openflight.companion.core.data.HistoryShot
+import dev.openflight.companion.core.data.ImportedSession
 import dev.openflight.companion.core.data.PiLiveShot
 import dev.openflight.companion.core.data.ShotHistoryRepository
+import dev.openflight.companion.core.data.ShotWindow
 import dev.openflight.companion.core.data.TransportType
+import dev.openflight.companion.core.model.GolfClub
 import dev.openflight.companion.core.model.ShotEvent
 import dev.openflight.companion.core.model.pi.ShotDetail
 import kotlinx.coroutines.CoroutineScope
@@ -30,7 +33,10 @@ import kotlinx.coroutines.launch
  * Deletes and "clear all" land after [writeDelayMillis], like a real store writing in the
  * background, so their pending state can be seen; with `null` (`--preview-history-stuck`) they never
  * land, so the screens' "storage didn't respond" failure can be seen too.
+ *
+ * It holds no imported sessions (plan F3): imports, the stats flag and notes are no-ops here.
  */
+@Suppress("TooManyFunctions") // Mirrors the ShotHistoryRepository surface.
 internal class PreviewShotHistoryRepository(
     private val writeDelayMillis: Long? = DEFAULT_WRITE_DELAY_MILLIS,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
@@ -40,7 +46,7 @@ internal class PreviewShotHistoryRepository(
 
     private val stored = MutableStateFlow(seed())
 
-    override fun sessions(): Flow<List<HistorySession>> =
+    override fun sessions(includeImported: Boolean): Flow<List<HistorySession>> =
         stored.map { sessions ->
             sessions
                 .filter { it.shots.isNotEmpty() }
@@ -68,6 +74,19 @@ internal class PreviewShotHistoryRepository(
                 ?.shots
                 .orEmpty()
                 .filter { profileId.isNullOrBlank() || it.detail.profileId == profileId }
+        }
+
+    override fun shotsForClub(
+        club: GolfClub,
+        window: ShotWindow,
+        profileId: String?,
+    ): Flow<List<HistoryShot>> =
+        stored.map { sessions ->
+            sessions.flatMap { session ->
+                session.shots.filter {
+                    it.detail.club == club.wireValue && (profileId.isNullOrBlank() || it.detail.profileId == profileId)
+                }
+            }
         }
 
     override fun startSession(
@@ -98,6 +117,33 @@ internal class PreviewShotHistoryRepository(
         }
 
     override fun clearAll() = write { stored.value = emptyList() }
+
+    override fun clearImported() = Unit
+
+    override fun setStarred(
+        shotId: Long,
+        starred: Boolean,
+    ) = updateShots { if (it.id == shotId) it.copy(starred = starred) else it }
+
+    override fun setNote(
+        shotId: Long,
+        note: String?,
+    ) = updateShots { if (it.id == shotId) it.copy(note = note) else it }
+
+    override fun setIncludeInStats(
+        sessionId: String,
+        include: Boolean,
+    ) = Unit
+
+    override fun setSessionNote(
+        sessionId: String,
+        note: String?,
+    ) = Unit
+
+    override suspend fun importSession(session: ImportedSession): String? = null
+
+    private fun updateShots(change: (HistoryShot) -> HistoryShot) =
+        stored.update { sessions -> sessions.map { session -> session.copy(shots = session.shots.map(change)) } }
 
     private fun write(change: () -> Unit) {
         val delayMillis = writeDelayMillis ?: return

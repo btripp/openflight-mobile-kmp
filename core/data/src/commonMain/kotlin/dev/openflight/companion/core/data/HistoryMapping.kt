@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 package dev.openflight.companion.core.data
 
+import dev.openflight.companion.core.database.SessionEntity
 import dev.openflight.companion.core.database.SessionSummaryRow
 import dev.openflight.companion.core.database.ShotEntity
 import dev.openflight.companion.core.model.ShotEvent
@@ -46,6 +47,20 @@ internal fun ShotEvent.toEntity(detail: ShotDetail?): ShotEntity {
         hasDetail = false,
         rawJson = HistoryJson.encodeToString(ShotEvent.serializer(), this),
     )
+}
+
+/**
+ * An imported session's shots as rows: the sharer's profile is dropped (it names a profile on their
+ * Pi, not this one's), and a shot number seen earlier in the file is dropped from the later shot so
+ * the per-session unique index can't reject the whole import.
+ */
+internal fun List<ShotDetail>.toImportedEntities(): List<ShotEntity> {
+    val seenNumbers = mutableSetOf<Int>()
+    return map { shot ->
+        val number = shot.shotNumber?.takeIf { seenNumbers.add(it) }
+        val stripped = shot.copy(shotNumber = number, profileId = null, profileName = null)
+        stripped.toEntity(eventId = null, rawJson = HistoryJson.encodeToString(ShotDetail.serializer(), stripped))
+    }
 }
 
 private fun ShotDetail.toEntity(
@@ -125,6 +140,8 @@ internal fun ShotEntity.toHistoryShot(): HistoryShot =
                 trainingImplement = trainingImplement,
                 trainingImplementLabel = trainingImplementLabel,
             ),
+        starred = starred,
+        note = note,
     )
 
 internal fun SessionSummaryRow.toHistorySession(): HistorySession =
@@ -136,4 +153,9 @@ internal fun SessionSummaryRow.toHistorySession(): HistorySession =
         shotCount = shotCount,
         firstShotAt = firstShotAt,
         lastShotAt = lastShotAt,
+        source = if (source == SessionEntity.SOURCE_IMPORTED) SessionSource.IMPORTED else SessionSource.LOCAL,
+        ownerName = ownerName,
+        title = title,
+        includeInStats = includeInStats,
+        note = note,
     )

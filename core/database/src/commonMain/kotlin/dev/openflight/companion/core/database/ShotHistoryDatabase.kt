@@ -11,19 +11,33 @@ import kotlinx.coroutines.IO
 import kotlin.coroutines.CoroutineContext
 
 /**
- * The phone's persistent shot history (plan R8h): sessions and the shots filed under them.
+ * The phone's persistent shot history (plan R8h): sessions and the shots filed under them, plus
+ * (schema v2, plan F3) bags, their clubs and finished activities.
  *
  * Schema versions are exported to `core/database/schemas/` and committed. A new version needs a
- * `Migration` (or an `AutoMigration`) plus a case in `ShotHistoryMigrationTest`; never destructive
- * fallback, since this is the player's only copy of past sessions.
+ * `Migration` (or an `AutoMigration`) in [MIGRATIONS] plus a case in `ShotHistoryMigrationTest`;
+ * never destructive fallback, since this is the player's only copy of past sessions.
  */
-@Database(entities = [SessionEntity::class, ShotEntity::class], version = ShotHistoryDatabase.VERSION)
+@Database(
+    entities = [
+        SessionEntity::class,
+        ShotEntity::class,
+        BagEntity::class,
+        BagClubEntity::class,
+        ActivityEntity::class,
+    ],
+    version = ShotHistoryDatabase.VERSION,
+)
 @ConstructedBy(ShotHistoryDatabaseConstructor::class)
 abstract class ShotHistoryDatabase : RoomDatabase() {
     abstract fun shotHistoryDao(): ShotHistoryDao
 
+    abstract fun bagDao(): BagDao
+
+    abstract fun activityDao(): ActivityDao
+
     companion object {
-        const val VERSION: Int = 1
+        const val VERSION: Int = 2
 
         /** The file name under the platform's app-private directory. */
         const val FILE_NAME: String = "shot_history.db"
@@ -39,12 +53,14 @@ expect object ShotHistoryDatabaseConstructor : RoomDatabaseConstructor<ShotHisto
 /**
  * Finishes a platform builder (`shotHistoryDatabaseBuilder(...)` in androidMain/iosMain, or
  * [inMemoryShotHistoryDatabaseBuilder]) the same way everywhere: the bundled SQLite driver, so the
- * SQLite version and behaviour are the same on Android and iOS, and queries off the main thread.
+ * SQLite version and behaviour are the same on Android and iOS, every schema [MIGRATIONS] step, and
+ * queries off the main thread.
  */
 fun RoomDatabase.Builder<ShotHistoryDatabase>.buildShotHistoryDatabase(
     queryContext: CoroutineContext = Dispatchers.IO,
 ): ShotHistoryDatabase =
     setDriver(BundledSQLiteDriver())
+        .apply { MIGRATIONS.forEach { addMigrations(it) } }
         .setQueryCoroutineContext(queryContext)
         .build()
 

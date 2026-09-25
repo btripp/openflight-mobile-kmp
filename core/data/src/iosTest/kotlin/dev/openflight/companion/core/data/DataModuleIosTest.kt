@@ -15,6 +15,12 @@ class DataModuleIosTest {
             val koin = app.koin
             assertThat(koin.get<ShotRepository>()).isSameInstanceAs(koin.get<ShotRepository>())
             assertThat(koin.get<SettingsRepository>()).isSameInstanceAs(koin.get<SettingsRepository>())
+            // F3: the history repositories share one database; the game and final-shot seams.
+            assertThat(koin.get<ShotHistoryRepository>()).isSameInstanceAs(koin.get<ShotHistoryRepository>())
+            assertThat(koin.get<BagRepository>()).isSameInstanceAs(koin.get<BagRepository>())
+            assertThat(koin.get<ActivityRepository>()).isSameInstanceAs(koin.get<ActivityRepository>())
+            assertThat(koin.get<ActiveGameRepository>()).isSameInstanceAs(koin.get<ActiveGameRepository>())
+            assertThat(koin.get<FinalShotStream>()).isSameInstanceAs(koin.get<FinalShotStream>())
         } finally {
             app.close()
         }

@@ -1,0 +1,567 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 2,
+    "identityHash": "44843afc4fe6a6335fc02921583bbada",
+    "entities": [
+      {
+        "tableName": "sessions",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `started_at` INTEGER NOT NULL, `host` TEXT, `transport` TEXT NOT NULL, `source` TEXT NOT NULL DEFAULT 'LOCAL', `owner_name` TEXT, `title` TEXT, `include_in_stats` INTEGER NOT NULL DEFAULT 1, `note` TEXT, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "startedAtEpochMillis",
+            "columnName": "started_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "host",
+            "columnName": "host",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "transport",
+            "columnName": "transport",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "source",
+            "columnName": "source",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'LOCAL'"
+          },
+          {
+            "fieldPath": "ownerName",
+            "columnName": "owner_name",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "includeInStats",
+            "columnName": "include_in_stats",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "1"
+          },
+          {
+            "fieldPath": "note",
+            "columnName": "note",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "shots",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `session_id` TEXT NOT NULL, `shot_number` INTEGER, `timestamp` TEXT NOT NULL, `event_id` TEXT, `club` TEXT NOT NULL, `profile_id` TEXT, `profile_name` TEXT, `mode` TEXT, `ball_speed_mph` REAL, `club_speed_mph` REAL, `smash_factor` REAL, `estimated_carry_yards` REAL, `carry_spin_adjusted` REAL, `carry_range_low` REAL, `carry_range_high` REAL, `launch_angle_vertical` REAL, `launch_angle_horizontal` REAL, `launch_angle_confidence` REAL, `angle_source` TEXT, `club_angle_deg` REAL, `club_path_deg` REAL, `spin_axis_deg` REAL, `spin_rpm` REAL, `spin_source` TEXT, `spin_quality` TEXT, `peak_magnitude` REAL, `swing_speed_duration_ms` REAL, `swing_speed_reading_count` INTEGER, `swing_speed_trigger_mph` REAL, `training_implement` TEXT, `training_implement_label` TEXT, `has_detail` INTEGER NOT NULL, `raw_json` TEXT NOT NULL, `starred` INTEGER NOT NULL DEFAULT 0, `note` TEXT, FOREIGN KEY(`session_id`) REFERENCES `sessions`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sessionId",
+            "columnName": "session_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "shotNumber",
+            "columnName": "shot_number",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "timestamp",
+            "columnName": "timestamp",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "eventId",
+            "columnName": "event_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "club",
+            "columnName": "club",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "profileId",
+            "columnName": "profile_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "profileName",
+            "columnName": "profile_name",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "mode",
+            "columnName": "mode",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "ballSpeedMph",
+            "columnName": "ball_speed_mph",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "clubSpeedMph",
+            "columnName": "club_speed_mph",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "smashFactor",
+            "columnName": "smash_factor",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "estimatedCarryYards",
+            "columnName": "estimated_carry_yards",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "carrySpinAdjusted",
+            "columnName": "carry_spin_adjusted",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "carryRangeLow",
+            "columnName": "carry_range_low",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "carryRangeHigh",
+            "columnName": "carry_range_high",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "launchAngleVertical",
+            "columnName": "launch_angle_vertical",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "launchAngleHorizontal",
+            "columnName": "launch_angle_horizontal",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "launchAngleConfidence",
+            "columnName": "launch_angle_confidence",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "angleSource",
+            "columnName": "angle_source",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "clubAngleDeg",
+            "columnName": "club_angle_deg",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "clubPathDeg",
+            "columnName": "club_path_deg",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "spinAxisDeg",
+            "columnName": "spin_axis_deg",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "spinRpm",
+            "columnName": "spin_rpm",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "spinSource",
+            "columnName": "spin_source",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "spinQuality",
+            "columnName": "spin_quality",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "peakMagnitude",
+            "columnName": "peak_magnitude",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "swingSpeedDurationMs",
+            "columnName": "swing_speed_duration_ms",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "swingSpeedReadingCount",
+            "columnName": "swing_speed_reading_count",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "swingSpeedTriggerMph",
+            "columnName": "swing_speed_trigger_mph",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "trainingImplement",
+            "columnName": "training_implement",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "trainingImplementLabel",
+            "columnName": "training_implement_label",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "hasDetail",
+            "columnName": "has_detail",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "rawJson",
+            "columnName": "raw_json",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "starred",
+            "columnName": "starred",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "note",
+            "columnName": "note",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_shots_session_id_timestamp",
+            "unique": false,
+            "columnNames": [
+              "session_id",
+              "timestamp"
+            ],
+            "orders": [
+              "ASC",
+              "DESC"
+            ],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_shots_session_id_timestamp` ON `${TABLE_NAME}` (`session_id` ASC, `timestamp` DESC)"
+          },
+          {
+            "name": "index_shots_session_id_shot_number",
+            "unique": true,
+            "columnNames": [
+              "session_id",
+              "shot_number"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_shots_session_id_shot_number` ON `${TABLE_NAME}` (`session_id`, `shot_number`)"
+          },
+          {
+            "name": "index_shots_session_id_event_id",
+            "unique": true,
+            "columnNames": [
+              "session_id",
+              "event_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_shots_session_id_event_id` ON `${TABLE_NAME}` (`session_id`, `event_id`)"
+          },
+          {
+            "name": "index_shots_club",
+            "unique": false,
+            "columnNames": [
+              "club"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_shots_club` ON `${TABLE_NAME}` (`club`)"
+          },
+          {
+            "name": "index_shots_profile_id",
+            "unique": false,
+            "columnNames": [
+              "profile_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_shots_profile_id` ON `${TABLE_NAME}` (`profile_id`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "sessions",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "session_id"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "bags",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `is_active` INTEGER, `created_at` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isActive",
+            "columnName": "is_active",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "createdAtEpochMillis",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_bags_one_active",
+            "unique": true,
+            "columnNames": [
+              "is_active"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_bags_one_active` ON `${TABLE_NAME}` (`is_active`)"
+          }
+        ]
+      },
+      {
+        "tableName": "bag_clubs",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `bag_id` TEXT NOT NULL, `club` TEXT NOT NULL, `make` TEXT, `model` TEXT, `loft_deg` REAL, `sort_order` INTEGER NOT NULL, `note` TEXT, PRIMARY KEY(`id`), FOREIGN KEY(`bag_id`) REFERENCES `bags`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "bagId",
+            "columnName": "bag_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "club",
+            "columnName": "club",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "make",
+            "columnName": "make",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "model",
+            "columnName": "model",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "loftDeg",
+            "columnName": "loft_deg",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "sortOrder",
+            "columnName": "sort_order",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "note",
+            "columnName": "note",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_bag_clubs_bag_id_club",
+            "unique": true,
+            "columnNames": [
+              "bag_id",
+              "club"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_bag_clubs_bag_id_club` ON `${TABLE_NAME}` (`bag_id`, `club`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "bags",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "bag_id"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "activities",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `type` TEXT NOT NULL, `started_at` INTEGER NOT NULL, `ended_at` INTEGER, `title` TEXT NOT NULL, `headline` TEXT NOT NULL, `players_json` TEXT NOT NULL, `result_json` TEXT NOT NULL, `session_id` TEXT, PRIMARY KEY(`id`), FOREIGN KEY(`session_id`) REFERENCES `sessions`(`id`) ON UPDATE NO ACTION ON DELETE SET NULL )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "type",
+            "columnName": "type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "startedAtEpochMillis",
+            "columnName": "started_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "endedAtEpochMillis",
+            "columnName": "ended_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "headline",
+            "columnName": "headline",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "playersJson",
+            "columnName": "players_json",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "resultJson",
+            "columnName": "result_json",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sessionId",
+            "columnName": "session_id",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_activities_session_id",
+            "unique": false,
+            "columnNames": [
+              "session_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_activities_session_id` ON `${TABLE_NAME}` (`session_id`)"
+          },
+          {
+            "name": "index_activities_started_at",
+            "unique": false,
+            "columnNames": [
+              "started_at"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_activities_started_at` ON `${TABLE_NAME}` (`started_at`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "sessions",
+            "onDelete": "SET NULL",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "session_id"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '44843afc4fe6a6335fc02921583bbada')"
+    ]
+  }
+}
