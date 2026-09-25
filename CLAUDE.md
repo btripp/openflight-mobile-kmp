@@ -77,6 +77,9 @@ Convention plugin ids: `openflight.kmp.library`, `openflight.kmp.room`,
   on `ComponentActivity` (`createAndroidComposeRule<ComponentActivity>()`).
 - Device UI tests: `./gradlew :feature:<name>:ui:connectedDebugAndroidTest` and
   `:androidApp:connectedDebugAndroidTest` (need an emulator; not part of `allTests`).
+- `MockServerIT` (`core/data/src/androidHostTest`): the real data layer against a live
+  `openflight-server --mock`. `OPENFLIGHT_BACKEND_DIR=<backend checkout> ./gradlew mockServerIT`;
+  skipped without the variable, excluded from `testAndroidHostTest`/`allTests`.
 - Port assertions and numbers from the reference `ios/OpenFlightTests`. Don't reinvent them.
 
 ## Invariants (check after every change)
@@ -112,6 +115,10 @@ invariants above:
   `./gradlew spotlessCheck detekt allTests :androidApp:assembleDebug -x iosSimulatorArm64Test`.
 - **ios** (macos): `./gradlew iosSimulatorArm64Test :shared:linkDebugFrameworkIosSimulatorArm64`,
   then the `xcodebuild … build` above.
+
+`.github/workflows/mock-server-it.yml` runs `:core:data:mockServerIT` on ubuntu against two
+pinned backends (upstream `main` and the `feat/phone-connectivity` fork), only when app code or
+the build changes. `.github/dependabot.yml` opens weekly grouped Gradle and Actions updates.
 
 CI doesn't run device UI tests (`connectedDebugAndroidTest`) or the Xcode test targets. Run
 those locally when a change affects UI. A green local run of invariants 1–3 and 9 should mean a
