@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 package dev.openflight.companion.core.data
 
+import dev.openflight.companion.core.insights.CalloutField
 import dev.openflight.companion.core.insights.UnitSystem
 import dev.openflight.companion.core.model.GolfClub
 import kotlinx.coroutines.flow.Flow
@@ -42,6 +43,7 @@ enum class RangeCameraMode(
  * (`shotTransport`, `piHost`, `selectedClub`). Every flow emits the stored value, or the default
  * when nothing (or something unreadable) is stored.
  */
+@Suppress("TooManyFunctions") // One getter/setter pair per persisted key; the surface grows with each new setting.
 interface SettingsRepository {
     val transport: Flow<TransportType>
 
@@ -96,5 +98,61 @@ interface SettingsRepository {
         val DEFAULT_CLUB: GolfClub = GolfClub.DRIVER
         val DEFAULT_UNITS: UnitSystem = UnitSystem.IMPERIAL
         val DEFAULT_RANGE_CAMERA_MODE: RangeCameraMode = RangeCameraMode.FOLLOW
+
+        // Plan F4: audio call-outs default off, and speak carry then ball speed on every shot.
+        const val DEFAULT_CALLOUTS_ENABLED: Boolean = false
+        const val DEFAULT_CALLOUT_RATE: Float = 1f
+        val DEFAULT_CALLOUT_FIELDS: List<CalloutField> = listOf(CalloutField.CARRY, CalloutField.BALL_SPEED)
+        val DEFAULT_CALLOUT_TRIGGER: CalloutTrigger = CalloutTrigger.EVERY_SHOT
+    }
+
+    // Plan F4: audio call-outs, added at the end to keep this file's diff mergeable with the
+    // other wave-1/wave-2 steps that also touch it (see the plan's §4a A7).
+
+    /** Whether shot call-outs are spoken. Off by default: audio needs an explicit opt-in. */
+    val calloutsEnabled: Flow<Boolean> get() = flowOf(DEFAULT_CALLOUTS_ENABLED)
+
+    /** The `core:speech` voice id call-outs are spoken with; `null` uses the platform default voice. */
+    val calloutVoiceId: Flow<String?> get() = flowOf(null)
+
+    /** The call-out speech rate (`SpeechEngine.speak`'s `rate`); `1f` is the platform default. */
+    val calloutRate: Flow<Float> get() = flowOf(DEFAULT_CALLOUT_RATE)
+
+    /** Which metrics a call-out speaks, and in what order. */
+    val calloutFields: Flow<List<CalloutField>> get() = flowOf(DEFAULT_CALLOUT_FIELDS)
+
+    /** When call-outs are spoken: every final shot, or only shots taken inside a game. */
+    val calloutTrigger: Flow<CalloutTrigger> get() = flowOf(DEFAULT_CALLOUT_TRIGGER)
+
+    /** Default no-op so existing implementations don't need to override it (see [calloutsEnabled]). */
+    suspend fun setCalloutsEnabled(enabled: Boolean) {}
+
+    /** Default no-op, see [calloutsEnabled]. A `null` [voiceId] restores the platform default voice. */
+    suspend fun setCalloutVoiceId(voiceId: String?) {}
+
+    /** Default no-op, see [calloutsEnabled]. */
+    suspend fun setCalloutRate(rate: Float) {}
+
+    /** Default no-op, see [calloutsEnabled]. */
+    suspend fun setCalloutFields(fields: List<CalloutField>) {}
+
+    /** Default no-op, see [calloutsEnabled]. */
+    suspend fun setCalloutTrigger(trigger: CalloutTrigger) {}
+}
+
+/**
+ * When shot call-outs are spoken (plan F4): every final shot, or only shots taken during a game
+ * (`feature:games`, F9, sets `ActiveGameRepository`; F7's coordinator reads it to gate this).
+ */
+enum class CalloutTrigger(
+    /** The value persisted in settings. */
+    val storageValue: String,
+) {
+    EVERY_SHOT("every_shot"),
+    GAMES_ONLY("games_only"),
+    ;
+
+    companion object {
+        fun fromStorageValue(value: String?): CalloutTrigger? = entries.firstOrNull { it.storageValue == value }
     }
 }

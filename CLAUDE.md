@@ -33,15 +33,16 @@ androidApp (Jetpack NavHost, permissions, launch extras, Koin start, app icon)
 iosApp (SwiftUI, Xcode) ──> Shared.framework = shared, exporting core:model/data/insights/flight
                              + feature:* + KoinHelper/NativeViewModels bridge; AppIcon asset catalog
 shared ──> feature:dashboard | calibration | range | session | training | camera | settings (KMP, VMs)
-             └──> core:data ──> core:ble / core:network / core:socketio ──> core:protocol ──> core:model
-                         └──> core:database (Room 3 KMP shot history; internal to core:data)
-                         └──> core:flight (conditions-adjusted carry, roll; ConditionsRepository)
+             ├──> core:data ──> core:ble / core:network / core:socketio ──> core:protocol ──> core:model
+             │            ├──> core:database (Room 3 KMP shot history; internal to core:data)
+             │            └──> core:flight (conditions-adjusted carry, roll; ConditionsRepository)
+             └──> core:speech (SpeechEngine text-to-speech; no core:* deps of its own)
 feature:range, feature:session ──> core:flight ; feature:calibration ──> core:sensors ; others ──> core:insights
 core:testing → fake repositories shared by VM tests (test-only, no app depends on it directly)
 ```
 
 Current leaf `core:*` modules: `model`, `protocol`, `ble`, `network`, `socketio`, `data`,
-`database`, `flight`, `sensors`, `insights`, `designsystem`, `testing`. Current `feature:*` modules:
+`database`, `flight`, `sensors`, `insights`, `designsystem`, `speech`, `testing`. Current `feature:*` modules:
 `dashboard`, `calibration`, `range`, `session`, `training`, `camera`, `settings` (each with a
 matching Android-only `feature:<name>:ui`).
 

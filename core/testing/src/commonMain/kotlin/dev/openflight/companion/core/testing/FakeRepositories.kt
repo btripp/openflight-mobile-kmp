@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 package dev.openflight.companion.core.testing
 
+import dev.openflight.companion.core.data.CalloutTrigger
 import dev.openflight.companion.core.data.SettingsRepository
 import dev.openflight.companion.core.data.ShotRepository
 import dev.openflight.companion.core.data.TransportType
+import dev.openflight.companion.core.insights.CalloutField
 import dev.openflight.companion.core.insights.UnitSystem
 import dev.openflight.companion.core.model.CalibrationResult
 import dev.openflight.companion.core.model.ClubSelection
@@ -39,6 +41,34 @@ class FakeSettingsRepository(
 
     override suspend fun setUnits(units: UnitSystem) {
         this.units.value = units
+    }
+
+    // Plan F4: audio call-outs, added at the end to keep this file's diff mergeable (§4a A7).
+
+    override val calloutsEnabled = MutableStateFlow(SettingsRepository.DEFAULT_CALLOUTS_ENABLED)
+    override val calloutVoiceId = MutableStateFlow<String?>(null)
+    override val calloutRate = MutableStateFlow(SettingsRepository.DEFAULT_CALLOUT_RATE)
+    override val calloutFields = MutableStateFlow(SettingsRepository.DEFAULT_CALLOUT_FIELDS)
+    override val calloutTrigger = MutableStateFlow(SettingsRepository.DEFAULT_CALLOUT_TRIGGER)
+
+    override suspend fun setCalloutsEnabled(enabled: Boolean) {
+        calloutsEnabled.value = enabled
+    }
+
+    override suspend fun setCalloutVoiceId(voiceId: String?) {
+        calloutVoiceId.value = voiceId
+    }
+
+    override suspend fun setCalloutRate(rate: Float) {
+        calloutRate.value = rate
+    }
+
+    override suspend fun setCalloutFields(fields: List<CalloutField>) {
+        calloutFields.value = fields
+    }
+
+    override suspend fun setCalloutTrigger(trigger: CalloutTrigger) {
+        calloutTrigger.value = trigger
     }
 }
 

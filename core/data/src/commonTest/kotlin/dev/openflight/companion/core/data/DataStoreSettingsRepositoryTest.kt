@@ -7,6 +7,7 @@ import app.cash.turbine.test
 import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isNull
+import dev.openflight.companion.core.insights.CalloutField
 import dev.openflight.companion.core.insights.UnitSystem
 import dev.openflight.companion.core.model.GolfClub
 import kotlinx.coroutines.CoroutineScope
@@ -162,5 +163,100 @@ class DataStoreSettingsRepositoryTest {
             assertThat(settings.selectedClub.first()).isEqualTo(GolfClub.DRIVER)
             assertThat(settings.units.first()).isEqualTo(UnitSystem.IMPERIAL)
             assertThat(settings.rangeCameraMode.first()).isEqualTo(RangeCameraMode.FOLLOW)
+        }
+
+    // Plan F4: audio call-outs, added at the end to keep this file's diff mergeable (§4a A7).
+
+    @Test
+    fun emptyStoreReadsTheCalloutDefaults() =
+        runTest {
+            val settings = DataStoreSettingsRepository(backgroundScope.dataStore())
+
+            assertThat(settings.calloutsEnabled.first()).isEqualTo(false)
+            assertThat(settings.calloutVoiceId.first()).isNull()
+            assertThat(settings.calloutRate.first()).isEqualTo(1f)
+            assertThat(settings.calloutFields.first()).isEqualTo(listOf(CalloutField.CARRY, CalloutField.BALL_SPEED))
+            assertThat(settings.calloutTrigger.first()).isEqualTo(CalloutTrigger.EVERY_SHOT)
+        }
+
+    @Test
+    fun calloutSettingsRoundTrip() =
+        runTest {
+            val settings = DataStoreSettingsRepository(backgroundScope.dataStore())
+
+            settings.setCalloutsEnabled(true)
+            settings.setCalloutVoiceId("en-us-x-premium")
+            settings.setCalloutRate(1.5f)
+            settings.setCalloutFields(listOf(CalloutField.TOTAL, CalloutField.SMASH, CalloutField.CLUB))
+            settings.setCalloutTrigger(CalloutTrigger.GAMES_ONLY)
+
+            assertThat(settings.calloutsEnabled.first()).isEqualTo(true)
+            assertThat(settings.calloutVoiceId.first()).isEqualTo("en-us-x-premium")
+            assertThat(settings.calloutRate.first()).isEqualTo(1.5f)
+            assertThat(
+                settings.calloutFields.first(),
+            ).isEqualTo(listOf(CalloutField.TOTAL, CalloutField.SMASH, CalloutField.CLUB))
+            assertThat(settings.calloutTrigger.first()).isEqualTo(CalloutTrigger.GAMES_ONLY)
+        }
+
+    @Test
+    fun calloutSettingsSurviveANewRepositoryOnTheSameStore() =
+        runTest {
+            val dataStore = backgroundScope.dataStore()
+            DataStoreSettingsRepository(dataStore).apply {
+                setCalloutsEnabled(true)
+                setCalloutFields(listOf(CalloutField.LAUNCH))
+                setCalloutTrigger(CalloutTrigger.GAMES_ONLY)
+            }
+
+            val reopened = DataStoreSettingsRepository(dataStore)
+
+            assertThat(reopened.calloutsEnabled.first()).isEqualTo(true)
+            assertThat(reopened.calloutFields.first()).isEqualTo(listOf(CalloutField.LAUNCH))
+            assertThat(reopened.calloutTrigger.first()).isEqualTo(CalloutTrigger.GAMES_ONLY)
+        }
+
+    @Test
+    fun clearingTheCalloutVoiceIdRestoresThePlatformDefault() =
+        runTest {
+            val settings = DataStoreSettingsRepository(backgroundScope.dataStore())
+            settings.setCalloutVoiceId("en-us-x-premium")
+
+            settings.setCalloutVoiceId(null)
+
+            assertThat(settings.calloutVoiceId.first()).isNull()
+        }
+
+    @Test
+    fun anUnrecognizedStoredCalloutFieldIsDroppedNotCrashed() =
+        runTest {
+            val dataStore = backgroundScope.dataStore()
+            dataStore.edit { it[stringPreferencesKey("calloutFields")] = "CARRY,NOT_A_REAL_FIELD,SMASH" }
+
+            val settings = DataStoreSettingsRepository(dataStore)
+
+            assertThat(settings.calloutFields.first()).isEqualTo(listOf(CalloutField.CARRY, CalloutField.SMASH))
+        }
+
+    @Test
+    fun anAllUnrecognizedStoredCalloutFieldListFallsBackToTheDefault() =
+        runTest {
+            val dataStore = backgroundScope.dataStore()
+            dataStore.edit { it[stringPreferencesKey("calloutFields")] = "NOT_A_REAL_FIELD" }
+
+            val settings = DataStoreSettingsRepository(dataStore)
+
+            assertThat(settings.calloutFields.first()).isEqualTo(listOf(CalloutField.CARRY, CalloutField.BALL_SPEED))
+        }
+
+    @Test
+    fun anUnrecognizedStoredCalloutTriggerFallsBackToTheDefault() =
+        runTest {
+            val dataStore = backgroundScope.dataStore()
+            dataStore.edit { it[stringPreferencesKey("calloutTrigger")] = "whenever-it-feels-like-it" }
+
+            val settings = DataStoreSettingsRepository(dataStore)
+
+            assertThat(settings.calloutTrigger.first()).isEqualTo(CalloutTrigger.EVERY_SHOT)
         }
 }

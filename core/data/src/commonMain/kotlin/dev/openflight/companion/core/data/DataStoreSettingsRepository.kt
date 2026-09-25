@@ -4,9 +4,12 @@ package dev.openflight.companion.core.data
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
+import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import dev.openflight.companion.core.insights.CalloutField
 import dev.openflight.companion.core.insights.UnitSystem
 import dev.openflight.companion.core.model.GolfClub
 import kotlinx.coroutines.CoroutineScope
@@ -20,6 +23,7 @@ import okio.IOException
 import okio.Path.Companion.toPath
 
 /** [SettingsRepository] backed by a DataStore preferences file. */
+@Suppress("TooManyFunctions") // Mirrors the growing SettingsRepository surface (see its own suppression).
 internal class DataStoreSettingsRepository(
     private val dataStore: DataStore<Preferences>,
 ) : SettingsRepository {
@@ -88,6 +92,67 @@ internal class DataStoreSettingsRepository(
         dataStore.edit { it[RANGE_CAMERA_KEY] = mode.storageValue }
     }
 
+    // Plan F4: audio call-outs, added at the end to keep this file's diff mergeable (§4a A7).
+
+    override val calloutsEnabled: Flow<Boolean> =
+        preferences
+            .map { it[CALLOUTS_ENABLED_KEY] ?: SettingsRepository.DEFAULT_CALLOUTS_ENABLED }
+            .distinctUntilChanged()
+
+    override val calloutVoiceId: Flow<String?> =
+        preferences.map { it[CALLOUT_VOICE_ID_KEY] }.distinctUntilChanged()
+
+    override val calloutRate: Flow<Float> =
+        preferences
+            .map { it[CALLOUT_RATE_KEY] ?: SettingsRepository.DEFAULT_CALLOUT_RATE }
+            .distinctUntilChanged()
+
+    override val calloutFields: Flow<List<CalloutField>> =
+        preferences
+            .map { prefs -> prefs[CALLOUT_FIELDS_KEY]?.let(::calloutFieldsFromStorageValue) }
+            .map { it ?: SettingsRepository.DEFAULT_CALLOUT_FIELDS }
+            .distinctUntilChanged()
+
+    override val calloutTrigger: Flow<CalloutTrigger> =
+        preferences
+            .map { prefs ->
+                CalloutTrigger.fromStorageValue(prefs[CALLOUT_TRIGGER_KEY])
+                    ?: SettingsRepository.DEFAULT_CALLOUT_TRIGGER
+            }.distinctUntilChanged()
+
+    override suspend fun setCalloutsEnabled(enabled: Boolean) {
+        dataStore.edit { it[CALLOUTS_ENABLED_KEY] = enabled }
+    }
+
+    override suspend fun setCalloutVoiceId(voiceId: String?) {
+        dataStore.edit { prefs ->
+            if (voiceId ==
+                null
+            ) {
+                prefs.remove(CALLOUT_VOICE_ID_KEY)
+            } else {
+                prefs[CALLOUT_VOICE_ID_KEY] = voiceId
+            }
+        }
+    }
+
+    override suspend fun setCalloutRate(rate: Float) {
+        dataStore.edit { it[CALLOUT_RATE_KEY] = rate }
+    }
+
+    override suspend fun setCalloutFields(fields: List<CalloutField>) {
+        dataStore.edit {
+            it[CALLOUT_FIELDS_KEY] =
+                fields.joinToString(
+                    CALLOUT_FIELDS_SEPARATOR,
+                ) { field -> field.name }
+        }
+    }
+
+    override suspend fun setCalloutTrigger(trigger: CalloutTrigger) {
+        dataStore.edit { it[CALLOUT_TRIGGER_KEY] = trigger.storageValue }
+    }
+
     companion object {
         /** DataStore requires the `.preferences_pb` extension for preferences files. */
         const val FILE_NAME = "openflight.preferences_pb"
@@ -102,7 +167,30 @@ internal class DataStoreSettingsRepository(
 
         // Plan R7a: the range's follow/fixed camera.
         private val RANGE_CAMERA_KEY = stringPreferencesKey("rangeCameraMode")
+
+        // Plan F4: audio call-outs.
+        private val CALLOUTS_ENABLED_KEY = booleanPreferencesKey("calloutsEnabled")
+        private val CALLOUT_VOICE_ID_KEY = stringPreferencesKey("calloutVoiceId")
+        private val CALLOUT_RATE_KEY = floatPreferencesKey("calloutRate")
+        private val CALLOUT_FIELDS_KEY = stringPreferencesKey("calloutFields")
+        private val CALLOUT_TRIGGER_KEY = stringPreferencesKey("calloutTrigger")
     }
+}
+
+// File-private (not a companion member) so calloutFieldsFromStorageValue below can share it too.
+private const val CALLOUT_FIELDS_SEPARATOR = ","
+
+/**
+ * Parses the comma-joined [CalloutField] names [setCalloutFields][DataStoreSettingsRepository.setCalloutFields]
+ * stores. An unrecognized entry (e.g. from a future app version) is dropped rather than failing
+ * the whole read; an empty or all-unrecognized result falls back to the default field list.
+ */
+private fun calloutFieldsFromStorageValue(stored: String): List<CalloutField>? {
+    val fields =
+        stored
+            .split(CALLOUT_FIELDS_SEPARATOR)
+            .mapNotNull { name -> runCatching { CalloutField.valueOf(name) }.getOrNull() }
+    return fields.ifEmpty { null }
 }
 
 private fun UnitSystem.storageValue(): String =
