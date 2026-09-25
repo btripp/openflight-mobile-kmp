@@ -66,6 +66,40 @@ class PiControlClientTest {
         }
 
     @Test
+    fun aTypedAddressWithATrailingSlashPostsToTheSameEndpoint() =
+        runTest {
+            // Expo shutdown.test.ts: the field accepts whatever was typed, trailing slash included.
+            val urls = mutableListOf<String>()
+            val engine =
+                MockEngine { request ->
+                    urls += request.url.toString()
+                    respond(
+                        content = """{"status":"shutting_down"}""",
+                        status = HttpStatusCode.OK,
+                        headers = headersOf(HttpHeaders.ContentType, "application/json"),
+                    )
+                }
+            val client = piControlClient(engine)
+
+            client.shutdown("http://192.168.1.100:8080/")
+            client.shutdown("192.168.1.100:8080")
+
+            assertThat(urls.toList()).isEqualTo(List(2) { "http://192.168.1.100:8080/api/shutdown" })
+        }
+
+    @Test
+    fun aRequestThatNeverReachedTheServerIsReportedNotSwallowed() =
+        runTest {
+            // Telling someone the Pi stopped when it didn't invites them to pull the plug.
+            val engine = MockEngine { throw IllegalStateException("Network request failed") }
+            val client = piControlClient(engine)
+
+            val error = runCatching { client.shutdown(DEFAULT_TEST_HOST) }.exceptionOrNull()
+
+            assertThat(error?.message).isEqualTo("Network request failed")
+        }
+
+    @Test
     fun anInvalidHostThrowsWithoutMakingARequest() =
         runTest {
             var requested = false

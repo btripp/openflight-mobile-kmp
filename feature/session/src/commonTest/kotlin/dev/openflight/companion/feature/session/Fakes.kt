@@ -29,6 +29,7 @@ internal fun detail(
     club: String = "driver",
     ballSpeedMph: Double = 140.0,
     profileName: String = "Profile 1",
+    profileId: String = "p1",
 ): ShotDetail =
     ShotDetail(
         timestamp = timestamp(number),
@@ -37,6 +38,7 @@ internal fun detail(
         carryRange = listOf(240.0, 260.0),
         club = club,
         profileName = profileName,
+        profileId = profileId,
         launchAngleVertical = 12.0,
         launchAngleConfidence = 0.5,
     )

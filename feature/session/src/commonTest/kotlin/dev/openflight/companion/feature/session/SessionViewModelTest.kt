@@ -5,6 +5,7 @@ import app.cash.turbine.ReceiveTurbine
 import app.cash.turbine.test
 import assertk.assertThat
 import assertk.assertions.containsExactly
+import assertk.assertions.isCloseTo
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
@@ -18,6 +19,8 @@ import dev.openflight.companion.core.model.pi.ClearState
 import dev.openflight.companion.core.model.pi.DeletionState
 import dev.openflight.companion.core.model.pi.PiFeatureAvailability
 import dev.openflight.companion.core.model.pi.PiLinkState
+import dev.openflight.companion.core.model.pi.Profile
+import dev.openflight.companion.core.model.pi.ProfilesState
 import dev.openflight.companion.core.model.pi.SessionStats
 import dev.openflight.companion.core.model.pi.TriggerStatus
 import dev.openflight.companion.core.testing.FakePiSessionRepository
@@ -30,6 +33,7 @@ import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import kotlin.math.sqrt
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -184,19 +188,22 @@ class SessionViewModelTest {
     // region Pi session (plan R6b)
 
     @Test
-    fun whileThePiIsConnectedTheSessionAndStatsComeFromThePi() =
+    fun whileThePiIsConnectedTheSessionComesFromThePiWithItsStatsComputedHere() =
         runTest {
             shots.setHistory(listOf(shot(9)))
             piSession.linkState.value = PiLinkState.Connected
             piSession.setSession(listOf(detail(2, club = "7-iron", ballSpeedMph = 120.0), detail(1)))
+            // The server's stats cover every profile, so they're not used.
             piSession.stats.value =
-                SessionStats(shotCount = 2, avgBallSpeed = 130.0, maxBallSpeed = 140.0, avgCarryEst = 250.0)
+                SessionStats(shotCount = 9, avgBallSpeed = 99.0, maxBallSpeed = 99.0, avgCarryEst = 250.0)
 
             viewModel.uiState.testIgnoringRest {
                 val state = awaitUntil { it.source == SessionSource.PI && it.allCount == 2 }
 
                 assertThat(state.shots.map { it.id }).containsExactly(timestamp(2), timestamp(1))
-                assertThat(state.stats.avgBallSpeedMph).isEqualTo(130.0) // The server's, not recomputed.
+                assertThat(state.stats.avgBallSpeedMph).isEqualTo(130.0)
+                assertThat(state.stats.minBallSpeedMph).isEqualTo(120.0)
+                assertThat(state.stats.stdDevBallSpeedMph).isCloseTo(sqrt(200.0), 1e-9)
                 assertThat(state.clubChips).containsExactly(ClubChip("7-iron", 1), ClubChip("driver", 1))
                 assertThat(state.shots.first().enrichment).isNotNull()
 
@@ -204,6 +211,37 @@ class SessionViewModelTest {
                 val tab = awaitUntil { it.selectedClub == "7-iron" }
                 assertThat(tab.stats.shotCount).isEqualTo(1)
                 assertThat(tab.stats.avgBallSpeedMph).isEqualTo(120.0)
+            }
+        }
+
+    @Test
+    fun onlyTheActiveProfilesRowsAndStatsAreShown() =
+        runTest {
+            piSession.linkState.value = PiLinkState.Connected
+            piSession.setSession(
+                listOf(
+                    detail(3, ballSpeedMph = 150.0, profileId = "sam"),
+                    detail(2, ballSpeedMph = 110.0, profileId = "alex"),
+                    detail(1, ballSpeedMph = 100.0, profileId = "alex"),
+                ),
+            )
+            piSession.profiles.value =
+                ProfilesState(
+                    profiles = listOf(Profile(id = "alex", name = "Alex"), Profile(id = "sam", name = "Sam")),
+                    activeProfileId = "alex",
+                    loaded = true,
+                )
+
+            viewModel.uiState.testIgnoringRest {
+                val state = awaitUntil { it.source == SessionSource.PI && it.allCount == 2 }
+
+                assertThat(state.shots.map { it.id }).containsExactly(timestamp(2), timestamp(1))
+                assertThat(state.stats.avgBallSpeedMph).isEqualTo(105.0)
+
+                // Another client (or this phone) switches the active profile.
+                piSession.profiles.value = piSession.profiles.value.copy(activeProfileId = "sam")
+                val sam = awaitUntil { it.allCount == 1 }
+                assertThat(sam.shots.single().id).isEqualTo(timestamp(3))
             }
         }
 

@@ -31,6 +31,17 @@ class ClubStatsTest {
     }
 
     @Test
+    fun theMinimumAndTheSampleSpreadCoverTheBallSpeeds() {
+        // Expo sessionStats.test.ts: 100/110/120 → a sample std dev of 10.
+        val stats =
+            computeClubStats(listOf(shot(ballSpeedMph = 100.0), shot(ballSpeedMph = 110.0), shot(ballSpeedMph = 120.0)))
+
+        assertThat(stats.minBallSpeedMph).isEqualTo(100.0)
+        assertThat(stats.stdDevBallSpeedMph).isEqualTo(10.0)
+        assertThat(computeClubStats(listOf(shot())).stdDevBallSpeedMph).isEqualTo(0.0)
+    }
+
+    @Test
     fun clubSpeedAndSmashFactorIgnoreNullShots() {
         val shots =
             listOf(

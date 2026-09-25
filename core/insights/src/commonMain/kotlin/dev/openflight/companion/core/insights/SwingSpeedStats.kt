@@ -62,8 +62,9 @@ fun computeSwingSpeedStats(
 private fun normalizeToken(value: String?): String = value?.trim()?.lowercase().orEmpty()
 
 /**
- * The web UI's `computeStats` over the Pi's session rows (the Socket.IO counterpart of
- * [computeClubStats]). A row missing its ball speed or carry is left out of that average only.
+ * The kiosk's `computeStats` over the Pi's session rows (the Socket.IO counterpart of
+ * [computeClubStats]). A row missing its ball speed or carry is left out of that figure only.
+ * The Pi's session holds every profile's rows, so filter them with [forProfile] first.
  */
 fun computeDetailStats(shots: List<ShotDetail>): ClubStats {
     if (shots.isEmpty()) return ClubStats.EMPTY
@@ -78,8 +79,19 @@ fun computeDetailStats(shots: List<ShotDetail>): ClubStats {
         avgCarryYards = carries.averageOrZero(),
         avgClubSpeedMph = clubSpeeds.takeIf { it.isNotEmpty() }?.average(),
         avgSmashFactor = smashFactors.takeIf { it.isNotEmpty() }?.average(),
+        minBallSpeedMph = ballSpeeds.minOrNull() ?: 0.0,
+        stdDevBallSpeedMph = sampleStdDev(ballSpeeds),
     )
 }
+
+/**
+ * The rows filed under [profileId], keeping their order. Two people sharing a bay produce one
+ * session, so screens show only the active profile's rows; like the kiosk and the Expo app
+ * (`stats.tsx` `profileShots`), a blank id (no profile known yet) gives an empty list rather than
+ * a guess at whose shots these are.
+ */
+fun List<ShotDetail>.forProfile(profileId: String): List<ShotDetail> =
+    if (profileId.isBlank()) emptyList() else filter { it.profileId == profileId }
 
 /** [computeClubChips] for the Pi's session rows; a row without a club counts under `""`. */
 fun computeDetailClubChips(shots: List<ShotDetail>): List<ClubChip> {
@@ -100,6 +112,8 @@ fun SessionStats.toClubStats(): ClubStats =
         avgCarryYards = avgCarryEst ?: 0.0,
         avgClubSpeedMph = avgClubSpeed,
         avgSmashFactor = avgSmashFactor,
+        minBallSpeedMph = minBallSpeed ?: 0.0,
+        stdDevBallSpeedMph = stdDev ?: 0.0,
     )
 
 private fun List<Double>.averageOrZero(): Double = if (isEmpty()) 0.0 else average()

@@ -14,13 +14,13 @@ import dev.openflight.companion.core.insights.computeClubStats
 import dev.openflight.companion.core.insights.computeDetailClubChips
 import dev.openflight.companion.core.insights.computeDetailStats
 import dev.openflight.companion.core.insights.computeSwingSpeedStats
-import dev.openflight.companion.core.insights.toClubStats
+import dev.openflight.companion.core.insights.forProfile
 import dev.openflight.companion.core.model.ShotEvent
 import dev.openflight.companion.core.model.pi.ClearState
 import dev.openflight.companion.core.model.pi.DeletionState
 import dev.openflight.companion.core.model.pi.PiFeatureAvailability
 import dev.openflight.companion.core.model.pi.PiLinkState
-import dev.openflight.companion.core.model.pi.SessionStats
+import dev.openflight.companion.core.model.pi.ProfilesState
 import dev.openflight.companion.core.model.pi.ShotDetail
 import dev.openflight.companion.core.model.pi.TriggerStatus
 import kotlinx.coroutines.CancellationException
@@ -55,7 +55,7 @@ class SessionViewModel(
     private val selectedClub = MutableStateFlow<String?>(null)
 
     private val piView =
-        combine(piSession.linkState, piSession.sessionShots, piSession.stats, piSession.shotDetails, ::PiView)
+        combine(piSession.linkState, piSession.sessionShots, piSession.profiles, piSession.shotDetails, ::PiView)
 
     private val piFlags = combine(piSession.mockMode, piSession.triggerStatus, ::PiFlags)
 
@@ -185,16 +185,19 @@ class SessionViewModel(
         pi: PiView,
         selected: String?,
     ): SessionUiState {
-        val session = pi.session
+        // The Pi's session holds every profile's rows: show the active profile's (plan 9.2). A Pi
+        // that never sends a roster (before profiles) keeps the whole session.
+        val session =
+            if (pi.profiles.loaded) pi.session.forProfile(pi.profiles.activeProfileId) else pi.session
         val filtered = if (selected == null) session else session.filter { it.club == selected }
-        val serverStats = pi.stats?.takeIf { selected == null }?.toClubStats()
         val isSwingSession = filtered.isNotEmpty() && filtered.all { it.isSwingSpeed }
         return SessionUiState(
             source = SessionSource.PI,
             allCount = session.size,
             clubChips = computeDetailClubChips(session),
             selectedClub = selected,
-            stats = serverStats ?: computeDetailStats(filtered),
+            // Computed here: the server's stats cover every profile.
+            stats = computeDetailStats(filtered),
             swingStats =
                 if (isSwingSession) {
                     computeSwingSpeedStats(filtered.asReversed(), profileId = null, trainingImplement = null)
@@ -208,7 +211,7 @@ class SessionViewModel(
     private data class PiView(
         val link: PiLinkState,
         val session: List<ShotDetail>,
-        val stats: SessionStats?,
+        val profiles: ProfilesState,
         val details: Map<String, ShotDetail>,
     ) {
         val connected: Boolean get() = link == PiLinkState.Connected

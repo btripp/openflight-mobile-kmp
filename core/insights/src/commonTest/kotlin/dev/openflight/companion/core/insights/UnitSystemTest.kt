@@ -41,6 +41,13 @@ class UnitSystemTest {
     }
 
     @Test
+    fun carryRangesFormatInTheSelectedUnitSystem() {
+        // Expo units.test.ts: the kiosk's constants (1.60934, 0.9144) and whole-unit rounding.
+        assertThat(formatCarryRange(200.0, 220.0, UnitSystem.IMPERIAL)).isEqualTo("200-220 yds")
+        assertThat(formatCarryRange(200.0, 220.0, UnitSystem.METRIC)).isEqualTo("183-201 m")
+    }
+
+    @Test
     fun formatDegreesRendersTightWithNoSpace() {
         assertThat(formatDegrees(9.5)).isEqualTo("9.5°")
         assertThat(formatDegrees(-3.4)).isEqualTo("-3.4°")
