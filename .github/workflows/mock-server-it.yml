@@ -1,0 +1,85 @@
+# MockServerIT (plan R8g): the app's real data layer against `openflight-server --mock`.
+#
+# A separate workflow so the path filter is GitHub's own: it runs only when app code, the build or
+# this file changes. The main CI workflow (ci.yml) is unchanged and still runs on every push/PR.
+#
+# Backends are pinned to exact commits so a backend push can't turn this red on its own. To move
+# a pin: run the IT locally against the new commit
+# (`OPENFLIGHT_BACKEND_DIR=<checkout> ./gradlew mockServerIT`), then update `ref` below.
+# - upstream main: open-flight/openflight main at 7ca4b40 (2026-09-23). No SSE and no /api/club,
+#   so those steps are reported as skipped; every Socket.IO step must pass.
+# - phone-connectivity fork: btripp/openflight feat/phone-connectivity at 07d5313 (SSE with
+#   ?schema=2, /api/club, BLE v1/v2). Every step must pass.
+name: Mock server IT
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "core/**"
+      - "feature/**"
+      - "shared/**"
+      - "build-logic/**"
+      - "gradle/**"
+      - "*.gradle.kts"
+      - "gradle.properties"
+      - ".github/workflows/mock-server-it.yml"
+  pull_request:
+    # Keep in sync with the push paths above.
+    paths:
+      - "core/**"
+      - "feature/**"
+      - "shared/**"
+      - "build-logic/**"
+      - "gradle/**"
+      - "*.gradle.kts"
+      - "gradle.properties"
+      - ".github/workflows/mock-server-it.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: mock-server-it-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  mock-server-it:
+    name: MockServerIT vs ${{ matrix.backend.name }} (Linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        backend:
+          - name: upstream main
+            repository: open-flight/openflight
+            ref: 7ca4b409aa4929f0b5de17ee2699adf1f636bf8a
+          - name: phone-connectivity fork
+            repository: btripp/openflight
+            ref: 07d5313c95b3be75e9ad24874072353d5cde950f
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check out the backend
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ matrix.backend.repository }}
+          ref: ${{ matrix.backend.ref }}
+          path: backend
+      # Upstream gitignores uv.lock and has no .python-version, so pin Python here and resolve
+      # from pyproject.toml (not --frozen).
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+          enable-cache: true
+          cache-dependency-glob: backend/pyproject.toml
+      - name: Install the backend
+        working-directory: backend
+        run: uv sync
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: gradle/actions/setup-gradle@v4
+      - name: MockServerIT
+        env:
+          OPENFLIGHT_BACKEND_DIR: ${{ github.workspace }}/backend
+        run: ./gradlew :core:data:mockServerIT

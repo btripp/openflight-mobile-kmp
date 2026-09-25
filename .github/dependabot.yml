@@ -1,0 +1,21 @@
+# Weekly, grouped version updates (plan R8g). Versions live in gradle/libs.versions.toml, which
+# Dependabot's Gradle ecosystem reads. Each update still has to pass CI (and, when it touches app
+# code, the Mock server IT workflow) before it's merged.
+version: 2
+updates:
+  - package-ecosystem: gradle
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      gradle-dependencies:
+        patterns: ["*"]
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    groups:
+      github-actions:
+        patterns: ["*"]
