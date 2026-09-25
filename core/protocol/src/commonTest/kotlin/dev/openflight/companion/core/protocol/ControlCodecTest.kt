@@ -129,6 +129,16 @@ class ControlCodecTest {
     }
 
     @Test
+    fun aV2LinkAcceptsSchemaTwoButNotThree() {
+        val v2 = """{"schema_version":2,"type":"club_changed","club":"driver"}""".encodeToByteArray()
+        val v3 = """{"schema_version":3,"type":"club_changed","club":"driver"}""".encodeToByteArray()
+
+        assertThat(ControlCodec.decodeClubChangedEvent(v2, ControlCodec.V1_AND_V2_SCHEMAS)).isEqualTo(GolfClub.DRIVER)
+        assertFailure { ControlCodec.decodeClubChangedEvent(v3, ControlCodec.V1_AND_V2_SCHEMAS) }
+            .isInstanceOf<ControlDecodeError.UnsupportedSchema>()
+    }
+
+    @Test
     fun clubChangedEventWithSchemaVersionTwoIsRejected() {
         assertFailure {
             ControlCodec.decodeClubChangedEvent(

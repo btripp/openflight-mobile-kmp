@@ -8,6 +8,10 @@ internal object OpenFlightBleProfile {
     const val SERVICE_UUID = "b6f633f2-e6e3-45ae-84b4-968ecca2d9c7"
     const val SHOT_CHARACTERISTIC_UUID = "2b28f67e-9011-41d2-98ed-562b47d7a5e4"
     const val CONTROL_CHARACTERISTIC_UUID = "7e3b5d6c-7f10-4d4a-9c39-25e2b77f4a11"
+
+    /** Schema v2's own pair in the same service (backend "Schema v2 design decision"). */
+    const val SHOT_V2_CHARACTERISTIC_UUID = "ed365fe6-3abf-4fc3-8e44-d9525a22dabd"
+    const val CONTROL_V2_CHARACTERISTIC_UUID = "7ba96e63-12c2-4ce0-bb84-3513c7fd1474"
 }
 
 /**

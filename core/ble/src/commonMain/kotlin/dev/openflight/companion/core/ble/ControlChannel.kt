@@ -9,6 +9,8 @@ import dev.openflight.companion.core.protocol.ControlCodec
 import dev.openflight.companion.core.protocol.ControlDecodeError
 import dev.openflight.companion.core.protocol.ControlResponseEnvelope
 import dev.openflight.companion.core.protocol.OpenFlightJson
+import dev.openflight.companion.core.protocol.SchemaV2Codec
+import dev.openflight.companion.core.protocol.SchemaV2Event
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.TimeoutCancellationException
@@ -33,6 +35,11 @@ internal sealed interface ControlInbound {
     data class ClubChangedInvalid(
         val message: String,
     ) : ControlInbound
+
+    /** A schema v2 event other than `club_changed` (v2 control characteristic only). */
+    data class Event(
+        val event: SchemaV2Event,
+    ) : ControlInbound
 }
 
 /**
@@ -42,12 +49,19 @@ internal sealed interface ControlInbound {
  *
  * Not thread-safe: [BleShotTransport] confines every call to one single-threaded dispatcher, the
  * same way the reference is `@MainActor`.
+ *
+ * One instance per control characteristic (plan R8e): [schemaV2] is the v2 control
+ * characteristic's channel, which answers with `schema_version: 2` and also notifies v2 events.
  */
+@Suppress("TooManyFunctions") // send/receive plus one helper per inbound message kind.
 internal class ControlChannel(
     private val requestIds: () -> String,
     private val timeout: kotlin.time.Duration,
     initialSequence: Int = 0,
+    private val schemaV2: Boolean = false,
 ) {
+    private val schemas = if (schemaV2) ControlCodec.V1_AND_V2_SCHEMAS else ControlCodec.V1_SCHEMAS
+
     private class PendingRequest(
         val requestId: String,
     ) {
@@ -87,17 +101,23 @@ internal class ControlChannel(
         }
     }
 
-    /** Routes one control notification: a `club_changed` event, a response, or a fragment. */
+    /** Routes one control notification: a `club_changed` event, a v2 event, a response, or a fragment. */
     fun receive(frame: ByteArray): ControlInbound {
         val payload = reassemble(frame)
         val json = payload?.let(::parseObject)
+        val type = (json?.get("type") as? JsonPrimitive)?.content
         return when {
             payload == null || json == null -> {
                 ControlInbound.Consumed
             }
 
-            (json["type"] as? JsonPrimitive)?.content == ControlCodec.TYPE_CLUB_CHANGED -> {
+            type == ControlCodec.TYPE_CLUB_CHANGED -> {
                 decodeClubChanged(payload)
+            }
+
+            // v2 events carry a type and never a request_id; responses are the other way round.
+            schemaV2 && type != null -> {
+                decodeEvent(json)
             }
 
             else -> {
@@ -156,9 +176,19 @@ internal class ControlChannel(
             null
         }
 
+    /** A malformed or unknown v2 event is dropped, like a malformed Socket.IO event. */
+    private fun decodeEvent(json: JsonObject): ControlInbound =
+        try {
+            SchemaV2Codec.decodeEvent(json)?.let(ControlInbound::Event) ?: ControlInbound.Consumed
+        } catch (_: IllegalArgumentException) {
+            ControlInbound.Consumed
+        } catch (_: ControlDecodeError) {
+            ControlInbound.Consumed
+        }
+
     private fun decodeClubChanged(payload: ByteArray): ControlInbound =
         try {
-            ControlInbound.ClubChanged(ControlCodec.decodeClubChangedEvent(payload))
+            ControlInbound.ClubChanged(ControlCodec.decodeClubChangedEvent(payload, schemas))
         } catch (error: IllegalArgumentException) {
             // SerializationException (an unknown club, a missing field) is an IllegalArgumentException.
             ControlInbound.ClubChangedInvalid(error.message ?: INVALID_CLUB_EVENT)
@@ -172,7 +202,7 @@ internal class ControlChannel(
         val schemaVersion = (json["schema_version"] as? JsonPrimitive)?.intOrNull
         val requestId = (json["request_id"] as? JsonPrimitive)?.takeIf { it.isString }?.content
         val ok = (json["ok"] as? JsonPrimitive)?.booleanOrNull
-        if (schemaVersion != 1 || requestId == null || ok == null) {
+        if (schemaVersion?.let { it in schemas } != true || requestId == null || ok == null) {
             fail(BleControlException.InvalidResponse())
             return
         }
