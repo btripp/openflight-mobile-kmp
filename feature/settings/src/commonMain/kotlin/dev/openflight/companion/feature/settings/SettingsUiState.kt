@@ -13,7 +13,7 @@ import dev.openflight.companion.core.model.pi.TriggerStatus
 
 /**
  * The settings screen (plan R6b): the phone-side preferences plus everything the web UI keeps in
- * its header and Debug tab (`App.tsx`, `PlayerPicker.tsx`, `SimStatus.tsx`, `DebugPanel.tsx`,
+ * its header and Debug tab (`App.tsx`, `SimStatus.tsx`, `DebugPanel.tsx`,
  * the cloud upload in `ShotList.tsx` and the shutdown dialog). Every Wi-Fi-only action carries a
  * [PiFeatureAvailability] with the reason it's disabled.
  *
@@ -28,7 +28,7 @@ data class SettingsUiState(
     val linkState: PiLinkState,
     val linkDescription: String,
     val units: UnitSystem,
-    val player: PlayerSettings,
+    val profile: ProfileSettings,
     val simulators: List<SimulatorRow>,
     val radar: RadarPanel,
     val debug: DebugSettings,
@@ -38,18 +38,16 @@ data class SettingsUiState(
 )
 
 /**
- * @property currentName the Pi's current player, or `null` before it reports one.
- * @property setPlayer whether [SettingsEvent.SetPlayer] can run.
+ * The Pi's active profile, read-only here (the server replaced `set_player` with profiles; the
+ * picker is plan R8f).
+ *
+ * @property activeName the active profile's name, or `null` before the roster arrives.
+ * @property availability whether the Pi's profile commands could run (the live link).
  */
-data class PlayerSettings(
-    val currentName: String?,
-    val setPlayer: PiFeatureAvailability,
-) {
-    companion object {
-        /** The server trims longer names (`set_player`), and the web UI's field caps at it. */
-        const val MAX_NAME_LENGTH: Int = 40
-    }
-}
+data class ProfileSettings(
+    val activeName: String?,
+    val availability: PiFeatureAvailability,
+)
 
 /** A simulator connector's severity bucket (`SimStatus.tsx`'s `severity`). */
 enum class SimSeverity {

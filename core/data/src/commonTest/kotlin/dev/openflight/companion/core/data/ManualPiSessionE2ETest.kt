@@ -2,7 +2,9 @@
 package dev.openflight.companion.core.data
 
 import dev.openflight.companion.core.model.ShotEvent
+import dev.openflight.companion.core.model.pi.ClearState
 import dev.openflight.companion.core.model.pi.CloudUploadState
+import dev.openflight.companion.core.model.pi.DeletionState
 import dev.openflight.companion.core.model.pi.PiLinkState
 import dev.openflight.companion.core.model.pi.PiNotice
 import dev.openflight.companion.core.model.pi.RadarConfigUpdate
@@ -77,7 +79,7 @@ class ManualPiSessionE2ETest {
             await("session_state") { repository.stats.value != null }
             log(
                 "session: shots=${repository.sessionShots.value.size} stats=${repository.stats.value} " +
-                    "player=${repository.playerName.value} mock=${repository.mockMode.value}",
+                    "profile=${repository.profiles.value.activeProfile?.name} mock=${repository.mockMode.value}",
             )
             log("trigger_status: ${repository.triggerStatus.value}")
             log("radar_config: ${repository.radarConfig.value}")
@@ -105,17 +107,21 @@ class ManualPiSessionE2ETest {
 
             val toDelete = repository.sessionShots.value.last()
             repository.deleteShot(toDelete.timestamp)
-            await("delete") { repository.sessionShots.value.none { it.timestamp == toDelete.timestamp } }
+            await("delete") { repository.deletionState.value == DeletionState.Deleted(toDelete.timestamp) }
             log(
                 "after delete: shots=${repository.sessionShots.value.size} " +
                     "stats.shot_count=${repository.stats.value?.shotCount}",
             )
+            repository.dismissDeletion()
             repository.deleteShot("1999-01-01T00:00:00")
-            await("delete error") { notices.any { it is PiNotice.DeleteShotFailed } }
+            await("delete error") { repository.deletionState.value is DeletionState.Failed }
 
-            repository.setPlayer("  Live Tester  ")
-            await("player") { repository.playerName.value == "Live Tester" }
-            log("player: ${repository.playerName.value}")
+            repository.addProfile("  Live Tester  ")
+            await("profile") {
+                repository.profiles.value.activeProfile
+                    ?.name == "Live Tester"
+            }
+            log("profiles: ${repository.profiles.value}")
 
             repository.setTrainingImplement("stack-100g")
             await("implement") { repository.trainingImplement.value != null }
@@ -152,8 +158,8 @@ class ManualPiSessionE2ETest {
                 )}",
             )
 
-            repository.clearSession()
-            await("clear") { repository.sessionShots.value.isEmpty() }
+            repository.clearSession(repository.profiles.value.activeProfileId)
+            await("clear") { repository.clearState.value is ClearState.Cleared }
             log(
                 "after clear: shots=${repository.sessionShots.value.size} stats=${repository.stats.value} " +
                     "details=${repository.shotDetails.value.size}",

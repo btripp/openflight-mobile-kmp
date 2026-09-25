@@ -3,14 +3,20 @@ package dev.openflight.companion.core.data
 
 import dev.openflight.companion.core.model.ShotEvent
 import dev.openflight.companion.core.model.pi.CameraStatus
+import dev.openflight.companion.core.model.pi.ClearState
 import dev.openflight.companion.core.model.pi.CloudUploadStatus
 import dev.openflight.companion.core.model.pi.DebugState
+import dev.openflight.companion.core.model.pi.DeletionState
 import dev.openflight.companion.core.model.pi.PiLinkState
 import dev.openflight.companion.core.model.pi.PiNotice
+import dev.openflight.companion.core.model.pi.PowerStatus
+import dev.openflight.companion.core.model.pi.ProfileRules
+import dev.openflight.companion.core.model.pi.ProfilesState
 import dev.openflight.companion.core.model.pi.RadarConfig
 import dev.openflight.companion.core.model.pi.RadarConfigUpdate
 import dev.openflight.companion.core.model.pi.SessionStats
 import dev.openflight.companion.core.model.pi.ShotDetail
+import dev.openflight.companion.core.model.pi.ShotProcessingState
 import dev.openflight.companion.core.model.pi.SimState
 import dev.openflight.companion.core.model.pi.SwingSpeedReading
 import dev.openflight.companion.core.model.pi.TrainingImplement
@@ -29,7 +35,13 @@ import kotlinx.coroutines.flow.StateFlow
  * empty value, and every command throws [WifiOnlyFeatureException].
  *
  * Commands are fire-and-forget emits, like the web UI's: the result arrives as a state change
- * (e.g. `delete_shot` → a new [sessionShots]) or as a [notices] entry (e.g. "Shot not found").
+ * (e.g. `delete_shot` → [deletionState] and a new [sessionShots]) or as a [notices] entry. They
+ * are sent only while the link is connected, so nothing is buffered and replayed after a
+ * reconnect (Expo `socket.ts` `emitWhileConnected`).
+ *
+ * Switching to another host (or to Bluetooth) resets every flow; a transient drop or [stop] keeps
+ * them, so the last roster, power reading and club stay on screen until the reconnect's snapshots
+ * replace them.
  *
  * Lifecycle methods must be called from one thread (the main thread), like a ViewModel's.
  */
@@ -37,7 +49,12 @@ import kotlinx.coroutines.flow.StateFlow
 interface PiSessionRepository {
     val linkState: StateFlow<PiLinkState>
 
-    /** The Pi's current session, **newest first**, capped at [MAX_SESSION_SHOTS] like the web UI. */
+    /**
+     * The Pi's current session for **every profile**, newest first, capped at [MAX_SESSION_SHOTS]
+     * like the web UI. Filter it with `core:insights`' `forProfile`. A `shot_update` replaces its
+     * `shot` in place (matched on `shot_number`, then `timestamp`); one for a shot never seen is
+     * prepended.
+     */
     val sessionShots: StateFlow<List<ShotDetail>>
 
     /**
@@ -49,10 +66,40 @@ interface PiSessionRepository {
      */
     val shotDetails: StateFlow<Map<String, ShotDetail>>
 
-    /** Server-computed session stats, or `null` before the first `session_state`. */
+    /**
+     * Server-computed stats over **every profile**, or `null` before the first `session_state` and
+     * after a per-profile `session_cleared` that left rows (the server sends no stats with it).
+     * Per-profile stats are computed on the client.
+     */
     val stats: StateFlow<SessionStats?>
 
-    val playerName: StateFlow<String?>
+    /**
+     * The Pi's roster (`profiles`), applied verbatim; requested on every connect. Kept through a
+     * transient drop, reset on a host switch.
+     */
+    val profiles: StateFlow<ProfilesState>
+
+    /**
+     * The club the Pi files shots under: from `session_state.club` and every `club_changed`
+     * broadcast (this phone's, the kiosk's or a simulator's). `null` until reported; never set
+     * from a local pick, since the Pi ignores an unknown club without replying.
+     */
+    val club: StateFlow<String?>
+
+    /** `shot_processing` (rolling-buffer only); cleared by the next `shot`. */
+    val shotProcessing: StateFlow<ShotProcessingState?>
+
+    /**
+     * The last `power_status` (a complete snapshot, applied verbatim), or `null` until one arrives,
+     * which is also the "not loaded" state. A Pi without `--battery` never sends one.
+     */
+    val powerStatus: StateFlow<PowerStatus?>
+
+    /** The one [deleteShot] in flight and its outcome. */
+    val deletionState: StateFlow<DeletionState>
+
+    /** The last [clearSession] and its outcome. */
+    val clearState: StateFlow<ClearState>
 
     /** The last `training_implement_changed`; the server doesn't report it on connect. */
     val trainingImplement: StateFlow<TrainingImplement?>
@@ -87,17 +134,61 @@ interface PiSessionRepository {
     /** `get_session` → `session_state`. Sent automatically on every connect. */
     suspend fun refreshSession()
 
-    /** `delete_shot` by [ShotDetail.timestamp] → `session_state`, or a [PiNotice.DeleteShotFailed]. */
+    /**
+     * `delete_shot` by [ShotDetail.timestamp] (not profile-scoped), tracked in [deletionState]:
+     * [DeletionState.Pending] until a `session_state` without that timestamp
+     * ([DeletionState.Deleted]) or a `delete_shot_error` / a dropped link ([DeletionState.Failed]).
+     * Nothing is removed locally before the server confirms. Ignored while another deletion is
+     * pending, since neither reply names its shot.
+     */
     suspend fun deleteShot(timestamp: String)
 
-    /** `clear_session` → `session_cleared`. */
-    suspend fun clearSession()
+    /** Returns [deletionState] to [DeletionState.Idle] once its outcome was shown. */
+    fun dismissDeletion()
+
+    /**
+     * `clear_session {profile_id}`: removes one profile's rows, tracked in [clearState]. The
+     * `session_cleared` broadcast carries the remaining session, which replaces [sessionShots]
+     * whoever asked. Fails after [ClearState.TIMEOUT_MILLIS] without a confirmation or when the
+     * link drops. Ignored while another clear is pending.
+     *
+     * @throws IllegalArgumentException for a blank [profileId] (the server would clear the
+     *   active profile instead).
+     */
+    suspend fun clearSession(profileId: String)
+
+    /** Returns [clearState] to [ClearState.Idle] once its outcome was shown. */
+    fun dismissClear()
+
+    /** `set_active_profile` → `profiles`. */
+    suspend fun setActiveProfile(profileId: String)
+
+    /**
+     * `add_profile` with the trimmed [name] → `profiles`; the server makes the new profile active,
+     * so no `set_active_profile` follows.
+     *
+     * @throws ProfileRuleException for a blank or too-long name, or at [ProfileRules.MAX_PROFILES].
+     */
+    suspend fun addProfile(name: String)
+
+    /**
+     * `rename_profile` with the trimmed [name] → `profiles`.
+     *
+     * @throws ProfileRuleException for a blank or too-long name.
+     */
+    suspend fun renameProfile(
+        profileId: String,
+        name: String,
+    )
+
+    /**
+     * `remove_profile` → `profiles`. The server refuses the active profile, the last one and one
+     * with session rows, answering with the unchanged roster.
+     */
+    suspend fun removeProfile(profileId: String)
 
     /** `simulate_shot`: works only on a `--mock` Pi; a real Pi ignores it. */
     suspend fun simulateShot()
-
-    /** `set_player` → `player_changed`. The server trims to 40 chars and uses "Player 1" for blank. */
-    suspend fun setPlayer(name: String)
 
     /** `set_training_implement` (a [TrainingImplement.KNOWN] key) → `training_implement_changed`. */
     suspend fun setTrainingImplement(implement: String)
@@ -149,6 +240,21 @@ class WifiOnlyFeatureException(
     ) {
         BLUETOOTH("This feature needs the Pi over Wi-Fi. Switch the transport to Wi-Fi to use it."),
         NOT_CONNECTED("Not connected to the Pi's live session yet."),
+    }
+}
+
+/** A profile mutation broke one of the server's [ProfileRules]; nothing was sent. */
+class ProfileRuleException(
+    val rule: Rule,
+) : IllegalArgumentException(rule.message) {
+    enum class Rule(
+        val message: String,
+    ) {
+        BLANK_NAME("Enter a name for the profile."),
+        NAME_TOO_LONG("Profile names can be at most ${ProfileRules.MAX_NAME_LENGTH} characters."),
+        TOO_MANY_PROFILES(
+            "The Pi holds at most ${ProfileRules.MAX_PROFILES} profiles. Remove one to add another.",
+        ),
     }
 }
 

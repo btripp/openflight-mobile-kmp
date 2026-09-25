@@ -164,13 +164,13 @@ class SocketIoClientTest {
         }
 
     @Test
-    fun reconnectsWithDoublingBackoffCappedAtFifteenSecondsAfterFailedOpens() =
+    fun reconnectsWithDoublingBackoffFromHalfASecondCappedAtFiveSecondsAfterFailedOpens() =
         runClientTest { (transport, client) ->
             repeat(6) { transport.failures += IllegalStateException("refused") }
             client.connect()
             runCurrent()
             assertThat(client.state.value).isEqualTo(
-                SocketConnectionState.Reconnecting(attempt = 1, retryInMillis = 1_000, reason = "refused"),
+                SocketConnectionState.Reconnecting(attempt = 1, retryInMillis = 500, reason = "refused"),
             )
 
             val observedDelays = mutableListOf<Long>()
@@ -182,7 +182,7 @@ class SocketIoClientTest {
             }
             observedDelays += (client.state.value as SocketConnectionState.Reconnecting).retryInMillis
 
-            assertThat(observedDelays).containsExactly(1_000L, 2_000L, 4_000L, 8_000L, 15_000L, 15_000L)
+            assertThat(observedDelays).containsExactly(500L, 1_000L, 2_000L, 4_000L, 5_000L, 5_000L)
             assertThat(transport.urls).hasSize(6)
         }
 
@@ -202,7 +202,7 @@ class SocketIoClientTest {
             runCurrent()
 
             assertThat(client.state.value).isEqualTo(
-                SocketConnectionState.Reconnecting(attempt = 1, retryInMillis = 1_000, reason = "Connection closed"),
+                SocketConnectionState.Reconnecting(attempt = 1, retryInMillis = 500, reason = "Connection closed"),
             )
         }
 
@@ -218,7 +218,7 @@ class SocketIoClientTest {
             runCurrent()
 
             assertThat(client.state.value).isEqualTo(
-                SocketConnectionState.Reconnecting(attempt = 1, retryInMillis = 1_000, reason = "Heartbeat timeout"),
+                SocketConnectionState.Reconnecting(attempt = 1, retryInMillis = 500, reason = "Heartbeat timeout"),
             )
             assertThat(first.closed).isTrue()
 
@@ -269,7 +269,7 @@ class SocketIoClientTest {
             runCurrent()
 
             assertThat(client.state.value).isEqualTo(
-                SocketConnectionState.Reconnecting(attempt = 1, retryInMillis = 1_000, reason = "Not authorized"),
+                SocketConnectionState.Reconnecting(attempt = 1, retryInMillis = 500, reason = "Not authorized"),
             )
         }
 

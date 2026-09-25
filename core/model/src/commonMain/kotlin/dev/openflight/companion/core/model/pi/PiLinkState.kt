@@ -40,11 +40,6 @@ sealed interface PiLinkState {
 sealed interface PiNotice {
     val message: String
 
-    /** `delete_shot_error`, e.g. "Shot not found". */
-    data class DeleteShotFailed(
-        override val message: String,
-    ) : PiNotice
-
     /** `radar_config_error`, e.g. "Radar not connected" (always on `--mock`). */
     data class RadarConfigFailed(
         override val message: String,

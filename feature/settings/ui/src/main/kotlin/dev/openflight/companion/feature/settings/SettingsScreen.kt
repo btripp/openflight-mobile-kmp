@@ -8,20 +8,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import dev.openflight.companion.core.data.TransportType
-import dev.openflight.companion.core.designsystem.OfButton
 import dev.openflight.companion.core.designsystem.OfCard
 import dev.openflight.companion.core.designsystem.OfColorTokens
 import dev.openflight.companion.core.designsystem.OfConfirmDialog
@@ -34,7 +27,6 @@ import dev.openflight.companion.core.designsystem.OfSegmentedPicker
 import dev.openflight.companion.core.designsystem.OfSpacing
 import dev.openflight.companion.core.designsystem.OfText
 import dev.openflight.companion.core.designsystem.OfTextButton
-import dev.openflight.companion.core.designsystem.OfTextField
 import dev.openflight.companion.core.designsystem.OfTextRole
 import dev.openflight.companion.core.designsystem.OfTopBar
 import dev.openflight.companion.core.designsystem.StatusTone
@@ -84,8 +76,8 @@ fun SettingsScreen(
         ) {
             UnitsCard(uiState.units, onEvent)
             ConnectionCard(uiState)
-            PlayerCard(uiState.player, onEvent)
-            SimulatorsCard(uiState.simulators, uiState.player.setPlayer.disabledReason)
+            ProfileCard(uiState.profile)
+            SimulatorsCard(uiState.simulators, uiState.profile.availability.disabledReason)
             RadarCard(uiState.radar, onEvent)
             DebugCard(uiState.debug, onEvent)
             CloudCard(uiState.cloud, onEvent)
@@ -179,36 +171,13 @@ private fun PiLinkState.tone(): StatusTone =
         PiLinkState.Idle, PiLinkState.WifiOnly -> StatusTone.Neutral
     }
 
-/** `PlayerPicker.tsx`: the Pi's current player and a field to set another (`set_player`). */
+/** The Pi's active profile (read-only until the profile picker, plan R8f). */
 @Composable
-private fun PlayerCard(
-    player: PlayerSettings,
-    onEvent: (SettingsEvent) -> Unit,
-) {
-    var draft by rememberSaveable { mutableStateOf("") }
-    val enabled = player.setPlayer.isAvailable
-    val submit = {
-        onEvent(SettingsEvent.SetPlayer(draft))
-        draft = ""
-    }
+private fun ProfileCard(profile: ProfileSettings) {
     OfCard(modifier = Modifier.fillMaxWidth(), contentSpacing = OfSpacing.Md) {
-        SectionTitle("PLAYER")
-        InfoRow("Current player", player.currentName ?: "—")
-        OfTextField(
-            value = draft,
-            onValueChange = { draft = it.take(PlayerSettings.MAX_NAME_LENGTH) },
-            placeholder = "Player name",
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-            onSubmit = { if (enabled) submit() },
-            modifier = Modifier.fillMaxWidth().testTag(SettingsTestTags.PLAYER_FIELD),
-        )
-        OfButton(
-            text = "Set Player",
-            onClick = submit,
-            enabled = enabled,
-            modifier = Modifier.fillMaxWidth().testTag(SettingsTestTags.PLAYER_SET),
-        )
-        player.setPlayer.disabledReason?.let { OfDisabledReason(it) }
+        SectionTitle("PROFILE")
+        InfoRow("Active profile", profile.activeName ?: "—", Modifier.testTag(SettingsTestTags.PROFILE))
+        profile.availability.disabledReason?.let { OfDisabledReason(it) }
     }
 }
 

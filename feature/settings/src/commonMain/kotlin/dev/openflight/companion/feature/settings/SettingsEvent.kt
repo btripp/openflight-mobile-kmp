@@ -10,11 +10,6 @@ sealed interface SettingsEvent {
         val units: UnitSystem,
     ) : SettingsEvent
 
-    /** `set_player`, trimmed and capped at [PlayerSettings.MAX_NAME_LENGTH]; blank becomes "Player 1" on the Pi. */
-    data class SetPlayer(
-        val name: String,
-    ) : SettingsEvent
-
     /** A slider was released: `set_radar_config` with just this [field]. */
     data class SetRadarValue(
         val field: RadarField,

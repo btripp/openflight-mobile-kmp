@@ -29,7 +29,7 @@ class SessionInsightsTest {
     }
 
     @Test
-    fun enrichmentCarriesTheBadgesRangeAndPlayer() {
+    fun enrichmentCarriesTheBadgesRangeAndProfile() {
         val enrichment = ShotEnrichment.from(mockShotDetail())
 
         assertThat(enrichment.launchAngleConfidence).isEqualTo(ConfidenceLevel.HIGH)
@@ -39,7 +39,7 @@ class SessionInsightsTest {
         assertThat(enrichment.carryRangeText(UnitSystem.IMPERIAL)).isEqualTo("231-255 yds")
         assertThat(enrichment.carryRangeText(UnitSystem.METRIC)).isEqualTo("211-233 m")
         assertThat(enrichment.carrySpinAdjustedYards).isNull()
-        assertThat(enrichment.playerName).isEqualTo("Player 1")
+        assertThat(enrichment.profileName).isEqualTo("Profile 1")
     }
 
     @Test
@@ -72,7 +72,7 @@ class SessionInsightsTest {
     fun swingSpeedStatsUseClubSpeedAndTheLastRepIsTheNewest() {
         val shots = listOf(swing(90.0), swing(100.0), swing(95.0), mockShotDetail())
 
-        val stats = computeSwingSpeedStats(shots, playerName = null, trainingImplement = null)
+        val stats = computeSwingSpeedStats(shots, profileId = null, trainingImplement = null)
 
         assertThat(
             stats,
@@ -80,19 +80,20 @@ class SessionInsightsTest {
     }
 
     @Test
-    fun swingSpeedStatsFilterByPlayerAndImplement() {
+    fun swingSpeedStatsFilterByProfileAndImplement() {
         val shots =
             listOf(
-                swing(90.0, player = "Ann", implement = "stack-100g", label = "Stack 100g"),
-                swing(100.0, player = "Bob", implement = "stack-100g", label = "Stack 100g"),
-                swing(80.0, player = " ann ", implement = "driver", label = "Driver"),
-                swing(85.0, player = null, implement = "stack-100g", label = "Stack 100g"),
+                swing(90.0, profileId = "ann", implement = "stack-100g", label = "Stack 100g"),
+                swing(100.0, profileId = "bob", implement = "stack-100g", label = "Stack 100g"),
+                swing(80.0, profileId = "ann", implement = "driver", label = "Driver"),
+                swing(85.0, profileId = null, implement = "stack-100g", label = "Stack 100g"),
             )
 
-        assertThat(computeSwingSpeedStats(shots, "ANN", "stack-100g").count).isEqualTo(1)
-        assertThat(computeSwingSpeedStats(shots, "Ann", null).count).isEqualTo(2)
-        assertThat(computeSwingSpeedStats(shots, "Player 1", "Stack 100g").lastSpeedMph).isEqualTo(85.0)
-        assertThat(computeSwingSpeedStats(shots, "Nobody", null)).isEqualTo(SwingSpeedStats.EMPTY)
+        assertThat(computeSwingSpeedStats(shots, "ann", "stack-100g").count).isEqualTo(1)
+        assertThat(computeSwingSpeedStats(shots, "ann", null).count).isEqualTo(2)
+        // No profile filter (the roster isn't known yet): every rep of the implement counts.
+        assertThat(computeSwingSpeedStats(shots, "", "Stack 100g").lastSpeedMph).isEqualTo(85.0)
+        assertThat(computeSwingSpeedStats(shots, "nobody", null)).isEqualTo(SwingSpeedStats.EMPTY)
     }
 
     // endregion
@@ -151,18 +152,21 @@ class SessionInsightsTest {
             buildExportCsv(
                 listOf(
                     ExportShot.of(event, mockShotDetail().copy(peakMagnitude = 812.0)),
-                    ExportShot.of(swing(97.4, player = "Ann", implement = "stack-100g", label = "Stack 100g"), null),
+                    ExportShot.of(
+                        swing(97.4, profileName = "Ann", implement = "stack-100g", label = "Stack 100g"),
+                        null,
+                    ),
                 ),
             ).lines()
 
         assertThat(
             csv[0].endsWith(
-                ",player,mode,implement,openflight_speed_mph,reading_count," +
+                ",profile,mode,implement,openflight_speed_mph,reading_count," +
                     "trigger_speed_mph,duration_ms,peak_magnitude",
             ),
         ).isTrue()
         assertThat(csv[1]).isEqualTo(
-            "1,${event.eventId},2026-09-24T15:38:33.264795,driver,143.3,,,243.0,,,,,,Player 1,,driver,143.3,,,,812.0",
+            "1,${event.eventId},2026-09-24T15:38:33.264795,driver,143.3,,,243.0,,,,,,Profile 1,,driver,143.3,,,,812.0",
         )
         assertThat(csv[2]).isEqualTo(
             "2,,2026-09-24T16:00:00.000001,Swing Speed,97.4,97.4,,0.0,,,,,," +
@@ -191,7 +195,8 @@ private fun mockShotDetail(): ShotDetail =
         estimatedCarryYards = 243.0,
         carryRange = listOf(231.0, 255.0),
         club = "driver",
-        playerName = "Player 1",
+        profileId = "p1",
+        profileName = "Profile 1",
         launchAngleVertical = 15.4,
         launchAngleConfidence = 0.72,
         angleSource = "mock",
@@ -202,7 +207,8 @@ private fun mockShotDetail(): ShotDetail =
 
 private fun swing(
     speedMph: Double,
-    player: String? = "Player 1",
+    profileId: String? = "p1",
+    profileName: String? = null,
     implement: String? = "driver",
     label: String? = "Driver",
 ): ShotDetail =
@@ -212,7 +218,8 @@ private fun swing(
         clubSpeedMph = speedMph,
         estimatedCarryYards = 0.0,
         club = "Swing Speed",
-        playerName = player,
+        profileId = profileId,
+        profileName = profileName,
         mode = "swing-speed",
         swingSpeedReadingCount = 5,
         swingSpeedTriggerMph = 80.1,

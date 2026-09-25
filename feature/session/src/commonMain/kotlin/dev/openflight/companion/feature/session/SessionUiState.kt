@@ -68,14 +68,15 @@ data class SessionUiState(
  * @property shotNumber `#n`, where 1 is the oldest shot.
  * @property ballSpeedMph `null` only for a Pi row that lacks it.
  * @property swingSpeedMph for a swing-speed rep: its club speed, else its ball speed.
- * @property enrichment the Pi's confidence badges, carry range and player, when known.
+ * @property profileName the Pi profile the shot was filed under, when known.
+ * @property enrichment the Pi's confidence badges, carry range and profile, when known.
  */
 data class SessionShotRow(
     val id: String,
     val shotNumber: Int,
     val timestamp: String,
     val club: String,
-    val playerName: String?,
+    val profileName: String?,
     val ballSpeedMph: Double?,
     val clubSpeedMph: Double?,
     val launchAngleVerticalDeg: Double?,

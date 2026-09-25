@@ -82,7 +82,7 @@ data class ShotEnrichment(
     val carryRangeLowYards: Double?,
     val carryRangeHighYards: Double?,
     val carrySpinAdjustedYards: Double?,
-    val playerName: String?,
+    val profileName: String?,
 ) {
     val hasCarryRange: Boolean get() = carryRangeLowYards != null && carryRangeHighYards != null
 
@@ -109,7 +109,7 @@ data class ShotEnrichment(
                 carryRangeHighYards = detail.carryRangeHigh,
                 // The web UI tests it for truthiness, so 0 counts as absent.
                 carrySpinAdjustedYards = detail.carrySpinAdjusted?.takeIf { it != 0.0 },
-                playerName = detail.playerName,
+                profileName = detail.profileName?.takeIf { it.isNotBlank() },
             )
         }
     }

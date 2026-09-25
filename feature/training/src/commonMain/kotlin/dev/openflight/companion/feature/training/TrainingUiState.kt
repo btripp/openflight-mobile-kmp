@@ -17,10 +17,10 @@ import dev.openflight.companion.core.model.pi.PiFeatureAvailability
  * @property triggerMode the Pi's trigger mode (`swing-speed`, `rolling-buffer` or `mock`), or
  *   `null` before the first `trigger_status`.
  * @property isSwingSpeedMode training reps only arrive in `swing-speed` mode.
- * @property playerName the Pi's current player ("Player 1" when unset).
- * @property stats Last, Best and Average over the session's reps for [playerName] and
- *   [selectedImplement] (the web UI's filter); all zero with no reps.
- * @property lastRep the newest rep of any player or implement, for the "Last Swing" gauge.
+ * @property profileName the Pi's active profile ([NO_PROFILE] before the roster arrives).
+ * @property stats Last, Best and Average over the session's reps for the active profile and
+ *   [selectedImplement] (the web UI's filter, by profile instead of player); all zero with no reps.
+ * @property lastRep the newest rep of any profile or implement, for the "Last Swing" gauge.
  * @property error the last failure: a Pi error ("Unknown training implement") or a failed command.
  * @property showSimulateSwing visible only when the Pi runs `--mock`.
  */
@@ -31,13 +31,18 @@ data class TrainingUiState(
     val selectedImplement: ImplementOption,
     val triggerMode: String?,
     val isSwingSpeedMode: Boolean,
-    val playerName: String,
+    val profileName: String,
     val stats: SwingSpeedStats,
     val lastRep: SwingRep?,
     val error: String?,
     val showSimulateSwing: Boolean,
 ) {
     val hasSwings: Boolean get() = stats.count > 0
+
+    companion object {
+        /** Shown until the Pi reports its roster. */
+        const val NO_PROFILE: String = "—"
+    }
 }
 
 /** One picker section, e.g. "TheStack" with its weights. */
@@ -59,5 +64,5 @@ data class SwingRep(
     val readingCount: Int?,
     val triggerSpeedMph: Double?,
     val durationMs: Double?,
-    val playerName: String?,
+    val profileName: String?,
 )

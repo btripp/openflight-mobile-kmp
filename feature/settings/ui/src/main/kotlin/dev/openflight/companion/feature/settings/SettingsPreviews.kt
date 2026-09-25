@@ -31,7 +31,7 @@ internal fun previewSettingsState(
         linkState = link,
         linkDescription = link.description,
         units = UnitSystem.IMPERIAL,
-        player = PlayerSettings(currentName = if (connected) "Alex" else null, setPlayer = available),
+        profile = ProfileSettings(activeName = if (connected) "Alex" else null, availability = available),
         simulators =
             if (connected) {
                 listOf(SimulatorRow("gspro", "GSPro", "connected", SimSeverity.OK, "192.168.1.20:921"))

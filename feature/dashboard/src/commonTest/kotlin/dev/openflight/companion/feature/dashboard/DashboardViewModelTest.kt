@@ -289,7 +289,7 @@ class DashboardViewModelTest {
                         spinSource = "calculated",
                         carryRange = listOf(231.0, 255.0),
                         carrySpinAdjusted = 248.0,
-                        playerName = "Ann",
+                        profileName = "Ann",
                     ),
                 ),
             )
@@ -305,7 +305,7 @@ class DashboardViewModelTest {
                 assertThat(enrichment.spinSource).isEqualTo(SpinSource.ESTIMATED)
                 assertThat(enrichment.carryRangeText(UnitSystem.IMPERIAL)).isEqualTo("231-255 yds")
                 assertThat(enrichment.carrySpinAdjustedYards).isEqualTo(248.0)
-                assertThat(enrichment.playerName).isEqualTo("Ann")
+                assertThat(enrichment.profileName).isEqualTo("Ann")
                 // The Pi never reported the previous shot: no detail for that row.
                 assertThat(state.enrichmentFor(previous)).isNull()
             }
@@ -319,10 +319,10 @@ class DashboardViewModelTest {
                 shots.history.value = listOf(latest)
                 awaitUntil { it is DashboardUiState.Live && it.latestEnrichment == null }
 
-                piSession.setSession(listOf(ShotDetail(timestamp = latest.timestamp, playerName = "Ann")))
+                piSession.setSession(listOf(ShotDetail(timestamp = latest.timestamp, profileName = "Ann")))
 
                 val state = awaitUntil { (it as? DashboardUiState.Live)?.latestEnrichment != null }
-                assertThat((state as DashboardUiState.Live).latestEnrichment?.playerName).isEqualTo("Ann")
+                assertThat((state as DashboardUiState.Live).latestEnrichment?.profileName).isEqualTo("Ann")
             }
         }
 

@@ -14,9 +14,10 @@ import assertk.assertions.isTrue
 import dev.openflight.companion.core.insights.ClubChip
 import dev.openflight.companion.core.insights.ConfidenceLevel
 import dev.openflight.companion.core.insights.UnitSystem
+import dev.openflight.companion.core.model.pi.ClearState
+import dev.openflight.companion.core.model.pi.DeletionState
 import dev.openflight.companion.core.model.pi.PiFeatureAvailability
 import dev.openflight.companion.core.model.pi.PiLinkState
-import dev.openflight.companion.core.model.pi.PiNotice
 import dev.openflight.companion.core.model.pi.SessionStats
 import dev.openflight.companion.core.model.pi.TriggerStatus
 import dev.openflight.companion.core.testing.FakePiSessionRepository
@@ -128,12 +129,12 @@ class SessionViewModelTest {
     fun localRowsCarryThePiDetailWhenItIsKnown() =
         runTest {
             shots.setHistory(listOf(shot(1)))
-            piSession.shotDetails.value = mapOf(timestamp(1) to detail(1, playerName = "Ann"))
+            piSession.shotDetails.value = mapOf(timestamp(1) to detail(1, profileName = "Ann"))
 
             viewModel.uiState.testIgnoringRest {
                 val row = awaitUntil { it.shots.isNotEmpty() }.shots.single()
 
-                assertThat(row.playerName).isEqualTo("Ann")
+                assertThat(row.profileName).isEqualTo("Ann")
                 assertThat(row.enrichment?.launchAngleConfidence).isEqualTo(ConfidenceLevel.MEDIUM)
             }
         }
@@ -254,12 +255,24 @@ class SessionViewModelTest {
         }
 
     @Test
-    fun aPiDeleteErrorBecomesAMessage() =
+    fun aFailedPiDeleteBecomesAMessageOnce() =
         runTest {
             viewModel.effects.test {
-                piSession.notices.emit(PiNotice.DeleteShotFailed("Shot not found"))
+                piSession.deletionState.value = DeletionState.Failed(timestamp(1), "Shot not found")
 
                 assertThat(awaitItem()).isEqualTo(SessionEffect.Message("Shot not found"))
+                assertThat(piSession.deletionState.value).isEqualTo(DeletionState.Idle)
+            }
+        }
+
+    @Test
+    fun anUnconfirmedPiClearBecomesAMessageOnce() =
+        runTest {
+            viewModel.effects.test {
+                piSession.clearState.value = ClearState.Failed("p1", ClearState.NO_CONFIRMATION)
+
+                assertThat(awaitItem()).isEqualTo(SessionEffect.Message(ClearState.NO_CONFIRMATION))
+                assertThat(piSession.clearState.value).isEqualTo(ClearState.Idle)
             }
         }
 
@@ -276,7 +289,7 @@ class SessionViewModelTest {
 
                 assertThat(
                     lines[0].endsWith(
-                        "player,mode,implement,openflight_speed_mph,reading_count," +
+                        "profile,mode,implement,openflight_speed_mph,reading_count," +
                             "trigger_speed_mph,duration_ms,peak_magnitude",
                     ),
                 ).isTrue()

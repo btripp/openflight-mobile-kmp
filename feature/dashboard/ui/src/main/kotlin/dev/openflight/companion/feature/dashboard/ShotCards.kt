@@ -57,7 +57,7 @@ internal fun ShotCard(
         Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
             OfText(text = "LATEST SHOT", role = OfTextRole.Eyebrow, color = OfColorTokens.Gold)
             OfText(text = shot.displayClub, role = OfTextRole.Title)
-            enrichment?.playerName?.let { player ->
+            enrichment?.profileName?.let { player ->
                 OfText(
                     text = player,
                     role = OfTextRole.BodySmall,

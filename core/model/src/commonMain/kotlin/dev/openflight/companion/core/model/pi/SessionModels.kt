@@ -31,20 +31,32 @@ data class SessionStats(
 }
 
 /**
- * `session_state`: sent on connect, on `get_session` and after `delete_shot`. [shots] is the whole
- * session, oldest first. The flags after [shots] are present only in the on-connect variant.
+ * `session_state` (server.py:1662 `_session_state_payload`): sent on connect, on `get_session` and
+ * after `delete_shot`. [shots] is the whole session for **every profile**, oldest first; clients
+ * filter by [ShotDetail.profileId]. [stats] also covers every profile. [mockMode] and [debugMode]
+ * are present only in the on-connect variant.
  */
 @Serializable
 data class SessionState(
     val stats: SessionStats = SessionStats(),
     val shots: List<ShotDetail> = emptyList(),
-    @SerialName("player_name") val playerName: String? = null,
+    /** The club the Pi files shots under (`_current_club_id`); absent on older servers. */
+    val club: String? = null,
     @SerialName("mock_mode") val mockMode: Boolean? = null,
     @SerialName("debug_mode") val debugMode: Boolean? = null,
-    @SerialName("camera_available") val cameraAvailable: Boolean? = null,
-    @SerialName("camera_enabled") val cameraEnabled: Boolean? = null,
-    @SerialName("camera_streaming") val cameraStreaming: Boolean? = null,
-    @SerialName("ball_detected") val ballDetected: Boolean? = null,
+)
+
+/**
+ * `session_cleared` (server.py:1931 `handle_clear_session`), broadcast after any client's
+ * `clear_session {profile_id}`.
+ *
+ * @property profileId the profile whose rows were removed; `null` when the payload lacked it.
+ * @property shots the whole session that **remains** (every other profile's rows), oldest first,
+ *   or `null` when the payload carried no usable list (an older server sent no payload at all).
+ */
+data class SessionCleared(
+    val profileId: String?,
+    val shots: List<ShotDetail>?,
 )
 
 /** A swing-speed training rep (`swing_speed_to_dict`, the `event` of a `swing_speed` event). */
@@ -58,7 +70,8 @@ data class SwingSpeedReading(
     @SerialName("peak_magnitude") val peakMagnitude: Double? = null,
     @SerialName("training_implement") val trainingImplement: String? = null,
     @SerialName("training_implement_label") val trainingImplementLabel: String? = null,
-    @SerialName("player_name") val playerName: String? = null,
+    @SerialName("profile_id") val profileId: String? = null,
+    @SerialName("profile_name") val profileName: String? = null,
     val unit: String? = null,
     val mode: String? = null,
 )

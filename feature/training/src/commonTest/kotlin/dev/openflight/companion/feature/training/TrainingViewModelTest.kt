@@ -16,6 +16,8 @@ import dev.openflight.companion.core.insights.SwingSpeedStats
 import dev.openflight.companion.core.model.pi.PiFeatureAvailability
 import dev.openflight.companion.core.model.pi.PiLinkState
 import dev.openflight.companion.core.model.pi.PiNotice
+import dev.openflight.companion.core.model.pi.Profile
+import dev.openflight.companion.core.model.pi.ProfilesState
 import dev.openflight.companion.core.model.pi.ShotDetail
 import dev.openflight.companion.core.model.pi.TrainingImplement
 import dev.openflight.companion.core.model.pi.TriggerStatus
@@ -67,14 +69,19 @@ class TrainingViewModelTest {
     }
 
     @Test
-    fun lastBestAndAverageCoverTheCurrentPlayerAndImplement() =
+    fun lastBestAndAverageCoverTheActiveProfileAndImplement() =
         runTest {
-            piSession.playerName.value = "Ann"
+            piSession.profiles.value =
+                ProfilesState(
+                    profiles = listOf(Profile(id = "ann", name = "Ann"), Profile(id = "bob", name = "Bob")),
+                    activeProfileId = "ann",
+                    loaded = true,
+                )
             piSession.trainingImplement.value = TrainingImplement("stack-100g", "Stack 100g")
             piSession.triggerStatus.value = TriggerStatus(mode = "swing-speed")
             piSession.setSession(
                 listOf(
-                    rep(4, 88.0, player = "Bob"),
+                    rep(4, 88.0, profileId = "bob"),
                     rep(3, 95.0),
                     rep(2, 100.0),
                     rep(1, 90.0, implement = "driver"),
@@ -87,7 +94,7 @@ class TrainingViewModelTest {
                 assertThat(state.availability).isEqualTo(PiFeatureAvailability.Available)
                 assertThat(state.isSwingSpeedMode).isTrue()
                 assertThat(state.triggerMode).isEqualTo("swing-speed")
-                assertThat(state.playerName).isEqualTo("Ann")
+                assertThat(state.profileName).isEqualTo("Ann")
                 assertThat(state.selectedImplement).isEqualTo(ImplementOption("stack-100g", "Stack 100g"))
                 assertThat(
                     state.stats,
@@ -169,7 +176,7 @@ class TrainingViewModelTest {
     private fun rep(
         number: Int,
         speedMph: Double,
-        player: String = "Ann",
+        profileId: String = "ann",
         implement: String = "stack-100g",
     ): ShotDetail =
         ShotDetail(
@@ -177,7 +184,7 @@ class TrainingViewModelTest {
             ballSpeedMph = speedMph,
             clubSpeedMph = speedMph,
             club = "Swing Speed",
-            playerName = player,
+            profileId = profileId,
             mode = "swing-speed",
             swingSpeedReadingCount = 5,
             trainingImplement = implement,

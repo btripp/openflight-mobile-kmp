@@ -14,7 +14,6 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
-import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import dev.openflight.companion.core.data.TransportType
 import dev.openflight.companion.core.designsystem.OfTheme
@@ -50,7 +49,7 @@ class SettingsScreenTest {
     fun givenBluetooth_whenShown_thenEveryWifiOnlyControlIsDisabledWithTheReason() {
         show(previewSettingsState(link = PiLinkState.WifiOnly, transport = TransportType.BLUETOOTH))
 
-        composeRule.onNodeWithTag(SettingsTestTags.PLAYER_SET).performScrollTo().assertIsNotEnabled()
+        composeRule.onNodeWithTag(SettingsTestTags.PROFILE).performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithTag(SettingsTestTags.RADAR_REFRESH).performScrollTo().assertIsNotEnabled()
         composeRule
             .onNode(isToggleable() and hasAnyAncestor(hasTestTag(SettingsTestTags.DEBUG_TOGGLE)))
@@ -58,7 +57,7 @@ class SettingsScreenTest {
             .assertIsNotEnabled()
         composeRule.onNodeWithTag(SettingsTestTags.CLOUD_UPLOAD).performScrollTo().assertIsNotEnabled()
         composeRule.onNodeWithTag(SettingsTestTags.SHUTDOWN).performScrollTo().assertIsNotEnabled()
-        // Player, simulators, radar, debug, cloud and shutdown each explain why.
+        // Profile, simulators, radar, debug, cloud and shutdown each explain why.
         composeRule
             .onAllNodes(hasText(PiFeatureAvailability.REQUIRES_WIFI), useUnmergedTree = true)
             .assertCountEquals(WIFI_ONLY_SECTIONS)
@@ -68,13 +67,10 @@ class SettingsScreenTest {
     }
 
     @Test
-    fun givenTheLink_whenAPlayerIsEntered_thenItIsSet() {
+    fun givenTheLink_whenShown_thenTheActiveProfileShows() {
         show(previewSettingsState())
 
-        composeRule.onNodeWithTag(SettingsTestTags.PLAYER_FIELD).performScrollTo().performTextInput("Sam")
-        composeRule.onNodeWithTag(SettingsTestTags.PLAYER_SET).performClick()
-
-        assertEquals(listOf<SettingsEvent>(SettingsEvent.SetPlayer("Sam")), events)
+        composeRule.onNodeWithText("Alex").performScrollTo().assertIsDisplayed()
     }
 
     @Test

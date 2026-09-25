@@ -41,7 +41,7 @@ struct ShotCard: View {
                     Text(shot.displayClub)
                         .font(.ofDisplay(.title))
                         .accessibilityIdentifier("dashboard.latestShot.club")
-                    if let player = enrichment?.playerName {
+                    if let player = enrichment?.profileName {
                         Text(player)
                             .font(.of(.subheadline))
                             .foregroundStyle(Theme.creamDim)

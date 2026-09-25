@@ -8,6 +8,8 @@ import dev.openflight.companion.core.model.GolfClub
 import dev.openflight.companion.core.model.PhoneOrientationMeasurement
 import dev.openflight.companion.core.model.ShotEvent
 import dev.openflight.companion.core.model.ShotHistory
+import dev.openflight.companion.core.model.pi.ClearState
+import dev.openflight.companion.core.model.pi.DeletionState
 import dev.openflight.companion.core.model.pi.PiLinkState
 import dev.openflight.companion.core.network.PiControlClient
 import dev.openflight.companion.core.protocol.ShotTransport
@@ -54,8 +56,12 @@ internal fun interface WifiTransportFactory {
  *   with `busy` and the sync-on-connect must not race a user's club change.
  *
  * Plan R6b: [start]/[stop] also start and stop [piSession] (it follows the same settings and is
- * active only on Wi-Fi, on the same host), and [deleteShot]/[deleteShotByTimestamp]/[clearHistory]
- * also go to the Pi's session, by timestamp, while its link is connected.
+ * active only on Wi-Fi, on the same host).
+ *
+ * Plan R8c: while the Pi's link is connected, [deleteShot]/[deleteShotByTimestamp] and
+ * [clearHistory] are **server-confirmed**: the request goes to [piSession] and [history] changes
+ * only once its [PiSessionRepository.deletionState] / [PiSessionRepository.clearState] reports
+ * success. Without a Pi link they stay local (optimistic) edits.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 @Suppress("TooManyFunctions") // The ShotRepository surface (9) plus the session helpers.
@@ -136,21 +142,61 @@ internal class DefaultShotRepository(
 
     override fun deleteShot(eventId: String) {
         val timestamp = shotHistory.shots.firstOrNull { it.eventId == eventId }?.timestamp ?: return
-        removeLocally { it.eventId == eventId }
-        onConnectedPi("delete_shot") { deleteShot(timestamp) }
+        deleteConfirmed(timestamp) { it.eventId == eventId }
     }
 
-    override fun deleteShotByTimestamp(timestamp: String) {
-        removeLocally { it.timestamp == timestamp }
-        onConnectedPi("delete_shot") { deleteShot(timestamp) }
+    override fun deleteShotByTimestamp(timestamp: String) = deleteConfirmed(timestamp) { it.timestamp == timestamp }
+
+    /**
+     * Removes the local shots matching [matches]: at once without a Pi link, else only once the
+     * Pi confirmed deleting [timestamp].
+     */
+    private fun deleteConfirmed(
+        timestamp: String,
+        matches: (ShotEvent) -> Boolean,
+    ) {
+        val pi = connectedPi()
+        if (pi == null) {
+            removeLocally(matches)
+            return
+        }
+        onPi("delete_shot") {
+            pi.deleteShot(timestamp)
+            // Settled once the state is no longer this shot's pending deletion.
+            val outcome = pi.deletionState.first { it !is DeletionState.Pending || it.timestamp != timestamp }
+            if (outcome is DeletionState.Deleted && outcome.timestamp == timestamp) removeLocally(matches)
+        }
     }
 
+    /**
+     * With a Pi link: `clear_session` for the **active profile** only (the server's session holds
+     * every profile), then, once confirmed, drops the local shots the Pi filed under that profile.
+     * Without one, or before the roster is known, it clears [history] locally.
+     */
     override fun clearHistory() {
-        shotHistory = ShotHistory(maximumCount = shotHistory.maximumCount)
-        mutableHistory.value = shotHistory.shots
-        mutableLatestShot.value = shotHistory.latestShot
-        onConnectedPi("clear_session") { clearSession() }
+        val pi = connectedPi()
+        val profileId =
+            pi
+                ?.profiles
+                ?.value
+                ?.activeProfileId
+                .orEmpty()
+        if (pi == null || profileId.isEmpty()) {
+            shotHistory = ShotHistory(maximumCount = shotHistory.maximumCount)
+            mutableHistory.value = shotHistory.shots
+            mutableLatestShot.value = shotHistory.latestShot
+            return
+        }
+        onPi("clear_session") {
+            pi.clearSession(profileId)
+            val outcome = pi.clearState.first { it !is ClearState.Pending || it.profileId != profileId }
+            if (outcome is ClearState.Cleared && outcome.profileId == profileId) {
+                removeLocally { pi.detailFor(it)?.profileId == profileId }
+            }
+        }
     }
+
+    private fun connectedPi(): PiSessionRepository? = piSession?.takeIf { it.linkState.value == PiLinkState.Connected }
 
     private fun removeLocally(predicate: (ShotEvent) -> Boolean) {
         shotHistory = shotHistory.copy(shots = shotHistory.shots.filterNot(predicate))
@@ -159,19 +205,17 @@ internal class DefaultShotRepository(
     }
 
     /**
-     * Runs [command] on [piSession] only while its link is connected; a failure (e.g. the link
-     * dropping in between) is logged, and the Pi reports a missing shot through its notices.
+     * Runs a Pi request in [scope]; a failure to send (e.g. the link dropping in between) is logged.
+     * The outcome a screen shows comes from [PiSessionRepository.deletionState]/`clearState`.
      */
-    @Suppress("TooGenericExceptionCaught") // The local change already happened; a Pi failure is only logged.
-    private fun onConnectedPi(
+    @Suppress("TooGenericExceptionCaught") // Nothing changed locally; a send failure is only logged.
+    private fun onPi(
         name: String,
-        command: suspend PiSessionRepository.() -> Unit,
+        request: suspend () -> Unit,
     ) {
-        val pi = piSession ?: return
-        if (pi.linkState.value != PiLinkState.Connected) return
         scope.launch {
             try {
-                pi.command()
+                request()
             } catch (cancellation: CancellationException) {
                 throw cancellation
             } catch (error: Exception) {

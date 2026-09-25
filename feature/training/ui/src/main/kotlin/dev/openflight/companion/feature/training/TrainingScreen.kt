@@ -94,7 +94,7 @@ private fun StatusCard(
 ) {
     OfCard(modifier = Modifier.fillMaxWidth(), contentSpacing = OfSpacing.Sm) {
         OfText(text = "SESSION", role = OfTextRole.Eyebrow, color = OfColorTokens.Gold)
-        OfText(text = uiState.playerName, role = OfTextRole.Title)
+        OfText(text = uiState.profileName, role = OfTextRole.Title)
         OfText(
             text = modeText(uiState),
             role = OfTextRole.BodySmall,

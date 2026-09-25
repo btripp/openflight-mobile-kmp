@@ -27,23 +27,22 @@ val ShotDetail.swingSpeedMph: Double?
  * Mirrors `computeSwingSpeedStats` + `filterSwingSpeedShots`. [shots] must be **oldest first**
  * (the server's order), so the last one is the latest rep.
  *
- * @param playerName when non-blank, only this player's reps count (a missing name is "Player 1";
- *   compared trimmed and case-insensitively).
+ * @param profileId when non-blank, only reps filed under this profile count (exact id match; the
+ *   server replaced the web UI's player-name filter with profiles).
  * @param trainingImplement when non-blank, only reps whose implement key, implement label or club
  *   match it (trimmed, case-insensitive).
  */
 fun computeSwingSpeedStats(
     shots: List<ShotDetail>,
-    playerName: String?,
+    profileId: String?,
     trainingImplement: String?,
 ): SwingSpeedStats {
-    val player = normalizePlayer(playerName)
     val implement = normalizeToken(trainingImplement)
     val speeds =
         shots
             .asSequence()
             .filter { it.isSwingSpeed }
-            .filter { playerName.isNullOrEmpty() || normalizePlayer(it.playerName) == player }
+            .filter { profileId.isNullOrBlank() || it.profileId == profileId }
             .filter {
                 implement.isEmpty() ||
                     normalizeToken(it.trainingImplement) == implement ||
@@ -60,12 +59,7 @@ fun computeSwingSpeedStats(
     )
 }
 
-private fun normalizePlayer(name: String?): String = (name?.trim()?.ifEmpty { null } ?: DEFAULT_PLAYER).lowercase()
-
 private fun normalizeToken(value: String?): String = value?.trim()?.lowercase().orEmpty()
-
-/** The server's name for a session with no player set (`set_player` with a blank name). */
-const val DEFAULT_PLAYER: String = "Player 1"
 
 /**
  * The web UI's `computeStats` over the Pi's session rows (the Socket.IO counterpart of

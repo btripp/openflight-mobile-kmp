@@ -16,9 +16,10 @@ import dev.openflight.companion.core.insights.computeDetailStats
 import dev.openflight.companion.core.insights.computeSwingSpeedStats
 import dev.openflight.companion.core.insights.toClubStats
 import dev.openflight.companion.core.model.ShotEvent
+import dev.openflight.companion.core.model.pi.ClearState
+import dev.openflight.companion.core.model.pi.DeletionState
 import dev.openflight.companion.core.model.pi.PiFeatureAvailability
 import dev.openflight.companion.core.model.pi.PiLinkState
-import dev.openflight.companion.core.model.pi.PiNotice
 import dev.openflight.companion.core.model.pi.SessionStats
 import dev.openflight.companion.core.model.pi.ShotDetail
 import dev.openflight.companion.core.model.pi.TriggerStatus
@@ -87,9 +88,22 @@ class SessionViewModel(
     val effects: Flow<SessionEffect> = sessionEffects.receiveAsFlow()
 
     init {
+        // A server-confirmed delete or clear that failed (refused, dropped link, no confirmation) is
+        // shown once. The pending/confirmed states themselves are plan R8f's UI.
         viewModelScope.launch {
-            piSession.notices.collect { notice ->
-                if (notice is PiNotice.DeleteShotFailed) sessionEffects.send(SessionEffect.Message(notice.message))
+            piSession.deletionState.collect { state ->
+                if (state is DeletionState.Failed) {
+                    sessionEffects.send(SessionEffect.Message(state.reason))
+                    piSession.dismissDeletion()
+                }
+            }
+        }
+        viewModelScope.launch {
+            piSession.clearState.collect { state ->
+                if (state is ClearState.Failed) {
+                    sessionEffects.send(SessionEffect.Message(state.reason))
+                    piSession.dismissClear()
+                }
             }
         }
     }
@@ -183,7 +197,7 @@ class SessionViewModel(
             stats = serverStats ?: computeDetailStats(filtered),
             swingStats =
                 if (isSwingSession) {
-                    computeSwingSpeedStats(filtered.asReversed(), playerName = null, trainingImplement = null)
+                    computeSwingSpeedStats(filtered.asReversed(), profileId = null, trainingImplement = null)
                 } else {
                     null
                 },

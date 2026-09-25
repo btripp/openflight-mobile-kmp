@@ -123,6 +123,12 @@ data class DebugShotRadar(
  */
 data class DebugState(
     val enabled: Boolean = false,
+    /**
+     * `false` until the Pi reports its debug mode (on-connect `session_state`, `debug_status` or
+     * `debug_toggled`). Debug mode is server-global, so a recording may already be running: a
+     * screen must not offer "Start" before this is `true` (Expo `useDeviceStore.debugLoaded`).
+     */
+    val loaded: Boolean = false,
     /** The server-side JSONL log file while debug mode is on. */
     val logPath: String? = null,
     val readings: List<DebugReading> = emptyList(),

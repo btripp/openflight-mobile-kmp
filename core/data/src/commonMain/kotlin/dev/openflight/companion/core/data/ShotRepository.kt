@@ -68,10 +68,11 @@ interface ShotRepository {
 
     /**
      * Removes one shot from [history]. While the Pi's Socket.IO link is
-     * [connected][dev.openflight.companion.core.model.pi.PiLinkState.Connected] it also deletes the
-     * shot from the Pi's session, **by timestamp** (`delete_shot`; the SSE/BLE `event_id` is a
-     * per-publish UUID the Pi doesn't know). Otherwise it's local only (plan R5a/R6b). A no-op if
-     * [eventId] isn't in [history].
+     * [connected][dev.openflight.companion.core.model.pi.PiLinkState.Connected] it asks the Pi to
+     * delete it, **by timestamp** (`delete_shot`; the SSE/BLE `event_id` is a per-publish UUID the
+     * Pi doesn't know), and removes it locally only once the Pi confirms
+     * ([PiSessionRepository.deletionState]). Otherwise it's a local edit (plan R5a/R6b/R8c). A
+     * no-op if [eventId] isn't in [history].
      *
      * Default no-op so every existing [ShotRepository] implementation (fakes in other feature
      * modules, [dev.openflight.companion.PreviewShotRepository]) stays source-compatible without
@@ -88,8 +89,10 @@ interface ShotRepository {
     fun deleteShotByTimestamp(timestamp: String) {}
 
     /**
-     * Clears [history], and the Pi's session too (`clear_session`) while its link is connected
-     * (plan R6b). See [deleteShot] for why this has a default body.
+     * Clears [history]. While the Pi's link is connected it instead clears the **active
+     * profile's** rows on the Pi (`clear_session {profile_id}`) and, once confirmed
+     * ([PiSessionRepository.clearState]), the local shots filed under that profile (plan R8c).
+     * See [deleteShot] for why this has a default body.
      */
     fun clearHistory() {}
 

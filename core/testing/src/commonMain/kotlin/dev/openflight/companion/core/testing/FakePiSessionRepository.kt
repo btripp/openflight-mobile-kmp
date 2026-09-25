@@ -4,14 +4,19 @@ package dev.openflight.companion.core.testing
 import dev.openflight.companion.core.data.PiSessionRepository
 import dev.openflight.companion.core.data.WifiOnlyFeatureException
 import dev.openflight.companion.core.model.pi.CameraStatus
+import dev.openflight.companion.core.model.pi.ClearState
 import dev.openflight.companion.core.model.pi.CloudUploadStatus
 import dev.openflight.companion.core.model.pi.DebugState
+import dev.openflight.companion.core.model.pi.DeletionState
 import dev.openflight.companion.core.model.pi.PiLinkState
 import dev.openflight.companion.core.model.pi.PiNotice
+import dev.openflight.companion.core.model.pi.PowerStatus
+import dev.openflight.companion.core.model.pi.ProfilesState
 import dev.openflight.companion.core.model.pi.RadarConfig
 import dev.openflight.companion.core.model.pi.RadarConfigUpdate
 import dev.openflight.companion.core.model.pi.SessionStats
 import dev.openflight.companion.core.model.pi.ShotDetail
+import dev.openflight.companion.core.model.pi.ShotProcessingState
 import dev.openflight.companion.core.model.pi.SimState
 import dev.openflight.companion.core.model.pi.SwingSpeedReading
 import dev.openflight.companion.core.model.pi.TrainingImplement
@@ -23,8 +28,10 @@ import kotlinx.coroutines.flow.emptyFlow
 
 /**
  * A [PiSessionRepository] whose flows tests set directly. Commands are recorded in [commands]
- * (`"delete_shot:<timestamp>"`, `"set_player:<name>"`, ...) and, like the real repository, throw
- * [WifiOnlyFeatureException] unless [linkState] is [PiLinkState.Connected].
+ * (`"delete_shot:<timestamp>"`, `"clear_session:<profile id>"`, ...) and, like the real repository,
+ * throw [WifiOnlyFeatureException] unless [linkState] is [PiLinkState.Connected]. [deleteShot] and
+ * [clearSession] move [deletionState]/[clearState] to pending; tests settle them by setting those
+ * flows, as the server's reply would.
  */
 @Suppress("TooManyFunctions") // Mirrors the PiSessionRepository surface.
 class FakePiSessionRepository(
@@ -34,7 +41,12 @@ class FakePiSessionRepository(
     override val sessionShots = MutableStateFlow(emptyList<ShotDetail>())
     override val shotDetails = MutableStateFlow(emptyMap<String, ShotDetail>())
     override val stats = MutableStateFlow<SessionStats?>(null)
-    override val playerName = MutableStateFlow<String?>(null)
+    override val profiles = MutableStateFlow(ProfilesState())
+    override val club = MutableStateFlow<String?>(null)
+    override val shotProcessing = MutableStateFlow<ShotProcessingState?>(null)
+    override val powerStatus = MutableStateFlow<PowerStatus?>(null)
+    override val deletionState = MutableStateFlow<DeletionState>(DeletionState.Idle)
+    override val clearState = MutableStateFlow<ClearState>(ClearState.Idle)
     override val trainingImplement = MutableStateFlow<TrainingImplement?>(null)
     override val latestSwingSpeed = MutableStateFlow<SwingSpeedReading?>(null)
     override val triggerStatus = MutableStateFlow<TriggerStatus?>(null)
@@ -73,13 +85,36 @@ class FakePiSessionRepository(
 
     override suspend fun refreshSession() = record("get_session")
 
-    override suspend fun deleteShot(timestamp: String) = record("delete_shot:$timestamp")
+    override suspend fun deleteShot(timestamp: String) {
+        record("delete_shot:$timestamp")
+        deletionState.value = DeletionState.Pending(timestamp)
+    }
 
-    override suspend fun clearSession() = record("clear_session")
+    override fun dismissDeletion() {
+        deletionState.value = DeletionState.Idle
+    }
+
+    override suspend fun clearSession(profileId: String) {
+        record("clear_session:$profileId")
+        clearState.value = ClearState.Pending(profileId)
+    }
+
+    override fun dismissClear() {
+        clearState.value = ClearState.Idle
+    }
+
+    override suspend fun setActiveProfile(profileId: String) = record("set_active_profile:$profileId")
+
+    override suspend fun addProfile(name: String) = record("add_profile:$name")
+
+    override suspend fun renameProfile(
+        profileId: String,
+        name: String,
+    ) = record("rename_profile:$profileId:$name")
+
+    override suspend fun removeProfile(profileId: String) = record("remove_profile:$profileId")
 
     override suspend fun simulateShot() = record("simulate_shot")
-
-    override suspend fun setPlayer(name: String) = record("set_player:$name")
 
     override suspend fun setTrainingImplement(implement: String) = record("set_training_implement:$implement")
 

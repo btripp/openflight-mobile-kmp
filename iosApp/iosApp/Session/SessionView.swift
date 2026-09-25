@@ -294,7 +294,7 @@ struct SessionShotRowView: View {
                 Text(row.implementLabel ?? Units.clubLabel(row.club))
                     .font(.of(.headline, weight: .semibold))
                     .lineLimit(1)
-                Text([Units.clockTime(row.timestamp), row.playerName].compactMap { $0 }.joined(separator: " · "))
+                Text([Units.clockTime(row.timestamp), row.profileName].compactMap { $0 }.joined(separator: " · "))
                     .font(.of(.caption))
                     .foregroundStyle(Theme.creamDim)
                     .lineLimit(1)

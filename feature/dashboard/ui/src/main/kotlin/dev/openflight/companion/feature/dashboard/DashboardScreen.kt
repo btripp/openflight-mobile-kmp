@@ -329,7 +329,7 @@ private fun DashboardLivePreview() {
                                     carryRangeLowYards = 251.0,
                                     carryRangeHighYards = 277.0,
                                     carrySpinAdjustedYards = null,
-                                    playerName = "Alex",
+                                    profileName = "Alex",
                                 ),
                         ),
                 ),

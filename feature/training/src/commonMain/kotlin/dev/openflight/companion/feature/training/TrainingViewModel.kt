@@ -5,12 +5,12 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dev.openflight.companion.core.data.PiSessionRepository
 import dev.openflight.companion.core.data.SettingsRepository
-import dev.openflight.companion.core.insights.DEFAULT_PLAYER
 import dev.openflight.companion.core.insights.UnitSystem
 import dev.openflight.companion.core.insights.computeSwingSpeedStats
 import dev.openflight.companion.core.insights.swingSpeedMph
 import dev.openflight.companion.core.model.pi.PiFeatureAvailability
 import dev.openflight.companion.core.model.pi.PiNotice
+import dev.openflight.companion.core.model.pi.ProfilesState
 import dev.openflight.companion.core.model.pi.ShotDetail
 import dev.openflight.companion.core.model.pi.TrainingImplement
 import kotlinx.coroutines.CancellationException
@@ -40,11 +40,11 @@ class TrainingViewModel(
         combine(
             piSession.linkState,
             piSession.sessionShots,
-            piSession.playerName,
+            piSession.profiles,
             piSession.trainingImplement,
             piSession.triggerStatus,
-        ) { link, shots, player, implement, trigger ->
-            PiState(PiFeatureAvailability.of(link), shots, player, implement, trigger?.mode)
+        ) { link, shots, profiles, implement, trigger ->
+            PiState(PiFeatureAvailability.of(link), shots, profiles, implement, trigger?.mode)
         }
 
     val uiState: StateFlow<TrainingUiState> =
@@ -54,7 +54,7 @@ class TrainingViewModel(
                 TrainingImplements.find(selectedId)
                     ?: pi.implement?.let { ImplementOption(it.implement, it.label) }
                     ?: TrainingImplements.default
-            val player = pi.playerName?.takeIf { it.isNotBlank() } ?: DEFAULT_PLAYER
+            val profile = pi.profiles.activeProfile
             TrainingUiState(
                 availability = pi.availability,
                 units = local.units,
@@ -62,9 +62,9 @@ class TrainingViewModel(
                 selectedImplement = selected,
                 triggerMode = pi.triggerMode,
                 isSwingSpeedMode = pi.triggerMode == SWING_SPEED_MODE,
-                playerName = player,
+                profileName = profile?.name ?: TrainingUiState.NO_PROFILE,
                 // The Pi lists newest first; the stats want the latest rep last.
-                stats = computeSwingSpeedStats(pi.shots.asReversed(), player, selected.id),
+                stats = computeSwingSpeedStats(pi.shots.asReversed(), profile?.id, selected.id),
                 lastRep = pi.shots.firstOrNull { it.isSwingSpeed }?.toSwingRep(),
                 error = local.error,
                 showSimulateSwing = mock == true,
@@ -132,7 +132,7 @@ class TrainingViewModel(
     private data class PiState(
         val availability: PiFeatureAvailability,
         val shots: List<ShotDetail>,
-        val playerName: String?,
+        val profiles: ProfilesState,
         val implement: TrainingImplement?,
         val triggerMode: String?,
     )
@@ -150,7 +150,7 @@ class TrainingViewModel(
                 selectedImplement = TrainingImplements.default,
                 triggerMode = null,
                 isSwingSpeedMode = false,
-                playerName = DEFAULT_PLAYER,
+                profileName = TrainingUiState.NO_PROFILE,
                 stats = computeSwingSpeedStats(emptyList(), null, null),
                 lastRep = null,
                 error = null,
@@ -167,6 +167,6 @@ private fun ShotDetail.toSwingRep(): SwingRep? {
         readingCount = swingSpeedReadingCount,
         triggerSpeedMph = swingSpeedTriggerMph,
         durationMs = swingSpeedDurationMs,
-        playerName = playerName,
+        profileName = profileName?.takeIf { it.isNotBlank() },
     )
 }

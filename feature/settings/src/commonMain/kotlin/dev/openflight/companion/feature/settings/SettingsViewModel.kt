@@ -15,6 +15,7 @@ import dev.openflight.companion.core.model.pi.DebugState
 import dev.openflight.companion.core.model.pi.PiFeatureAvailability
 import dev.openflight.companion.core.model.pi.PiLinkState
 import dev.openflight.companion.core.model.pi.PiNotice
+import dev.openflight.companion.core.model.pi.ProfilesState
 import dev.openflight.companion.core.model.pi.RadarConfig
 import dev.openflight.companion.core.model.pi.RadarConfigUpdate
 import dev.openflight.companion.core.model.pi.SimState
@@ -32,7 +33,7 @@ import kotlinx.coroutines.launch
 
 /**
  * The settings screen's state holder (plan R6b): units, the transport and link status, and the
- * Pi's Wi-Fi-only controls (player, simulators, radar/debug, cloud upload, shutdown), each
+ * Pi's Wi-Fi-only controls (profile, simulators, radar/debug, cloud upload, shutdown), each
  * disabled with a reason unless the Pi's Socket.IO link is connected.
  */
 class SettingsViewModel(
@@ -47,7 +48,7 @@ class SettingsViewModel(
 
     private val device =
         combine(
-            piSession.playerName,
+            piSession.profiles,
             piSession.simState,
             piSession.cloudUploadStatus,
             piSession.mockMode,
@@ -77,7 +78,7 @@ class SettingsViewModel(
                         ConnectionState.Idle,
                     ),
                     PiLinkState.Idle,
-                    DeviceState(null, SimState(), CloudUploadStatus(), null),
+                    DeviceState(ProfilesState(), SimState(), CloudUploadStatus(), null),
                     RadarState(null, null, DebugState()),
                     confirming = false,
                 ),
@@ -98,14 +99,6 @@ class SettingsViewModel(
         when (event) {
             is SettingsEvent.SetUnits -> {
                 viewModelScope.launch { settings.setUnits(event.units) }
-            }
-
-            is SettingsEvent.SetPlayer -> {
-                send {
-                    piSession.setPlayer(
-                        event.name.trim().take(PlayerSettings.MAX_NAME_LENGTH),
-                    )
-                }
             }
 
             is SettingsEvent.SetRadarValue -> {
@@ -176,7 +169,7 @@ class SettingsViewModel(
     )
 
     private data class DeviceState(
-        val playerName: String?,
+        val profiles: ProfilesState,
         val sim: SimState,
         val cloud: CloudUploadStatus,
         val mockMode: Boolean?,
@@ -209,7 +202,7 @@ class SettingsViewModel(
                 linkState = link,
                 linkDescription = link.description,
                 units = phone.units,
-                player = PlayerSettings(device.playerName, available),
+                profile = ProfileSettings(device.profiles.activeProfile?.name, available),
                 simulators = SettingsPanels.simulators(device.sim.connectors),
                 radar = SettingsPanels.radar(radar.config, radar.trigger, radar.debug, mock, available),
                 debug =
@@ -246,8 +239,8 @@ class SettingsViewModel(
 
                 is PiNotice.SimSendFailed -> "${notice.target}: ${notice.message}"
 
-                // Shown by the session and training screens.
-                is PiNotice.DeleteShotFailed, is PiNotice.TrainingImplementFailed -> null
+                // Shown by the training screen.
+                is PiNotice.TrainingImplementFailed -> null
             }
     }
 }

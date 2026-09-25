@@ -6,10 +6,12 @@ import assertk.assertFailure
 import assertk.assertThat
 import assertk.assertions.containsExactly
 import assertk.assertions.containsOnly
+import assertk.assertions.doesNotContain
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isInstanceOf
+import assertk.assertions.isNotNull
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
 import assertk.assertions.prop
@@ -20,72 +22,35 @@ import dev.openflight.companion.core.model.pi.CloudUploadState
 import dev.openflight.companion.core.model.pi.CloudUploadStatus
 import dev.openflight.companion.core.model.pi.PiLinkState
 import dev.openflight.companion.core.model.pi.PiNotice
+import dev.openflight.companion.core.model.pi.PowerState
 import dev.openflight.companion.core.model.pi.RadarConfig
 import dev.openflight.companion.core.model.pi.RadarConfigUpdate
 import dev.openflight.companion.core.model.pi.SessionStats
+import dev.openflight.companion.core.model.pi.ShotProcessingState
 import dev.openflight.companion.core.model.pi.TriggerStatus
 import dev.openflight.companion.core.socketio.SocketConnectionState
-import dev.openflight.companion.core.socketio.SocketEvent
-import dev.openflight.companion.core.socketio.SocketNotConnectedException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
-import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlin.test.Test
 
+/**
+ * [DefaultPiSessionRepository] against a scripted socket: the link lifecycle, every event the Pi
+ * sends and every command. Frames are the captured/hand-built [PiFixtures]. The connect/reconnect,
+ * connected-only emit and `shot_update` cases port the Expo app's `socket.test.ts` and
+ * `useSessionStore.test.ts`; the club, roster and device cases are in [PiSessionContextTest], the
+ * delete and clear cases (`feat/delete-shot`, `feat/stats-tab`) in [PiSessionDeleteAndClearTest].
+ */
 @OptIn(ExperimentalCoroutinesApi::class)
 class PiSessionRepositoryTest {
-    private class Harness(
-        scope: CoroutineScope,
-        transport: TransportType,
-        host: String,
-    ) {
-        val settings = FakeSettingsRepository(transport = transport, host = host)
-        val sockets = mutableListOf<FakePiSocket>()
-        val cameraHosts = mutableListOf<String>()
-        val logs = mutableListOf<String>()
-        val repository =
-            DefaultPiSessionRepository(
-                settings = settings,
-                socketFactory = { socketHost, _ -> FakePiSocket(socketHost).also { sockets += it } },
-                cameraSource = { cameraHost ->
-                    cameraHosts += cameraHost
-                    flowOf(byteArrayOf(1), byteArrayOf(2))
-                },
-                scope = scope,
-                log = { logs += it },
-            )
-
-        val socket: FakePiSocket get() = sockets.last()
-
-        /** Connects the current socket and forgets the automatic on-connect requests. */
-        fun connected(): FakePiSocket =
-            socket.apply {
-                serverAcks()
-                emitted.clear()
-            }
-    }
-
-    private fun runPiTest(
-        transport: TransportType = TransportType.WIFI,
-        host: String = "pi.local:8080",
-        body: suspend TestScope.(Harness) -> Unit,
-    ) = runTest(UnconfinedTestDispatcher()) {
-        val harness = Harness(backgroundScope, transport, host)
-        harness.repository.start()
-        body(harness)
-    }
-
     // region link and transport
 
     @Test
@@ -101,23 +66,48 @@ class PiSessionRepositoryTest {
         }
 
     @Test
-    fun onConnectItRequestsSessionTriggerStatusAndRadarConfigLikeTheWebUi() =
+    fun onConnectItRequestsEverythingTheServerDoesNotPush() =
         runPiTest { h ->
             h.socket.serverAcks()
 
-            assertThat(h.socket.emittedNames).containsExactly("get_session", "get_trigger_status", "get_radar_config")
+            assertThat(h.socket.emittedNames).containsExactly(
+                "get_session",
+                "get_trigger_status",
+                "get_radar_config",
+                "get_debug_status",
+                "get_profiles",
+            )
         }
 
     @Test
     fun aReconnectRequestsTheInitialStateAgain() =
         runPiTest { h ->
-            h.socket.serverAcks()
-            h.socket.state.value = SocketConnectionState.Reconnecting(1, 1_000, "Connection closed")
-            assertThat(h.repository.linkState.value).isEqualTo(PiLinkState.Reconnecting(1, 1_000, "Connection closed"))
+            h.connected()
+            h.drop()
+            assertThat(h.repository.linkState.value).isEqualTo(PiLinkState.Reconnecting(1, 500, "Connection closed"))
 
             h.socket.serverAcks()
 
-            assertThat(h.socket.emittedNames.count { it == "get_session" }).isEqualTo(2)
+            // The hardware, the roster or the debug mode may have changed while the phone was away.
+            assertThat(h.socket.emittedNames).containsExactly(
+                "get_session",
+                "get_trigger_status",
+                "get_radar_config",
+                "get_debug_status",
+                "get_profiles",
+            )
+        }
+
+    @Test
+    fun anUnchangedHostOrARepeatedStartKeepsTheOneSocket() =
+        runPiTest { h ->
+            h.connected()
+
+            h.repository.start()
+            h.settings.hostState.value = "pi.local:8080"
+
+            assertThat(h.sockets.size).isEqualTo(1)
+            assertThat(h.socket.disconnectCount).isEqualTo(0)
         }
 
     @Test
@@ -134,8 +124,9 @@ class PiSessionRepositoryTest {
                 listOf(
                     { h.repository.simulateShot() },
                     { h.repository.deleteShot("t") },
-                    { h.repository.clearSession() },
-                    { h.repository.setPlayer("Ann") },
+                    { h.repository.clearSession("p1") },
+                    { h.repository.setActiveProfile("p1") },
+                    { h.repository.addProfile("Sam") },
                     { h.repository.toggleCamera() },
                     { h.repository.uploadCloud() },
                     { h.repository.shutdown() },
@@ -156,6 +147,45 @@ class PiSessionRepositoryTest {
                 .isInstanceOf(WifiOnlyFeatureException::class)
                 .prop(WifiOnlyFeatureException::reason)
                 .isEqualTo(WifiOnlyFeatureException.Reason.NOT_CONNECTED)
+            assertThat(h.socket.emitted).isEmpty()
+        }
+
+    @Test
+    fun nothingTriedDuringATransientDropIsReplayedAfterTheReconnect() =
+        runPiTest { h ->
+            h.connected()
+            h.drop()
+            val commands: List<suspend () -> Unit> =
+                listOf(
+                    { h.repository.setActiveProfile("p2") },
+                    { h.repository.addProfile("Sam") },
+                    { h.repository.renameProfile("p1", "Alexandra") },
+                    { h.repository.removeProfile("p2") },
+                    { h.repository.toggleDebug() },
+                    { h.repository.deleteShot("t") },
+                    { h.repository.clearSession("p1") },
+                )
+            for (command in commands) {
+                assertFailure { command() }
+                    .isInstanceOf(WifiOnlyFeatureException::class)
+                    .prop(WifiOnlyFeatureException::reason)
+                    .isEqualTo(WifiOnlyFeatureException.Reason.NOT_CONNECTED)
+            }
+
+            h.socket.serverAcks()
+
+            // Only the on-connect re-sync: none of the mutations went out late.
+            assertThat(h.socket.emittedNames).containsExactly(
+                "get_session",
+                "get_trigger_status",
+                "get_radar_config",
+                "get_debug_status",
+                "get_profiles",
+            )
+            h.repository.setActiveProfile("p2")
+            assertThat(h.socket.emitted.last()).isEqualTo(
+                "set_active_profile" to buildJsonObject { put("profile_id", "p2") },
+            )
         }
 
     @Test
@@ -175,15 +205,52 @@ class PiSessionRepositoryTest {
         }
 
     @Test
-    fun aHostChangeReconnectsToTheNewHostWithAFreshSession() =
+    fun aHostChangeForgetsEverythingThePreviousPiReported() =
         runPiTest { h ->
-            h.connected().serverFrame(PiFixtures.SHOT_FRAME)
+            val socket = h.connected()
+            socket.serverFrame(PiFixtures.SHOT_FRAME)
+            socket.serverFrame(PiFixtures.PROFILES_AFTER_ADD_FRAME)
+            socket.serverFrame(PiFixtures.POWER_STATUS_FRAME)
+            socket.serverFrame(PiFixtures.CLUB_CHANGED_FRAME)
+            socket.serverFrame(PiFixtures.TRIGGER_STATUS_FRAME)
+            socket.serverFrame(PiFixtures.DEBUG_STATUS_FRAME)
+            socket.serverFrame(PiFixtures.SHOT_PROCESSING_FRAME)
+            // Everything was showing first, or "empty afterwards" would prove nothing.
+            assertThat(h.repository.profiles.value.loaded).isTrue()
+            assertThat(h.repository.powerStatus.value).isNotNull()
 
             h.settings.hostState.value = "10.0.0.9:8080"
 
             assertThat(h.sockets.map { it.host }).containsExactly("pi.local:8080", "10.0.0.9:8080")
             assertThat(h.sockets.first().disconnectCount).isEqualTo(1)
             assertThat(h.repository.sessionShots.value).isEmpty()
+            assertThat(h.repository.profiles.value.profiles).isEmpty()
+            assertThat(h.repository.profiles.value.loaded).isFalse()
+            assertThat(h.repository.powerStatus.value).isNull()
+            assertThat(h.repository.club.value).isNull()
+            assertThat(h.repository.triggerStatus.value).isNull()
+            assertThat(h.repository.debugState.value.loaded).isFalse()
+            assertThat(h.repository.shotProcessing.value).isNull()
+        }
+
+    @Test
+    fun aTransientDropKeepsTheRosterPowerClubAndDeviceStatus() =
+        runPiTest { h ->
+            val socket = h.connected()
+            socket.serverFrame(PiFixtures.PROFILES_AFTER_ADD_FRAME)
+            socket.serverFrame(PiFixtures.POWER_STATUS_FRAME)
+            socket.serverFrame(PiFixtures.CLUB_CHANGED_FRAME)
+            socket.serverFrame(PiFixtures.TRIGGER_STATUS_FRAME)
+
+            h.drop()
+
+            assertThat(h.repository.profiles.value.profiles.size).isEqualTo(2)
+            assertThat(
+                h.repository.powerStatus.value
+                    ?.provider,
+            ).isEqualTo("geekworm")
+            assertThat(h.repository.club.value).isEqualTo("7-iron")
+            assertThat(h.repository.triggerStatus.value).isNotNull()
         }
 
     @Test
@@ -191,12 +258,14 @@ class PiSessionRepositoryTest {
         runPiTest { h ->
             val socket = h.connected()
             socket.serverFrame(PiFixtures.SHOT_FRAME)
+            socket.serverFrame(PiFixtures.PROFILES_AFTER_ADD_FRAME)
 
             h.repository.stop()
 
             assertThat(socket.disconnectCount).isEqualTo(1)
             assertThat(h.repository.linkState.value).isEqualTo(PiLinkState.Idle)
             assertThat(h.repository.sessionShots.value.size).isEqualTo(1)
+            assertThat(h.repository.profiles.value.loaded).isTrue()
         }
 
     @Test
@@ -216,27 +285,31 @@ class PiSessionRepositoryTest {
 
     // endregion
 
-    // region session state
+    // region session state and shots
 
     @Test
-    fun theOnConnectSessionStateFillsSessionStatsPlayerMockModeAndCamera() =
+    fun theOnConnectSessionStateFillsSessionStatsMockModeDebugAndClub() =
         runPiTest { h ->
             h.connected().serverFrame(PiFixtures.CONNECT_SESSION_STATE_FRAME)
 
             assertThat(h.repository.sessionShots.value).isEmpty()
-            assertThat(h.repository.stats.value).isEqualTo(SessionStats.EMPTY)
-            assertThat(h.repository.playerName.value).isEqualTo("Player 1")
+            assertThat(
+                h.repository.stats.value
+                    ?.shotCount,
+            ).isEqualTo(0)
             assertThat(h.repository.mockMode.value).isEqualTo(true)
-            assertThat(h.repository.cameraStatus.value).isEqualTo(CameraStatus(available = false))
+            assertThat(h.repository.club.value).isEqualTo("driver")
             assertThat(h.repository.debugState.value.enabled).isFalse()
+            assertThat(h.repository.debugState.value.loaded).isTrue()
         }
 
     @Test
-    fun sessionStateListsShotsNewestFirst() =
+    fun sessionStateListsShotsNewestFirstAcrossProfiles() =
         runPiTest { h ->
-            h.connected().serverFrame(
-                """42["session_state",{"stats":{"shot_count":2},"shots":[{"timestamp":"a"},{"timestamp":"b"}]}]""",
-            )
+            val socket = h.connected()
+            socket.serverFrame(PiFixtures.SHOT_FRAME)
+            socket.serverFrame(PiFixtures.SECOND_SHOT_FRAME)
+            socket.server("session_state", """{"stats":{},"shots":[{"timestamp":"a"},{"timestamp":"b"}]}""")
 
             assertThat(
                 h.repository.sessionShots.value
@@ -270,15 +343,16 @@ class PiSessionRepositoryTest {
                     eventId = "8f6dbe50-eb69-4a3e-b343-41731776e82f",
                     timestamp = PiFixtures.SHOT_TIMESTAMP,
                     club = "driver",
-                    ballSpeedMph = 143.3,
-                    estimatedCarryYards = 243.0,
+                    ballSpeedMph = 116.2,
+                    estimatedCarryYards = 179.0,
                 )
 
             val detail = h.repository.detailFor(sseShot)
 
-            assertThat(detail?.launchAngleConfidence).isEqualTo(0.72)
-            assertThat(detail?.spinQuality).isEqualTo("medium")
-            assertThat(h.repository.detailFor(sseShot.copy(timestamp = "2026-09-24T15:38:33.264796"))).isNull()
+            assertThat(detail?.launchAngleConfidence).isEqualTo(0.66)
+            assertThat(detail?.spinQuality).isEqualTo("high")
+            assertThat(detail?.profileName).isEqualTo("Profile 1")
+            assertThat(h.repository.detailFor(sseShot.copy(timestamp = "2026-09-25T10:03:35.906613"))).isNull()
         }
 
     @Test
@@ -292,16 +366,94 @@ class PiSessionRepositoryTest {
         }
 
     @Test
-    fun sessionClearedEmptiesTheSessionButKeepsTheEnrichmentIndex() =
+    fun anEnrichedUpdateReplacesItsShotInPlace() =
+        runPiTest { h ->
+            // Expo: "shows one shot, with the final measurements, across the whole sequence".
+            val socket = h.connected()
+            socket.serverFrame(PiFixtures.SHOT_FRAME)
+
+            socket.serverFrame(PiFixtures.SHOT_UPDATE_FRAME)
+
+            val shot =
+                h.repository.sessionShots.value
+                    .single()
+            assertThat(shot.iwr6843HorizontalDeg).isEqualTo(2.1)
+            assertThat(h.repository.detailFor(sseShotAt(PiFixtures.SHOT_TIMESTAMP))?.iwr6843HorizontalDeg)
+                .isEqualTo(2.1)
+        }
+
+    @Test
+    fun aSkippedEnrichmentUpdateKeepsOneRow() =
         runPiTest { h ->
             val socket = h.connected()
             socket.serverFrame(PiFixtures.SHOT_FRAME)
 
-            socket.server("session_cleared")
+            socket.serverFrame(PiFixtures.SHOT_UPDATE_SKIPPED_FRAME)
 
-            assertThat(h.repository.sessionShots.value).isEmpty()
-            assertThat(h.repository.stats.value).isEqualTo(SessionStats.EMPTY)
-            assertThat(h.repository.shotDetails.value.keys).containsOnly(PiFixtures.SHOT_TIMESTAMP)
+            assertThat(h.repository.sessionShots.value.size).isEqualTo(1)
+        }
+
+    @Test
+    fun anUpdateForAShotThatArrivedBeforeThisPhoneConnectedIsKept() =
+        runPiTest { h ->
+            h.connected().serverFrame(PiFixtures.SHOT_UPDATE_FRAME)
+
+            assertThat(
+                h.repository.sessionShots.value
+                    .single()
+                    .shotNumber,
+            ).isEqualTo(1)
+        }
+
+    @Test
+    fun anUpdateForAnEarlierShotLeavesTheOrderAlone() =
+        runPiTest { h ->
+            val socket = h.connected()
+            socket.serverFrame(PiFixtures.SHOT_FRAME)
+            socket.serverFrame(PiFixtures.SECOND_SHOT_FRAME)
+
+            socket.serverFrame(PiFixtures.SHOT_UPDATE_FRAME)
+
+            assertThat(
+                h.repository.sessionShots.value
+                    .map { it.shotNumber },
+            ).containsExactly(2, 1)
+            assertThat(
+                h.repository.sessionShots.value
+                    .last()
+                    .iwr6843HorizontalDeg,
+            ).isEqualTo(2.1)
+        }
+
+    @Test
+    fun anUnnumberedUpdateMatchesOnlyItsOwnTimestamp() =
+        runPiTest { h ->
+            // Swing-speed rows carry no shot_number; two unnumbered rows aren't the same shot.
+            val socket = h.connected()
+            socket.server("shot", """{"shot":{"timestamp":"t1","club":"driver"}}""")
+            socket.serverFrame(PiFixtures.SHOT_FRAME)
+
+            socket.server("shot_update", """{"shot":{"timestamp":"t9","club":"7 iron"}}""")
+            socket.server("shot_update", """{"shot":{"timestamp":"t1","club":"Stack 100g"}}""")
+
+            val shots = h.repository.sessionShots.value
+            assertThat(shots.map { it.timestamp }).containsExactly("t9", PiFixtures.SHOT_TIMESTAMP, "t1")
+            assertThat(shots.last().club).isEqualTo("Stack 100g")
+            assertThat(shots[1].club).isEqualTo("driver")
+        }
+
+    @Test
+    fun theProcessingIndicatorLastsUntilTheNextShot() =
+        runPiTest { h ->
+            val socket = h.connected()
+            socket.server("shot_processing", """{"state":"capturing"}""")
+            assertThat(h.repository.shotProcessing.value).isEqualTo(ShotProcessingState.CAPTURING)
+            socket.serverFrame(PiFixtures.SHOT_PROCESSING_FRAME)
+            assertThat(h.repository.shotProcessing.value).isEqualTo(ShotProcessingState.CALCULATING)
+
+            socket.serverFrame(PiFixtures.SHOT_FRAME)
+
+            assertThat(h.repository.shotProcessing.value).isNull()
         }
 
     @Test
@@ -338,13 +490,10 @@ class PiSessionRepositoryTest {
         }
 
     @Test
-    fun playerAndTrainingImplementChanges() =
+    fun trainingImplementChanges() =
         runPiTest { h ->
-            val socket = h.connected()
-            socket.server("player_changed", """{"player_name":"Ann"}""")
-            socket.server("training_implement_changed", """{"implement":"stack-100g","label":"Stack 100g"}""")
+            h.connected().serverFrame(PiFixtures.TRAINING_IMPLEMENT_CHANGED_FRAME)
 
-            assertThat(h.repository.playerName.value).isEqualTo("Ann")
             assertThat(
                 h.repository.trainingImplement.value
                     ?.label,
@@ -356,129 +505,10 @@ class PiSessionRepositoryTest {
         runPiTest { h ->
             val socket = h.connected()
             socket.server("shot", "\"nope\"")
-            socket.server("player_changed", """{"player_name":"Ann"}""")
+            socket.serverFrame(PiFixtures.TRAINING_IMPLEMENT_CHANGED_FRAME)
 
             assertThat(h.logs.single()).startsWith("Dropped malformed 'shot'")
-            assertThat(h.repository.playerName.value).isEqualTo("Ann")
-        }
-
-    // endregion
-
-    // region devices, debug, sim, cloud
-
-    @Test
-    fun cameraStatusMergesPartialUpdatesAndBallDetection() =
-        runPiTest { h ->
-            val socket = h.connected()
-            socket.server("camera_status", """{"enabled":true,"available":true,"streaming":false}""")
-            socket.server("ball_detection", """{"detected":true,"confidence":0.83}""")
-            socket.server("camera_status", """{"enabled":true,"available":true,"streaming":true}""")
-
-            assertThat(h.repository.cameraStatus.value).isEqualTo(
-                CameraStatus(
-                    available = true,
-                    enabled = true,
-                    streaming = true,
-                    ballDetected = true,
-                    ballConfidence = 0.83,
-                ),
-            )
-
-            socket.server("camera_status", """{"enabled":false,"available":false,"error":"Camera not initialized"}""")
-            assertThat(h.repository.cameraStatus.value.error).isEqualTo("Camera not initialized")
-            assertThat(h.repository.cameraStatus.value.available).isFalse()
-        }
-
-    @Test
-    fun triggerDiagnosticsAppendAndCountLikeTheWebDebugStore() =
-        runPiTest { h ->
-            val socket = h.connected()
-            socket.serverFrame(PiFixtures.TRIGGER_STATUS_FRAME)
-            socket.server("trigger_diagnostic", """{"accepted":true,"reason":"ok"}""")
-            socket.server("trigger_diagnostic", """{"accepted":false,"reason":"too slow"}""")
-
-            assertThat(h.repository.triggerStatus.value).isEqualTo(
-                TriggerStatus(mode = "mock", triggersTotal = 2, triggersAccepted = 1, triggersRejected = 1),
-            )
-            assertThat(
-                h.repository.debugState.value.triggerDiagnostics
-                    .map { it.reason },
-            ).containsExactly("ok", "too slow")
-        }
-
-    @Test
-    fun debugFeedsFillWhileEnabledAndClearWhenDisabled() =
-        runPiTest { h ->
-            val socket = h.connected()
-            socket.server("debug_toggled", """{"enabled":true,"log_path":"/home/pi/openflight_logs/debug.jsonl"}""")
-            repeat(55) { socket.server("debug_reading", """{"speed":$it,"direction":"outbound","magnitude":1}""") }
-            socket.server(
-                "debug_shot",
-                """{"type":"shot","radar":{"ball_speed_mph":140.1},"camera":null,"club":"driver"}""",
-            )
-
-            val enabled = h.repository.debugState.value
-            assertThat(enabled.enabled).isTrue()
-            assertThat(enabled.logPath).isEqualTo("/home/pi/openflight_logs/debug.jsonl")
-            assertThat(enabled.readings.size).isEqualTo(50)
-            assertThat(enabled.readings.first().speed).isEqualTo(5.0)
-            assertThat(
-                enabled.shotLogs
-                    .single()
-                    .radar
-                    ?.ballSpeedMph,
-            ).isEqualTo(140.1)
-
-            socket.server("debug_toggled", """{"enabled":false}""")
-
-            val disabled = h.repository.debugState.value
-            assertThat(disabled.enabled).isFalse()
-            assertThat(disabled.readings).isEmpty()
-            assertThat(disabled.shotLogs).isEmpty()
-        }
-
-    @Test
-    fun simStatusIsKeptPerTargetWithTheLatestShotAndPlayer() =
-        runPiTest { h ->
-            val socket = h.connected()
-            socket.server("sim_status", """{"target":"gspro","state":"connecting","host":"10.0.0.2","port":921}""")
-            socket.server("sim_status", """{"target":"gspro","state":"connected","host":"10.0.0.2","port":921}""")
-            socket.server(
-                "sim_shot",
-                """{"target":"gspro","shot_number":3,"fields":["BallSpeed"],"values":{"BallSpeed":143.3},""" +
-                    """"provenance":{"BallSpeed":"measured"}}""",
-            )
-            socket.server("sim_player", """{"target":"gspro","handed":"RH","club":"7-iron"}""")
-
-            val sim = h.repository.simState.value
-            assertThat(sim.connectors.keys).containsOnly("gspro")
-            assertThat(sim.connectors.getValue("gspro").state).isEqualTo("connected")
-            assertThat(sim.latestShot?.shotNumber).isEqualTo(3)
-            assertThat(sim.latestPlayer?.club).isEqualTo("7-iron")
-        }
-
-    @Test
-    fun radarConfigAndCloudStatusMirrorTheServer() =
-        runPiTest { h ->
-            val socket = h.connected()
-            socket.server("radar_config", """{"min_speed":10,"max_speed":220,"min_magnitude":0,"transmit_power":0}""")
-            socket.server("cloud_upload_status", """{"state":"complete","message":"Nothing to upload.","summary":{}}""")
-
-            assertThat(h.repository.radarConfig.value).isEqualTo(RadarConfig(minSpeed = 10, maxSpeed = 220))
-            assertThat(h.repository.cloudUploadStatus.value.message).isEqualTo("Nothing to upload.")
-        }
-
-    @Test
-    fun serverErrorsArriveAsNotices() =
-        runPiTest { h ->
-            val socket = h.connected()
-            h.repository.notices.test {
-                socket.server("delete_shot_error", """{"error":"Shot not found"}""")
-                socket.server("radar_config_error", """{"error":"Radar not connected"}""")
-
-                assertThat(awaitItem()).isEqualTo(PiNotice.DeleteShotFailed("Shot not found"))
-                assertThat(awaitItem()).isEqualTo(PiNotice.RadarConfigFailed("Radar not connected"))
-            }
+            assertThat(h.repository.trainingImplement.value).isNotNull()
         }
 
     // endregion
@@ -486,15 +516,12 @@ class PiSessionRepositoryTest {
     // region commands
 
     @Test
-    fun commandsEmitTheWebUisEventNamesAndPayloads() =
+    fun commandsEmitTheServersEventNamesAndPayloads() =
         runPiTest { h ->
             val socket = h.connected()
             val repository = h.repository
 
             repository.simulateShot()
-            repository.deleteShot(PiFixtures.SHOT_TIMESTAMP)
-            repository.clearSession()
-            repository.setPlayer("Ann")
             repository.setTrainingImplement("stack-100g")
             repository.toggleCamera()
             repository.toggleCameraStream()
@@ -506,9 +533,6 @@ class PiSessionRepositoryTest {
 
             assertThat(socket.emitted).containsExactly(
                 "simulate_shot" to null,
-                "delete_shot" to buildJsonObject { put("timestamp", PiFixtures.SHOT_TIMESTAMP) },
-                "clear_session" to null,
-                "set_player" to buildJsonObject { put("player_name", "Ann") },
                 "set_training_implement" to buildJsonObject { put("implement", "stack-100g") },
                 "toggle_camera" to null,
                 "toggle_camera_stream" to null,
@@ -544,20 +568,8 @@ class PiSessionRepositoryTest {
             h.repository.uploadCloud()
 
             assertThat(socket.emittedNames).containsExactly("upload_cloud")
-            assertThat(
-                h.repository.cloudUploadStatus.value,
-            ).isEqualTo(CloudUploadStatus(CloudUploadState.RUNNING, "Uploading..."))
-        }
-
-    @Test
-    fun commandsFailWithNotConnectedWhileReconnecting() =
-        runPiTest { h ->
-            h.connected().state.value = SocketConnectionState.Reconnecting(1, 1_000, "Connection closed")
-
-            assertFailure { h.repository.clearSession() }
-                .isInstanceOf(WifiOnlyFeatureException::class)
-                .prop(WifiOnlyFeatureException::reason)
-                .isEqualTo(WifiOnlyFeatureException.Reason.NOT_CONNECTED)
+            assertThat(h.repository.cloudUploadStatus.value)
+                .isEqualTo(CloudUploadStatus(CloudUploadState.RUNNING, "Uploading..."))
         }
 
     @Test
@@ -569,5 +581,29 @@ class PiSessionRepositoryTest {
             assertThat(h.cameraHosts).containsExactly("pi.local:8080")
         }
 
+    @Test
+    fun sessionStatsAfterAPerProfileClearAreUnknownUnlessNothingIsLeft() =
+        runPiTest { h ->
+            val socket = h.connected()
+            socket.serverFrame(PiFixtures.SHOT_FRAME)
+
+            socket.serverFrame(PiFixtures.SESSION_CLEARED_FRAME)
+            assertThat(h.repository.stats.value).isNull()
+
+            socket.server("session_cleared", """{"profile_id":"x","shots":[]}""")
+            assertThat(h.repository.stats.value).isEqualTo(SessionStats.EMPTY)
+            assertThat(h.repository.shotDetails.value.keys).doesNotContain("x")
+        }
+
     // endregion
+
+    private fun sseShotAt(timestamp: String): ShotEvent =
+        ShotEvent(
+            schemaVersion = 1,
+            eventId = "8f6dbe50-eb69-4a3e-b343-41731776e82f",
+            timestamp = timestamp,
+            club = "driver",
+            ballSpeedMph = 116.2,
+            estimatedCarryYards = 179.0,
+        )
 }

@@ -50,7 +50,7 @@ struct TrainingContent: View {
     private var sessionCard: some View {
         VStack(alignment: .leading, spacing: 10) {
             Eyebrow("SESSION")
-            Text(state.playerName)
+            Text(state.profileName)
                 .font(.ofDisplay(.title))
                 .accessibilityIdentifier("training.player")
             Text(modeText)

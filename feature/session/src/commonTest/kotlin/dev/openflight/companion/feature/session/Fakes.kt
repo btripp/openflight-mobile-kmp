@@ -28,7 +28,7 @@ internal fun detail(
     number: Int,
     club: String = "driver",
     ballSpeedMph: Double = 140.0,
-    playerName: String = "Player 1",
+    profileName: String = "Profile 1",
 ): ShotDetail =
     ShotDetail(
         timestamp = timestamp(number),
@@ -36,7 +36,7 @@ internal fun detail(
         estimatedCarryYards = 250.0,
         carryRange = listOf(240.0, 260.0),
         club = club,
-        playerName = playerName,
+        profileName = profileName,
         launchAngleVertical = 12.0,
         launchAngleConfidence = 0.5,
     )
@@ -50,7 +50,7 @@ internal fun swingRep(
         ballSpeedMph = speedMph,
         clubSpeedMph = speedMph,
         club = "Swing Speed",
-        playerName = "Ann",
+        profileName = "Ann",
         peakMagnitude = 210.5,
         mode = "swing-speed",
         swingSpeedReadingCount = 5,

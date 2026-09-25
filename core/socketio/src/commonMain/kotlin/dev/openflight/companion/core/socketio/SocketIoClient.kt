@@ -22,10 +22,15 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 
-/** Reconnect backoff: [initialMillis], doubling per failed attempt, capped at [maxMillis]. Resets on connect. */
+/**
+ * Reconnect backoff: [initialMillis], doubling per failed attempt, capped at [maxMillis]. Resets on
+ * connect. The defaults match the Expo app's socket.io-client options
+ * (`reconnectionDelay: 500`, `reconnectionDelayMax: 5000`, plan §9.2); the SSE transport keeps its
+ * own 1 s → 15 s backoff.
+ */
 data class ReconnectPolicy(
-    val initialMillis: Long = 1_000,
-    val maxMillis: Long = 15_000,
+    val initialMillis: Long = 500,
+    val maxMillis: Long = 5_000,
 ) {
     /** The delay before retry number [attempt] (1-based). */
     fun delayFor(attempt: Int): Long {

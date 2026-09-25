@@ -22,7 +22,7 @@ internal fun previewTrainingState(
         selectedImplement = TrainingImplements.default,
         triggerMode = "swing-speed",
         isSwingSpeedMode = true,
-        playerName = "Player 1",
+        profileName = "Player 1",
         stats = stats,
         lastRep = SwingRep(104.2, "Driver", 12, 40.0, 250.0, "Player 1"),
         error = error,

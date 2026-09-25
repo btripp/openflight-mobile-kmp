@@ -54,7 +54,7 @@ internal fun SessionShotRowItem(
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 OfText(text = shot.implementLabel ?: clubLabel(shot.club), role = OfTextRole.TitleSmall, maxLines = 1)
                 OfText(
-                    text = listOfNotNull(clockTime(shot.timestamp), shot.playerName).joinToString(" · "),
+                    text = listOfNotNull(clockTime(shot.timestamp), shot.profileName).joinToString(" · "),
                     role = OfTextRole.BodySmall,
                     color = OfColorTokens.CreamDim,
                     maxLines = 1,
@@ -114,7 +114,7 @@ internal fun previewRow(
         shotNumber = number,
         timestamp = "2026-07-29T19:42:1$number.000000",
         club = club,
-        playerName = null,
+        profileName = null,
         ballSpeedMph = ballSpeed,
         clubSpeedMph = null,
         launchAngleVerticalDeg = 12.0,

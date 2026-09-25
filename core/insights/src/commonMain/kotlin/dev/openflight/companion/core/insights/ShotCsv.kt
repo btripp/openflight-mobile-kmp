@@ -13,7 +13,7 @@ import dev.openflight.companion.core.model.pi.ShotDetail
  *
  * The base columns are every measurement [ShotEvent] carries. When at least one row has the
  * Pi's Socket.IO [ShotDetail] (plan R6b), the web export's session columns are appended too
- * ([DETAIL_HEADERS]: player, mode, implement, the swing speed as `openflight_speed_mph`, and the
+ * ([DETAIL_HEADERS]: profile, mode, implement, the swing speed as `openflight_speed_mph`, and the
  * swing-speed/peak-magnitude values); rows without a detail leave them empty.
  *
  * Rows are numbered in list order (`shot_number` = index + 1); pass the list oldest-first, the
@@ -41,7 +41,7 @@ private val CSV_HEADERS =
 /** The web export's session columns (`buildValidationCsv`), appended when a [ShotDetail] is known. */
 private val DETAIL_HEADERS =
     listOf(
-        "player",
+        "profile",
         "mode",
         "implement",
         "openflight_speed_mph",
@@ -151,7 +151,7 @@ private fun detailCells(shot: ExportShot): List<String> {
     // `openflightSpeed = isSwingSpeedShot(shot) ? getSwingSpeedMph(shot) : shot.ball_speed_mph`, `.toFixed(1)`.
     val speed = if (detail.isSwingSpeed) detail.swingSpeedMph else detail.ballSpeedMph ?: shot.ballSpeedMph
     return listOf(
-        detail.playerName.orEmpty(),
+        detail.profileName.orEmpty(),
         detail.mode.orEmpty(),
         detail.trainingImplementLabel ?: detail.club ?: shot.club,
         speed?.let { ShotMetricFormatter.number(it, 1).replace(",", "") }.orEmpty(),

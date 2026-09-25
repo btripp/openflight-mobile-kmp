@@ -15,6 +15,7 @@ import dev.openflight.companion.core.model.ClubSelection
 import dev.openflight.companion.core.model.ConnectionState
 import dev.openflight.companion.core.model.GolfClub
 import dev.openflight.companion.core.model.ShotEvent
+import dev.openflight.companion.core.model.pi.DeletionState
 import dev.openflight.companion.core.model.pi.PiLinkState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -523,42 +524,71 @@ class ShotRepositoryTest {
         }
 
     @Test
-    fun whileThePiIsConnectedDeleteShotAlsoDeletesItOnThePiByTimestamp() =
+    fun whileThePiIsConnectedDeleteShotWaitsForThePiToConfirmByTimestamp() =
         runRepositoryTest(transport = TransportType.WIFI) { h ->
             val socket = h.piConnected()
-            h.wifi.shots.emit(timedShot(1, "2026-09-24T15:38:33.264795"))
+            h.wifi.shots.emit(timedShot(1, PiFixtures.SHOT_TIMESTAMP))
             h.wifi.shots.emit(timedShot(2, "2026-09-24T15:39:00.000001"))
 
             h.repository.deleteShot(shotId(1))
+
+            // Sent by timestamp, but nothing is removed before the Pi confirms.
+            assertThat(socket.emitted).containsExactly(
+                "delete_shot" to buildJsonObject { put("timestamp", JsonPrimitive(PiFixtures.SHOT_TIMESTAMP)) },
+            )
+            assertThat(h.repository.history.value.size).isEqualTo(2)
+
+            socket.serverFrame(PiFixtures.SESSION_STATE_AFTER_DELETE_FRAME)
 
             assertThat(
                 h.repository.history.value
                     .map { it.eventId },
             ).containsExactly(shotId(2))
-            assertThat(socket.emitted).containsExactly(
-                "delete_shot" to buildJsonObject { put("timestamp", JsonPrimitive("2026-09-24T15:38:33.264795")) },
+        }
+
+    @Test
+    fun aDeletionThePiRefusesKeepsTheLocalShot() =
+        runRepositoryTest(transport = TransportType.WIFI) { h ->
+            val socket = h.piConnected()
+            h.wifi.shots.emit(timedShot(1, PiFixtures.SHOT_TIMESTAMP))
+
+            h.repository.deleteShotByTimestamp(PiFixtures.SHOT_TIMESTAMP)
+            socket.serverFrame(PiFixtures.DELETE_SHOT_ERROR_FRAME)
+
+            assertThat(h.repository.history.value.size).isEqualTo(1)
+            assertThat(h.piSession.deletionState.value).isEqualTo(
+                DeletionState.Failed(PiFixtures.SHOT_TIMESTAMP, "Shot not found"),
             )
         }
 
     @Test
-    fun deleteShotByTimestampDeletesOnThePiAndTheMatchingLocalShot() =
+    fun whileThePiIsConnectedClearHistoryClearsTheActiveProfileOnceConfirmed() =
         runRepositoryTest(transport = TransportType.WIFI) { h ->
             val socket = h.piConnected()
-            h.wifi.shots.emit(timedShot(1, "2026-09-24T15:38:33.264795"))
-            h.wifi.shots.emit(timedShot(2, "2026-09-24T15:39:00.000001"))
+            // Sam is active; shot #2 is Sam's, shot #1 the default profile's.
+            socket.serverFrame(PiFixtures.PROFILES_AFTER_ADD_FRAME)
+            socket.serverFrame(PiFixtures.SHOT_FRAME)
+            socket.serverFrame(PiFixtures.SECOND_SHOT_FRAME)
+            h.wifi.shots.emit(timedShot(1, PiFixtures.SHOT_TIMESTAMP))
+            h.wifi.shots.emit(timedShot(2, PiFixtures.SECOND_SHOT_TIMESTAMP))
 
-            h.repository.deleteShotByTimestamp("2026-09-24T15:39:00.000001")
-            h.repository.deleteShotByTimestamp("2026-09-24T10:00:00") // Only on the Pi: no local shot has it.
+            h.repository.clearHistory()
+
+            assertThat(socket.emitted).containsExactly(
+                "clear_session" to buildJsonObject { put("profile_id", JsonPrimitive(PiFixtures.SAM_PROFILE_ID)) },
+            )
+            assertThat(h.repository.history.value.size).isEqualTo(2)
+
+            socket.serverFrame(PiFixtures.SESSION_CLEARED_FRAME)
 
             assertThat(
                 h.repository.history.value
                     .map { it.eventId },
             ).containsExactly(shotId(1))
-            assertThat(socket.emittedNames).containsExactly("delete_shot", "delete_shot")
         }
 
     @Test
-    fun whileThePiIsConnectedClearHistoryAlsoClearsThePiSession() =
+    fun beforeTheRosterIsKnownClearHistoryStaysLocal() =
         runRepositoryTest(transport = TransportType.WIFI) { h ->
             val socket = h.piConnected()
             h.wifi.shots.emit(shot(1))
@@ -566,7 +596,7 @@ class ShotRepositoryTest {
             h.repository.clearHistory()
 
             assertThat(h.repository.history.value).isEmpty()
-            assertThat(socket.emittedNames).containsExactly("clear_session")
+            assertThat(socket.emitted).isEmpty()
         }
 
     @Test

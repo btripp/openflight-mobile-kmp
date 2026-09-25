@@ -2,7 +2,7 @@
 import Shared
 import SwiftUI
 
-/// Settings (plans R5b/R6c), over the shared `SettingsViewModel`: units, connection info, player,
+/// Settings (plans R5b/R6c), over the shared `SettingsViewModel`: units, connection info, profile,
 /// simulator status, the radar/debug panel, cloud upload and Pi shutdown. Wi-Fi-only controls stay
 /// visible and are disabled with the VM's reason. Android's `SettingsScreen.kt` renders the same
 /// state.
@@ -26,14 +26,13 @@ struct SettingsContent: View {
     let state: SettingsUiState
     let send: (SettingsEvent) -> Void
 
-    @State private var playerName = ""
     @State private var showingShutdown = false
 
     var body: some View {
         Form {
             unitsSection
             connectionSection
-            playerSection
+            profileSection
             simulatorsSection
             radarSection
             debugSection
@@ -112,37 +111,18 @@ struct SettingsContent: View {
         .listRowBackground(Theme.bgCard)
     }
 
-    // MARK: Player
+    // MARK: Profile
 
-    private var playerSection: some View {
-        let setPlayer = state.player.setPlayer
-        return Section {
-            row("Current player", state.player.currentName ?? "—")
-            TextField("Player name", text: $playerName)
-                .textInputAutocapitalization(.words)
-                .autocorrectionDisabled()
-                .submitLabel(.done)
-                .onChange(of: playerName) { _, name in
-                    let limit = Int(PlayerSettings.companion.MAX_NAME_LENGTH)
-                    if name.count > limit { playerName = String(name.prefix(limit)) }
-                }
-                .onSubmit(submitPlayer)
-                .disabled(!setPlayer.isAvailable)
-                .accessibilityIdentifier("settings.player.field")
-            Button("Set Player", action: submitPlayer)
-                .font(.of(.body, weight: .semibold))
-                .disabled(!setPlayer.isAvailable)
-                .accessibilityIdentifier("settings.player.set")
-            if let reason = setPlayer.disabledReason { DisabledReason(reason: reason) }
+    /// The Pi's active profile, read-only until the profile picker (plan R8f).
+    private var profileSection: some View {
+        Section {
+            row("Active profile", state.profile.activeName ?? "—")
+                .accessibilityIdentifier("settings.profile")
+            if let reason = state.profile.availability.disabledReason { DisabledReason(reason: reason) }
         } header: {
-            header("PLAYER")
+            header("PROFILE")
         }
         .listRowBackground(Theme.bgCard)
-    }
-
-    private func submitPlayer() {
-        send(SettingsEventSetPlayer(name: playerName))
-        playerName = ""
     }
 
     // MARK: Simulators
