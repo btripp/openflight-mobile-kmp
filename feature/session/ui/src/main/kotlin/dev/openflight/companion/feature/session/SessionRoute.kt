@@ -20,6 +20,7 @@ import org.koin.androidx.compose.koinViewModel
 fun SessionRoute(
     onBack: () -> Unit,
     onShareCsv: (csv: String, filename: String) -> Unit,
+    onOpenHistory: (() -> Unit)? = null,
     viewModel: SessionViewModel = koinViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -33,5 +34,11 @@ fun SessionRoute(
             }
         }
     }
-    SessionScreen(uiState = uiState, onEvent = viewModel::onEvent, onBack = onBack, messages = messages)
+    SessionScreen(
+        uiState = uiState,
+        onEvent = viewModel::onEvent,
+        onBack = onBack,
+        messages = messages,
+        onOpenHistory = onOpenHistory,
+    )
 }

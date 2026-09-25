@@ -38,6 +38,10 @@ Multiplatform ViewModels, repositories and transports
 - **Session**: shot history grouped by club, with per-club stats (count, average/max ball
   speed, average carry, average club speed, average smash), swipe-to-delete, clear-with-
   confirmation, and CSV export through the Android share sheet or the iOS `ShareLink`.
+- **Session history**: every connection to the Pi starts a session that is stored on the phone
+  (Room, survives relaunches), listed newest first with its date, shot count and first/last
+  shot time; each stored session opens with the same club tabs, stats, rows and per-session CSV
+  export, and "Clear all history" deletes them after a confirmation.
 - **Wi-Fi-only features over the Pi's Socket.IO API** (`core:socketio` speaks the same
   Engine.IO v4 / Socket.IO v5 protocol as the Pi's own web UI): server-backed session history
   and stats, server-side delete/clear, confidence badges (`launch_angle_confidence`,
@@ -62,7 +66,8 @@ Multiplatform ViewModels, repositories and transports
 | `core/protocol` | The wire-protocol codec: BLE frame encoder/reassembler, `ShotEventDecoder`, SSE parsing, control envelopes, the `ShotTransport` interface. No I/O. |
 | `core/ble`, `core/network` | The BLE (Kable-backed) and Wi-Fi/SSE transports, both implementing `core/protocol`'s `ShotTransport` |
 | `core/socketio` | A minimal Engine.IO v4 / Socket.IO v5 client (Ktor WebSocket), an MJPEG multipart parser, and `PiSessionRepository` for the Wi-Fi-only features above |
-| `core/data` | `ShotRepository`/`SettingsRepository`/`PiSessionRepository` — the single source of truth the UI observes as `Flow`s; enriches SSE/BLE shots with Socket.IO detail by timestamp |
+| `core/data` | `ShotRepository`/`SettingsRepository`/`PiSessionRepository`/`ShotHistoryRepository` — the single source of truth the UI observes as `Flow`s; enriches SSE/BLE shots with Socket.IO detail by timestamp and writes every shot through to the persistent history |
+| `core/database` | The persistent multi-session shot history: a Room 3 KMP database (bundled SQLite) with sessions and shots, used only by `core/data`. Exported schemas live in `core/database/schemas/` |
 | `core/flight` | Pure ball-flight math for the driving range: the RK4 simulator, the fixed-camera planner, and `FollowCameraPlanner` |
 | `core/sensors` | Gravity sensor `expect`/`actual` and the phone-orientation calibration math (converts Android's `TYPE_GRAVITY` into iOS CoreMotion's convention) |
 | `core/insights` | Units, per-club stats, CSV export, shot enrichment/confidence formatting — pure, depends only on `core:model` |
@@ -85,6 +90,7 @@ androidApp (Jetpack NavHost, permissions, launch extras, Koin start)
 iosApp (SwiftUI, Xcode) ──> Shared.framework = shared, exporting core:*/feature:* + KoinHelper
 shared ──> feature:dashboard | calibration | range | session | training | camera | settings
              └──> core:data ──> core:ble / core:network / core:socketio ──> core:protocol ──> core:model
+                        └──> core:database (Room 3 KMP)
 feature:range ──> core:flight ; feature:calibration ──> core:sensors ; others ──> core:insights
 ```
 

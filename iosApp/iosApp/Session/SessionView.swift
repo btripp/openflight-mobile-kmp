@@ -14,6 +14,12 @@ struct SessionView: View {
     var body: some View {
         SessionContent(state: host.state, send: host.send, export: export)
             .navigationTitle("Session")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    NavigationLink("History") { SessionHistoryView() }
+                        .accessibilityIdentifier(SessionHistoryTestTags.shared.OPEN)
+                }
+            }
             .messageBanner($message)
             .task {
                 await host.collect(host.viewModel.sideEffects) { effect in
@@ -76,9 +82,9 @@ struct SessionContent: View {
                 Section { simulateButton }.listRowBackground(Theme.bgCard)
             }
             if state.hasShots {
-                Section { tabs }
+                Section { SessionClubTabs(state: state) { send(SessionEventSelectClub(club: $0)) } }
                     .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
-                Section { stats }.listRowBackground(Theme.bgCard)
+                Section { SessionStatsGrid(state: state) }.listRowBackground(Theme.bgCard)
                 Section { actions }.listRowBackground(Theme.bgCard)
                 Section {
                     ForEach(state.shots, id: \.id) { row in
@@ -156,13 +162,65 @@ struct SessionContent: View {
         }
     }
 
-    // MARK: Tabs and stats
+    // MARK: Actions
 
-    private var tabs: some View {
+    private var actions: some View {
+        HStack(spacing: 12) {
+            Group {
+                if let export {
+                    ShareLink(item: export.url, preview: SharePreview(export.filename)) {
+                        Label("Export CSV", systemImage: "square.and.arrow.up")
+                            .frame(maxWidth: .infinity)
+                    }
+                } else {
+                    Button {} label: {
+                        Label("Export CSV", systemImage: "square.and.arrow.up")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .disabled(true)
+                }
+            }
+            .accessibilityIdentifier("session.export")
+
+            Button(role: .destructive) {
+                confirmingClear = true
+            } label: {
+                Label("Clear", systemImage: "trash")
+                    .frame(maxWidth: .infinity)
+            }
+            .tint(Theme.danger)
+            .accessibilityIdentifier("session.clear")
+            // Attached to the button, so where iOS shows it as a popover it points at Clear.
+            .confirmationDialog("Clear session?", isPresented: $confirmingClear, titleVisibility: .visible) {
+                Button("Clear", role: .destructive) { send(SessionEventClearHistory.shared) }
+                    .accessibilityIdentifier("session.clear.confirm")
+                Button("Cancel", role: .cancel) {}
+                    .accessibilityIdentifier("session.clear.cancel")
+            } message: {
+                Text(
+                    isPi
+                        ? "Every shot is removed from this phone and from the Pi's session."
+                        : "Every shot is removed from this phone."
+                )
+            }
+        }
+        .font(.of(.body, weight: .semibold))
+        .buttonStyle(.bordered)
+        .tint(Theme.gold)
+    }
+}
+
+/// "All" plus one chip per club (`StatsView.tsx`'s club filter), shared by the live session and a
+/// stored one (plan R8h).
+struct SessionClubTabs: View {
+    let state: SessionUiState
+    let onSelect: (String?) -> Void
+
+    var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 ChipButton(label: "All", count: state.allCount, isSelected: state.selectedClub == nil) {
-                    send(SessionEventSelectClub(club: nil))
+                    onSelect(nil)
                 }
                 .accessibilityIdentifier("session.tab.all")
                 ForEach(state.clubChips, id: \.club) { chip in
@@ -171,7 +229,7 @@ struct SessionContent: View {
                         count: chip.count,
                         isSelected: state.selectedClub == chip.club
                     ) {
-                        send(SessionEventSelectClub(club: chip.club))
+                        onSelect(chip.club)
                     }
                     .accessibilityIdentifier("session.tab.\(chip.club)")
                 }
@@ -180,8 +238,15 @@ struct SessionContent: View {
         }
         .listRowBackground(Color.clear)
     }
+}
 
-    private var stats: some View {
+/// The selected tab's stats tiles, or swing-speed tiles for a swing session.
+struct SessionStatsGrid: View {
+    let state: SessionUiState
+
+    private var units: UnitSystem { state.units }
+
+    var body: some View {
         let speed = Units.speedUnit(units)
         let tiles: [(String, String)]
         if let swing = state.swingStats {
@@ -228,53 +293,6 @@ struct SessionContent: View {
         .padding(.vertical, 4)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("session.stats")
-    }
-
-    // MARK: Actions
-
-    private var actions: some View {
-        HStack(spacing: 12) {
-            Group {
-                if let export {
-                    ShareLink(item: export.url, preview: SharePreview(export.filename)) {
-                        Label("Export CSV", systemImage: "square.and.arrow.up")
-                            .frame(maxWidth: .infinity)
-                    }
-                } else {
-                    Button {} label: {
-                        Label("Export CSV", systemImage: "square.and.arrow.up")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .disabled(true)
-                }
-            }
-            .accessibilityIdentifier("session.export")
-
-            Button(role: .destructive) {
-                confirmingClear = true
-            } label: {
-                Label("Clear", systemImage: "trash")
-                    .frame(maxWidth: .infinity)
-            }
-            .tint(Theme.danger)
-            .accessibilityIdentifier("session.clear")
-            // Attached to the button, so where iOS shows it as a popover it points at Clear.
-            .confirmationDialog("Clear session?", isPresented: $confirmingClear, titleVisibility: .visible) {
-                Button("Clear", role: .destructive) { send(SessionEventClearHistory.shared) }
-                    .accessibilityIdentifier("session.clear.confirm")
-                Button("Cancel", role: .cancel) {}
-                    .accessibilityIdentifier("session.clear.cancel")
-            } message: {
-                Text(
-                    isPi
-                        ? "Every shot is removed from this phone and from the Pi's session."
-                        : "Every shot is removed from this phone."
-                )
-            }
-        }
-        .font(.of(.body, weight: .semibold))
-        .buttonStyle(.bordered)
-        .tint(Theme.gold)
     }
 }
 
