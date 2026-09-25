@@ -12,9 +12,11 @@ import dev.openflight.companion.core.database.buildShotHistoryDatabase
 import dev.openflight.companion.core.database.inMemoryShotHistoryDatabaseBuilder
 import dev.openflight.companion.core.model.ConnectionState
 import dev.openflight.companion.core.model.ShotEvent
+import dev.openflight.companion.core.model.pi.ShotDetail
 import dev.openflight.companion.core.protocol.SchemaV2Event
 import dev.openflight.companion.core.socketio.SocketConnectionState
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -295,8 +297,64 @@ class ShotHistoryWriteThroughTest {
             assertThat(h.storedTimestamps()).containsExactly("2026-09-25T10:01:00")
         }
 
+    // Plan F3, A8: the Pi's deletes are about the phone's own sessions only.
+    @Test
+    fun anImportedSessionWithTheSameTimestampSurvivesAPiDeleteShot() =
+        runWriteThroughTest { h ->
+            // Queued first, awaited last: awaiting the database here would let virtual time run on.
+            val imported = async { h.history.importSession(importedSession(PiFixtures.SHOT_TIMESTAMP)) }
+            h.wifi.state.value = ConnectionState.Connected
+            val socket = h.piConnected()
+            h.wifi.shots.emit(timedShot(1, PiFixtures.SHOT_TIMESTAMP))
+
+            h.repository.deleteShot(shotId(1))
+            socket.serverFrame(PiFixtures.SESSION_STATE_AFTER_DELETE_FRAME)
+
+            val current = h.current()
+            val importedId = checkNotNull(imported.await())
+            assertThat(h.storedTimestamps(current)).isEmpty()
+            assertThat(h.storedTimestamps(importedId)).containsExactly(PiFixtures.SHOT_TIMESTAMP)
+        }
+
+    @Test
+    fun anImportedSessionWithTheSameTimestampSurvivesASessionCleared() =
+        runWriteThroughTest(transport = TransportType.BLUETOOTH) { h ->
+            val imported = async { h.history.importSession(importedSession("2026-09-25T10:00:00")) }
+            h.ble.state.value = ConnectionState.Connected
+            h.ble.shots.emit(timedShot(1, "2026-09-25T10:00:00").copy(profileId = "sam"))
+
+            h.ble.schemaEvents.emit(SchemaV2Event.SessionCleared("sam"))
+
+            val current = h.current()
+            val importedId = checkNotNull(imported.await())
+            assertThat(h.storedTimestamps(current)).isEmpty()
+            assertThat(h.storedTimestamps(importedId)).containsExactly("2026-09-25T10:00:00")
+            assertThat(
+                h.history
+                    .sessions(includeImported = true)
+                    .first()
+                    .map { it.id },
+            ).containsExactly(importedId)
+        }
+
     private companion object {
         const val HOST = "pi.local:8080"
+
+        fun importedSession(timestamp: String) =
+            ImportedSession(
+                ownerName = "Sam",
+                title = null,
+                startedAtEpochMillis = 1_000L,
+                shots =
+                    listOf(
+                        ShotDetail(
+                            timestamp = timestamp,
+                            shotNumber = 1,
+                            ballSpeedMph = 150.0,
+                            club = "driver",
+                        ),
+                    ),
+            )
 
         fun timedShot(
             number: Int,

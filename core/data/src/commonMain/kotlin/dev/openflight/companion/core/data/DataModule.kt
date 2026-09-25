@@ -27,7 +27,9 @@ expect val platformDataModule: Module
  * Everything `core:data` provides: [SettingsRepository], [ShotRepository] and
  * [PiSessionRepository] (all singletons; [ShotRepository.start]/[ShotRepository.stop] drive the
  * Pi session too), plus the transports and the one shared [HttpClient] behind them. Includes [platformDataModule],
- * so an app only lists `dataModule`.
+ * so an app only lists `dataModule`. The history repositories ([ShotHistoryRepository],
+ * [BagRepository], [ActivityRepository]) come from `shotHistoryModule`; [ActiveGameRepository] and
+ * [FinalShotStream] (plan F3) are bound here.
  */
 val dataModule: Module =
     module {
@@ -70,4 +72,7 @@ val dataModule: Module =
                 bluetooth = get<BleShotTransport>(),
             )
         }
+        // F3 (A2): the running game for the call-outs, and final shots as events.
+        single<ActiveGameRepository> { DefaultActiveGameRepository() }
+        single<FinalShotStream> { DefaultFinalShotStream(get<ShotRepository>().history) }
     }
