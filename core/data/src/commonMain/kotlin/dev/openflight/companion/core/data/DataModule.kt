@@ -75,4 +75,12 @@ val dataModule: Module =
         // F3 (A2): the running game for the call-outs, and final shots as events.
         single<ActiveGameRepository> { DefaultActiveGameRepository() }
         single<FinalShotStream> { DefaultFinalShotStream(get<ShotRepository>().history) }
+        // F2 (plan A2): manual playing conditions, in the settings DataStore.
+        single<ConditionsRepository> {
+            DataStoreConditionsRepository(
+                dataStore = get(),
+                scope =
+                    CoroutineScope(SupervisorJob() + Dispatchers.Default),
+            )
+        }
     }

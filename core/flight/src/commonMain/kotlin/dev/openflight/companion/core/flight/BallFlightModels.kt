@@ -60,12 +60,16 @@ data class FlightPoint(
  * used only for SwiftUI `Identifiable` list diffing); nothing in the pure math depends on `id`
  * being distinct from `eventId`, and this avoids taking a random-UUID dependency in a pure-math
  * module.
+ *
+ * [landingSpinRpm] is the spin when the ball lands (the launch spin when spin decay is off), or
+ * `null` for a trajectory that didn't come from [BallFlightSimulator].
  */
 data class FlightTrajectory(
     val eventId: String,
     val points: List<FlightPoint>,
     val provenance: FlightInputProvenance,
     val id: String = eventId,
+    val landingSpinRpm: Double? = null,
 ) {
     val apexMeters: Double = points.maxOfOrNull { it.positionMeters.y } ?: 0.0
     val flightTime: Double = points.lastOrNull()?.time ?: 0.0

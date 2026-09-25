@@ -47,6 +47,24 @@ class BallFlightSimulatorTest {
     }
 
     @Test
+    fun spinDecayIsOffByDefaultSoLandingSpinIsLaunchSpin() {
+        val input = makeInput(speed = 67.0, launch = 13.0, spin = 2_500.0, carry = 245.0)
+
+        assertThat(BallFlightSimulator.Configuration.standard.spinDecayPerSecond).isEqualTo(0.0)
+        assertThat(BallFlightSimulator().simulate(input).landingSpinRpm).isEqualTo(2_500.0)
+    }
+
+    @Test
+    fun conditionsSpinDecayFollowsTheExponential() {
+        val input = makeInput(speed = 67.0, launch = 13.0, spin = 2_500.0, carry = 245.0)
+        val trajectory = BallFlightSimulator(BallFlightSimulator.Configuration.conditions).simulate(input)
+        val landingSpin = checkNotNull(trajectory.landingSpinRpm)
+
+        assertThat(landingSpin).isCloseTo(2_500.0 * kotlin.math.exp(-0.04 * trajectory.flightTime), 1.0)
+        assertThat(landingSpin).isLessThan(2_500.0)
+    }
+
+    @Test
     fun dragReducesUnconstrainedCarry() {
         val aerodynamicConfiguration = BallFlightSimulator.Configuration.standard.copy(constrainToTargetCarry = false)
         val input = makeInput(speed = 60.0, launch = 14.0, spin = 0.0, carry = 240.0)

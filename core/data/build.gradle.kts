@@ -22,6 +22,8 @@ kotlin {
             implementation(libs.okio)
             // WifiShotTransport's constructor takes an HttpClient; core:network keeps Ktor as implementation.
             implementation(libs.ktor.client.core)
+            // F2 (plan A1): conditions-adjusted distances; ConditionsRepository's API is core:model types.
+            implementation(projects.core.flight)
             // dataModule/platformDataModule are public Koin Modules.
             api(project.dependencies.platform(libs.koin.bom))
             api(libs.koin.core)
