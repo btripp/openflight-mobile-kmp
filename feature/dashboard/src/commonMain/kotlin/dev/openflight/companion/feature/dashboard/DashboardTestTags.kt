@@ -18,6 +18,8 @@ object DashboardTestTags {
     const val CLUB_CONFIRM = "dashboard.clubConfirm"
     const val LOCAL_NETWORK_DENIED = "dashboard.localNetworkDenied"
     const val OPEN_SETTINGS = "dashboard.openSettings"
+    const val PROCESSING = "dashboard.processing"
+    const val CONNECTION_PROBLEM = "dashboard.connectionProblem"
 
     /** A tap-to-fill host hint, by its host (for example "192.168.4.1:8080"). */
     fun hostHint(host: String): String = "dashboard.hostHint.$host"

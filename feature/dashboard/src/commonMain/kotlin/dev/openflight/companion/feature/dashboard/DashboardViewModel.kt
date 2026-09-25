@@ -11,6 +11,7 @@ import dev.openflight.companion.core.insights.ShotEnrichment
 import dev.openflight.companion.core.insights.computeClubChips
 import dev.openflight.companion.core.insights.computeClubStats
 import dev.openflight.companion.core.model.ConnectionErrorKind
+import dev.openflight.companion.core.model.ConnectionProblem
 import dev.openflight.companion.core.model.ConnectionState
 import dev.openflight.companion.core.model.GolfClub
 import dev.openflight.companion.core.model.ShotEvent
@@ -56,6 +57,7 @@ class DashboardViewModel(
     private val piLink =
         piSession.linkState.map { link ->
             PiLinkFlags(
+                link = link,
                 connected = link == PiLinkState.Connected,
                 localNetworkDenied = link is PiLinkState.Reconnecting && link.localNetworkDenied,
             )
@@ -83,16 +85,30 @@ class DashboardViewModel(
                     link.localNetworkDenied ||
                         (state as? ConnectionState.Error)?.kind == ConnectionErrorKind.LOCAL_NETWORK_DENIED,
                 showClubConfirmation = confirmation == ClubConfirmation.Phase.SHOWING,
+                problem = ConnectionProblem.of(state, link.link),
             )
         }
 
     val uiState: StateFlow<DashboardUiState> =
-        combine(panel, shots.history, settings.units, piSession.shotDetails) { connection, history, units, details ->
+        combine(
+            panel,
+            shots.history,
+            settings.units,
+            piSession.shotDetails,
+            piSession.shotProcessing,
+        ) { connection, history, units, details, processingState ->
             val stats = computeClubStats(history)
             val chips = computeClubChips(history)
             val latest = history.firstOrNull()
+            val processing = ProcessingIndicator.of(processingState)
             if (latest == null) {
-                DashboardUiState.Waiting(connection, units = units, clubStats = stats, clubChips = chips)
+                DashboardUiState.Waiting(
+                    connection,
+                    units = units,
+                    clubStats = stats,
+                    clubChips = chips,
+                    processing = processing,
+                )
             } else {
                 DashboardUiState.Live(
                     connection = connection,
@@ -102,6 +118,7 @@ class DashboardViewModel(
                     clubStats = stats,
                     clubChips = chips,
                     enrichments = enrichments(history, details),
+                    processing = processing,
                 )
             }
         }.stateIn(
@@ -246,6 +263,7 @@ class DashboardViewModel(
     )
 
     private data class PiLinkFlags(
+        val link: PiLinkState,
         val connected: Boolean,
         val localNetworkDenied: Boolean,
     )

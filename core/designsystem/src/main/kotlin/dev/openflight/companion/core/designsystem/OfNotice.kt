@@ -2,13 +2,16 @@
 package dev.openflight.companion.core.designsystem
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -37,6 +40,7 @@ fun OfNotice(
     actions: (@Composable ColumnScope.() -> Unit)? = null,
 ) {
     val color = tone.noticeColor()
+    val reduceMotion = rememberOfReduceMotion()
     Column(
         modifier =
             modifier
@@ -55,9 +59,27 @@ fun OfNotice(
             horizontalArrangement = Arrangement.spacedBy(OfSpacing.Md),
         ) {
             when {
-                busy -> OfSpinner(modifier = Modifier.size(22.dp))
-                tone == StatusTone.Positive -> OfIcon(OfIcons.Check, contentDescription = null, tint = color)
-                else -> OfIcon(OfIcons.Warning, contentDescription = null, tint = color)
+                // With animations removed, a still ring says "working" without spinning.
+                busy && reduceMotion -> {
+                    Box(
+                        modifier =
+                            Modifier
+                                .size(22.dp)
+                                .border(3.dp, OfColorTokens.Gold, CircleShape),
+                    )
+                }
+
+                busy -> {
+                    OfSpinner(modifier = Modifier.size(22.dp))
+                }
+
+                tone == StatusTone.Positive -> {
+                    OfIcon(OfIcons.Check, contentDescription = null, tint = color)
+                }
+
+                else -> {
+                    OfIcon(OfIcons.Warning, contentDescription = null, tint = color)
+                }
             }
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(OfSpacing.Xs)) {
                 OfText(text = title, role = OfTextRole.TitleSmall)

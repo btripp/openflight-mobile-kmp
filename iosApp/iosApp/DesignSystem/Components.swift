@@ -94,6 +94,8 @@ struct NoticeRow: View {
     var detail: String?
     let tone: Tone
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     private var color: Color {
         switch tone {
         case .busy, .warning: Theme.warning
@@ -105,6 +107,9 @@ struct NoticeRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             switch tone {
+            case .busy where reduceMotion:
+                // A still symbol instead of a spinning one when Reduce Motion is on.
+                Image(systemName: "hourglass").foregroundStyle(Theme.gold)
             case .busy:
                 ProgressView().tint(Theme.gold)
             case .success:

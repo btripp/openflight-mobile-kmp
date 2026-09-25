@@ -102,6 +102,7 @@ fun DashboardScreen(
             verticalArrangement = Arrangement.spacedBy(OfSpacing.Xl),
         ) {
             ConnectionCard(uiState.connection, onEvent, onOpenCalibration)
+            uiState.processing?.let { ProcessingNotice(it) }
             when (uiState) {
                 is DashboardUiState.Waiting -> {
                     EmptyState()
@@ -171,6 +172,7 @@ private fun ConnectionCard(
             modifier = Modifier.fillMaxWidth(),
         )
         StatusRow(panel, onRetry = { onEvent(DashboardEvent.Retry) })
+        panel.visibleProblem?.let { ConnectionProblemNotice(it) }
         if (panel.showHostField) {
             OfTextField(
                 value = panel.hostText,

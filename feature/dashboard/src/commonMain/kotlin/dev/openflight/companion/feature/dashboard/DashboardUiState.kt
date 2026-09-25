@@ -7,6 +7,7 @@ import dev.openflight.companion.core.insights.ClubChip
 import dev.openflight.companion.core.insights.ClubStats
 import dev.openflight.companion.core.insights.ShotEnrichment
 import dev.openflight.companion.core.insights.UnitSystem
+import dev.openflight.companion.core.model.ConnectionProblem
 import dev.openflight.companion.core.model.ConnectionState
 import dev.openflight.companion.core.model.GolfClub
 import dev.openflight.companion.core.model.ShotEvent
@@ -27,12 +28,16 @@ sealed interface DashboardUiState {
     val clubStats: ClubStats
     val clubChips: List<ClubChip>
 
+    /** What the Pi is doing with the last swing (plan R8f), or `null`. */
+    val processing: ProcessingIndicator?
+
     /** No shot yet: "Waiting for a shot". */
     data class Waiting(
         override val connection: ConnectionPanelState,
         override val units: UnitSystem = SettingsRepository.DEFAULT_UNITS,
         override val clubStats: ClubStats = ClubStats.EMPTY,
         override val clubChips: List<ClubChip> = emptyList(),
+        override val processing: ProcessingIndicator? = null,
     ) : DashboardUiState
 
     /**
@@ -52,6 +57,7 @@ sealed interface DashboardUiState {
         override val clubStats: ClubStats = ClubStats.EMPTY,
         override val clubChips: List<ClubChip> = emptyList(),
         val enrichments: Map<String, ShotEnrichment> = emptyMap(),
+        override val processing: ProcessingIndicator? = null,
     ) : DashboardUiState {
         val latestEnrichment: ShotEnrichment? get() = enrichments[latest.eventId]
 
@@ -76,6 +82,7 @@ sealed interface DashboardEffect {
  * @property localNetworkDenied iOS refused the connection because Local Network access is off
  *   (plan R8d): the card offers to open Settings instead of only Retry.
  * @property showClubConfirmation the once-per-launch "is this the right club?" prompt (plan R8d).
+ * @property problem why the phone can't reach the Pi, in words (plan R8f), or `null`.
  */
 data class ConnectionPanelState(
     val transport: TransportType = SettingsRepository.DEFAULT_TRANSPORT,
@@ -87,7 +94,15 @@ data class ConnectionPanelState(
     val piLinkConnected: Boolean = false,
     val localNetworkDenied: Boolean = false,
     val showClubConfirmation: Boolean = false,
+    val problem: ConnectionProblem? = null,
 ) {
+    /**
+     * The problem the card spells out. A Local Network denial has its own block with the way out
+     * ([localNetworkDenied]), so it isn't repeated here.
+     */
+    val visibleProblem: ConnectionProblem?
+        get() = problem?.takeIf { it.kind != ConnectionProblem.Kind.LOCAL_NETWORK_DENIED }
+
     /** Tap-to-fill suggestions under the host field (Wi-Fi only). */
     val hostHints: List<HostHint>
         get() = if (showHostField) HOST_HINTS else emptyList()

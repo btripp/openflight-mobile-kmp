@@ -15,13 +15,51 @@ import androidx.compose.ui.platform.testTag
 import dev.openflight.companion.core.designsystem.OfButton
 import dev.openflight.companion.core.designsystem.OfChip
 import dev.openflight.companion.core.designsystem.OfColorTokens
+import dev.openflight.companion.core.designsystem.OfNotice
 import dev.openflight.companion.core.designsystem.OfSpacing
 import dev.openflight.companion.core.designsystem.OfText
 import dev.openflight.companion.core.designsystem.OfTextButton
 import dev.openflight.companion.core.designsystem.OfTextRole
+import dev.openflight.companion.core.designsystem.StatusTone
+import dev.openflight.companion.core.model.ConnectionProblem
 import dev.openflight.companion.core.model.GolfClub
 
 // Plan R8d's additions to the dashboard's connection card.
+
+/**
+ * Plan R8f: why the Pi can't be reached, in words with an icon, not only the red status dot. A
+ * refused address says to fix the address; anything else says Retry may help.
+ */
+@Composable
+internal fun ConnectionProblemNotice(problem: ConnectionProblem) {
+    val hint =
+        when (problem.kind) {
+            ConnectionProblem.Kind.ADDRESS_REJECTED -> "Fix the address above, then press Go."
+            ConnectionProblem.Kind.LOCAL_NETWORK_DENIED -> null
+            ConnectionProblem.Kind.CONNECTION_FAILED -> "Check the Pi is on and on this network, then Retry."
+        }
+    OfNotice(
+        title = problem.title,
+        detail = listOfNotNull(problem.detail, hint).joinToString("\n"),
+        tone = StatusTone.Negative,
+        modifier = Modifier.testTag(DashboardTestTags.CONNECTION_PROBLEM),
+    )
+}
+
+/**
+ * Plan R8f: what the Pi is doing with the last swing. A spinner (a still ring with animations
+ * removed) while capturing or calculating, a warning icon when it failed; announced politely.
+ */
+@Composable
+internal fun ProcessingNotice(processing: ProcessingIndicator) {
+    OfNotice(
+        title = processing.title,
+        detail = processing.detail,
+        tone = if (processing.failed) StatusTone.Negative else StatusTone.InProgress,
+        busy = !processing.failed,
+        modifier = Modifier.testTag(DashboardTestTags.PROCESSING),
+    )
+}
 
 /** Plan R8d: tap-to-fill host suggestions; they fill the field, Go still connects. */
 @Composable

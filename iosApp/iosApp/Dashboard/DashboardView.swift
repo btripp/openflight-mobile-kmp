@@ -45,6 +45,16 @@ struct DashboardContent: View {
                     header
                     connectionCard
 
+                    if let processing = state.processing {
+                        // Plan R8f: what the Pi is doing with the swing; the haptic and flash stay on the shot.
+                        NoticeRow(
+                            title: processing.title,
+                            detail: processing.detail,
+                            tone: processing.failed ? .problem : .busy
+                        )
+                        .accessibilityIdentifier(DashboardTestTags.shared.PROCESSING)
+                    }
+
                     if let live {
                         ShotCard(shot: live.latest, units: live.units, enrichment: live.latestEnrichment)
                             .id(live.latest.eventId)
@@ -139,6 +149,12 @@ struct DashboardContent: View {
 
             statusRow
 
+            if let problem = connection.visibleProblem {
+                // Plan R8f: why the Pi can't be reached, in words, not only the red dot.
+                NoticeRow(title: problem.title, detail: problemDetail(problem), tone: .problem)
+                    .accessibilityIdentifier(DashboardTestTags.shared.CONNECTION_PROBLEM)
+            }
+
             if connection.showHostField {
                 HStack(spacing: 10) {
                     Image(systemName: "network")
@@ -190,6 +206,15 @@ struct DashboardContent: View {
         }
         .padding(16)
         .background(Theme.cream.opacity(0.07), in: RoundedRectangle(cornerRadius: 18))
+    }
+
+    private func problemDetail(_ problem: ConnectionProblem) -> String {
+        let hint: String? = switch problem.kind {
+        case .addressRejected: "Fix the address above, then press Go."
+        case .connectionFailed: "Check the Pi is on and on this network, then Retry."
+        default: nil
+        }
+        return [problem.detail, hint].compactMap { $0 }.joined(separator: "\n")
     }
 
     /// Plan R8d: tap-to-fill suggestions; they fill the field, Go still connects.
