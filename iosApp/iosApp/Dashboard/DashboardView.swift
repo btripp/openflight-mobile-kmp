@@ -43,10 +43,9 @@ struct DashboardContent: View {
             ScrollView {
                 LazyVStack(spacing: 20) {
                     header
-                    connectionCard
-
                     if let processing = state.processing {
                         // Plan R8f: what the Pi is doing with the swing; the haptic and flash stay on the shot.
+                        // Above the long connection card so it's on screen while swinging.
                         NoticeRow(
                             title: processing.title,
                             detail: processing.detail,
@@ -54,6 +53,8 @@ struct DashboardContent: View {
                         )
                         .accessibilityIdentifier(DashboardTestTags.shared.PROCESSING)
                     }
+
+                    connectionCard
 
                     if let live {
                         ShotCard(shot: live.latest, units: live.units, enrichment: live.latestEnrichment)

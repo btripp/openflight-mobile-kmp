@@ -101,8 +101,9 @@ fun DashboardScreen(
                     .padding(horizontal = OfSpacing.Xl, vertical = OfSpacing.Sm),
             verticalArrangement = Arrangement.spacedBy(OfSpacing.Xl),
         ) {
-            ConnectionCard(uiState.connection, onEvent, onOpenCalibration)
+            // Above the long connection card, so it's on screen while swinging (plan R8f).
             uiState.processing?.let { ProcessingNotice(it) }
+            ConnectionCard(uiState.connection, onEvent, onOpenCalibration)
             when (uiState) {
                 is DashboardUiState.Waiting -> {
                     EmptyState()

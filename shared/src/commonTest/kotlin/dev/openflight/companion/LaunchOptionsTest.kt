@@ -26,6 +26,14 @@ class LaunchOptionsTest {
     }
 
     @Test
+    fun previewPiSwapsInTheFakeRepositoryToo() {
+        val options = LaunchOptions.fromArguments(listOf("app", "--preview-pi"))
+
+        assertThat(options.previewPi).isTrue()
+        assertThat(options.usesFakeRepository).isTrue()
+    }
+
+    @Test
     fun rangeModeAndPreviewFlightAreFlagsThatKeepTheRealRepository() {
         val options = LaunchOptions.fromArguments(listOf("app", "--range-mode", "--preview-flight"))
 

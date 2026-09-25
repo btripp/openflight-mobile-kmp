@@ -9,15 +9,20 @@ import dev.openflight.companion.core.data.TransportType
  * end-to-end runs.
  *
  * - iOS reads them from `NSProcessInfo.arguments`: `--ui-testing`, `--preview-shot`,
- *   `--range-mode`, `--preview-flight`, `--transport wifi|bluetooth`, `--host <host[:port]>`,
- *   `--preview-history`, `--preview-history-stuck`, `--preview-pi-session`, `--preview-pi-session-stuck`.
+ *   `--preview-pi`, `--range-mode`, `--preview-flight`, `--transport wifi|bluetooth`,
+ *   `--host <host[:port]>`, `--preview-history`, `--preview-history-stuck`, `--preview-pi-session`,
+ *   `--preview-pi-session-stuck`.
  * - Android reads intent extras: `--ez ui_testing true`, `--ez preview_shot true`,
+ *   `--ez preview_pi true`,
  *   `--ez range_mode true`, `--ez preview_flight true`, `--es transport wifi`,
  *   `--es host 10.0.2.2:8091`, `--ez preview_history true`, `--ez preview_history_stuck true`,
  *   `--ez preview_pi_session true`, `--ez preview_pi_session_stuck true`.
  *
  * @property uiTesting swap in [PreviewShotRepository] so no transport ever starts.
  * @property previewShot like [uiTesting], and the fake history holds the preview shot.
+ * @property previewPi like [uiTesting], plus [PreviewDevicePiSessionRepository] (plan R8f): a
+ *   profile roster, power and trigger status and a swing being calculated, for the picker, device
+ *   cards and shutdown UI tests. (The session screen's deletes use [previewPiSession] instead.)
  * @property rangeMode open the driving range over the dashboard at launch (ContentView.swift:33-35).
  * @property previewFlight fly the displayed shot whenever the range opens (DrivingRangeView.swift).
  * @property transport persisted as the selected transport before the UI starts.
@@ -32,6 +37,7 @@ import dev.openflight.companion.core.data.TransportType
 data class LaunchOptions(
     val uiTesting: Boolean = false,
     val previewShot: Boolean = false,
+    val previewPi: Boolean = false,
     val rangeMode: Boolean = false,
     val previewFlight: Boolean = false,
     val transport: TransportType? = null,
@@ -42,11 +48,12 @@ data class LaunchOptions(
     val previewPiSessionStuck: Boolean = false,
 ) {
     val usesFakeRepository: Boolean
-        get() = uiTesting || previewShot
+        get() = uiTesting || previewShot || previewPi
 
     companion object {
         const val UI_TESTING = "--ui-testing"
         const val PREVIEW_SHOT = "--preview-shot"
+        const val PREVIEW_PI = "--preview-pi"
         const val RANGE_MODE = "--range-mode"
         const val PREVIEW_FLIGHT = "--preview-flight"
         const val TRANSPORT = "--transport"
@@ -65,6 +72,7 @@ data class LaunchOptions(
             return LaunchOptions(
                 uiTesting = UI_TESTING in arguments,
                 previewShot = PREVIEW_SHOT in arguments,
+                previewPi = PREVIEW_PI in arguments,
                 rangeMode = RANGE_MODE in arguments,
                 previewFlight = PREVIEW_FLIGHT in arguments,
                 transport = valueAfter(TRANSPORT)?.let(TransportType::fromStorageValue),

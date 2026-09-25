@@ -9,6 +9,7 @@ import dev.openflight.companion.core.model.ConnectionState
 import dev.openflight.companion.core.model.GolfClub
 import dev.openflight.companion.core.model.PhoneOrientationMeasurement
 import dev.openflight.companion.core.model.ShotEvent
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
@@ -50,7 +51,14 @@ internal class PreviewShotRepository(
     override suspend fun submitCalibration(measurement: PhoneOrientationMeasurement): CalibrationResult =
         throw UnsupportedOperationException("Calibration needs a real OpenFlight Pi.")
 
+    /** Plan R8f: a preview Pi accepts the stop after a short, visible wait (the pending state). */
+    override suspend fun shutdownPi(target: String) {
+        delay(PREVIEW_SHUTDOWN_MILLIS)
+    }
+
     companion object {
+        private const val PREVIEW_SHUTDOWN_MILLIS = 1_500L
+
         /**
          * The reference's `ShotEvent.preview` (ShotEvent.swift:44-58), which carries the same numbers
          * as the `shot_v1.json` contract fixture; the fixture's event id keeps it stable.

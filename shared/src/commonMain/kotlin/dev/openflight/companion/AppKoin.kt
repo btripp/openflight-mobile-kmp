@@ -80,6 +80,13 @@ suspend fun Koin.applyLaunchOptions(options: LaunchOptions) {
             )
         loadModules(listOf(module { single<PiSessionRepository> { preview } }), allowOverride = true)
     }
+    if (options.previewPi) {
+        // Plan R8f part A: profiles, device cards and shutdown without a Pi.
+        loadModules(
+            listOf(module { single<PiSessionRepository> { PreviewDevicePiSessionRepository() } }),
+            allowOverride = true,
+        )
+    }
     val settings = get<SettingsRepository>()
     options.transport?.let { settings.setTransport(it) }
     options.host?.let { settings.setHost(it) }

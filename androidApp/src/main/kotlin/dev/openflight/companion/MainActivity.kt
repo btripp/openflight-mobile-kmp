@@ -48,6 +48,7 @@ class MainActivity : ComponentActivity() {
         LaunchOptions(
             uiTesting = getBooleanExtra(EXTRA_UI_TESTING, false),
             previewShot = getBooleanExtra(EXTRA_PREVIEW_SHOT, false),
+            previewPi = getBooleanExtra(EXTRA_PREVIEW_PI, false),
             rangeMode = getBooleanExtra(EXTRA_RANGE_MODE, false),
             previewFlight = getBooleanExtra(EXTRA_PREVIEW_FLIGHT, false),
             transport = TransportType.fromStorageValue(getStringExtra(EXTRA_TRANSPORT)),
@@ -61,6 +62,7 @@ class MainActivity : ComponentActivity() {
     private companion object {
         const val EXTRA_UI_TESTING = "ui_testing"
         const val EXTRA_PREVIEW_SHOT = "preview_shot"
+        const val EXTRA_PREVIEW_PI = "preview_pi"
         const val EXTRA_RANGE_MODE = "range_mode"
         const val EXTRA_PREVIEW_FLIGHT = "preview_flight"
         const val EXTRA_TRANSPORT = "transport"
