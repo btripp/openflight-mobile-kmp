@@ -76,7 +76,29 @@ enum class GolfClub(
     LOB_WEDGE("lw", "Lob Wedge"),
     ;
 
+    /** Compact label for chart markers and legends: "D", "3W", "5H", "7i", "PW". */
+    val shortLabel: String
+        get() {
+            val number = wireValue.substringBefore('-')
+            return when {
+                this == DRIVER -> "D"
+                wireValue.endsWith("-wood") -> "${number}W"
+                wireValue.endsWith("-hybrid") -> "${number}H"
+                wireValue.endsWith("-iron") -> "${number}i"
+                else -> wireValue.uppercase()
+            }
+        }
+
     companion object {
         fun fromWireValue(value: String): GolfClub? = entries.firstOrNull { it.wireValue == value }
+
+        /**
+         * [shortLabel] for a raw wire `club` value; unknown values (the Pi may send clubs this app
+         * doesn't know yet) fall back to their first two characters.
+         */
+        fun shortLabelFor(wireValue: String): String =
+            fromWireValue(wireValue)?.shortLabel ?: wireValue.take(SHORT_LABEL_FALLBACK_LENGTH).ifEmpty { "?" }
+
+        private const val SHORT_LABEL_FALLBACK_LENGTH = 2
     }
 }

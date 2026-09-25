@@ -72,7 +72,10 @@ suspend fun Koin.applyLaunchOptions(options: LaunchOptions) {
 
 private fun previewModule(showPreviewShot: Boolean): Module =
     module {
-        single<ShotRepository> { PreviewShotRepository(settings = get(), showPreviewShot = showPreviewShot) }
+        // Deletes and Clear edit the preview history in memory, like the real repository.
+        single<ShotRepository> {
+            LocalEditsShotRepository(PreviewShotRepository(settings = get(), showPreviewShot = showPreviewShot))
+        }
     }
 
 /**

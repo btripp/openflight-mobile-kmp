@@ -14,6 +14,9 @@ internal fun shot(
     number: Int,
     club: String = "driver",
     ballSpeedMph: Double = 140.0,
+    carryYards: Double = 250.0,
+    launchAngleHorizontal: Double? = null,
+    spinAxisDeg: Double? = null,
 ): ShotEvent =
     ShotEvent(
         schemaVersion = 1,
@@ -21,7 +24,9 @@ internal fun shot(
         timestamp = timestamp(number),
         club = club,
         ballSpeedMph = ballSpeedMph,
-        estimatedCarryYards = 250.0,
+        estimatedCarryYards = carryYards,
+        launchAngleHorizontal = launchAngleHorizontal,
+        spinAxisDeg = spinAxisDeg,
     )
 
 internal fun detail(

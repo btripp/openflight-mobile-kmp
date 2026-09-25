@@ -33,6 +33,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
@@ -53,7 +54,9 @@ class SessionViewModel(
     private val piSession: PiSessionRepository,
     private val now: () -> String = { Clock.System.now().toString() },
 ) : ViewModel() {
-    private val selectedClub = MutableStateFlow<String?>(null)
+    /** The club tab and the selected shot change together, so one state never mixes old and new. */
+    private val selection = MutableStateFlow(Selection(club = null, shotId = null))
+    private val dispersion = DispersionCalculator()
 
     private val piView =
         combine(piSession.linkState, piSession.sessionShots, piSession.profiles, piSession.shotDetails, ::PiView)
@@ -61,15 +64,25 @@ class SessionViewModel(
     private val piFlags = combine(piSession.mockMode, piSession.triggerStatus, settings.transport, ::PiFlags)
 
     val uiState: StateFlow<SessionUiState> =
-        combine(shots.history, settings.units, selectedClub, piView, piFlags) { history, units, selected, pi, flags ->
+        combine(shots.history, settings.units, selection, piView, piFlags) { history, units, picked, pi, flags ->
+            val selected = picked.club
             val base =
                 if (pi.connected) {
                     piState(pi, selected)
                 } else {
                     localState(history, pi.details, selected)
                 }
+            val points =
+                if (pi.connected) {
+                    dispersion.piPoints(pi.activeSession)
+                } else {
+                    dispersion.localPoints(history, pi.details)
+                }
+            val chart = dispersionState(points, selected, units)
             base.copy(
                 units = units,
+                dispersion = chart,
+                selectedShot = selectedShotCard(picked.shotId, chart, base.shots),
                 showSimulateShot = flags.mockMode == true,
                 simulateLabel =
                     if (flags.triggerStatus?.mode == SWING_SPEED_MODE) {
@@ -113,7 +126,8 @@ class SessionViewModel(
 
     fun onEvent(event: SessionEvent) {
         when (event) {
-            is SessionEvent.SelectClub -> selectedClub.value = event.club
+            is SessionEvent.SelectClub -> selectClub(event.club)
+            is SessionEvent.SelectShot -> selectShot(event.id)
             is SessionEvent.DeleteShot -> ifEditable { deleteShot(event.id) }
             SessionEvent.ClearHistory -> ifEditable { shots.clearHistory() }
             SessionEvent.ExportCsv -> exportCsv()
@@ -128,6 +142,19 @@ class SessionViewModel(
             action()
         } else {
             sessionEffects.trySend(SessionEffect.Message(reason))
+        }
+    }
+
+    private fun selectClub(club: String?) {
+        selection.value = Selection(club = club, shotId = null)
+    }
+
+    /** A shot from another club than the selected tab switches back to "All", so its dot shows. */
+    private fun selectShot(id: String?) {
+        val shotClub = id?.let(::clubOf)
+        selection.update { current ->
+            val keepTab = current.club == null || shotClub == null || shotClub == current.club
+            Selection(club = if (keepTab) current.club else null, shotId = id)
         }
     }
 
@@ -190,7 +217,7 @@ class SessionViewModel(
             clubChips = computeClubChips(history),
             selectedClub = selected,
             stats = computeClubStats(filtered),
-            shots = localRows(history, details),
+            shots = localRows(history, details).forTab(selected),
         )
     }
 
@@ -198,10 +225,7 @@ class SessionViewModel(
         pi: PiView,
         selected: String?,
     ): SessionUiState {
-        // The Pi's session holds every profile's rows: show the active profile's (plan 9.2). A Pi
-        // that never sends a roster (before profiles) keeps the whole session.
-        val session =
-            if (pi.profiles.loaded) pi.session.forProfile(pi.profiles.activeProfileId) else pi.session
+        val session = pi.activeSession
         val filtered = if (selected == null) session else session.filter { it.club == selected }
         val isSwingSession = filtered.isNotEmpty() && filtered.all { it.isSwingSpeed }
         return SessionUiState(
@@ -217,7 +241,7 @@ class SessionViewModel(
                 } else {
                     null
                 },
-            shots = piRows(session),
+            shots = piRows(session).forTab(selected),
         )
     }
 
@@ -228,7 +252,32 @@ class SessionViewModel(
         val details: Map<String, ShotDetail>,
     ) {
         val connected: Boolean get() = link == PiLinkState.Connected
+
+        /**
+         * The Pi's session holds every profile's rows: the screen (list, stats and dispersion
+         * chart) shows the active profile's (plan 9.2). A Pi that never sends a roster (before
+         * profiles) keeps the whole session.
+         */
+        val activeSession: List<ShotDetail>
+            get() = if (profiles.loaded) session.forProfile(profiles.activeProfileId) else session
     }
+
+    /**
+     * The club of the shot with row id [id], looked up in the whole session: the rows in [uiState]
+     * only cover the selected tab. Ids are event ids locally and timestamps on the Pi.
+     */
+    private fun clubOf(id: String): String? =
+        shots.history.value
+            .firstOrNull { it.eventId == id }
+            ?.club
+            ?: piSession.sessionShots.value
+                .firstOrNull { it.timestamp == id }
+                ?.club
+
+    private data class Selection(
+        val club: String?,
+        val shotId: String?,
+    )
 
     private data class PiFlags(
         val mockMode: Boolean?,
@@ -242,3 +291,7 @@ class SessionViewModel(
         private const val STOP_TIMEOUT_MILLIS = 5_000L
     }
 }
+
+/** The selected tab's rows; each keeps its session-wide `#n`. */
+private fun List<SessionShotRow>.forTab(club: String?): List<SessionShotRow> =
+    if (club == null) this else filter { it.club == club }

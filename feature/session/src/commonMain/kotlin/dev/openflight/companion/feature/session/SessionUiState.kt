@@ -31,7 +31,11 @@ enum class SessionSource {
  *   own session stats.
  * @property swingStats non-null when every shot in the selected tab is a swing-speed rep (the web
  *   UI then shows Swings/Last/Best/Average instead of ball stats). Only the Pi reports swing reps.
- * @property shots every shot (not filtered by the tab, like the web UI's list), newest first.
+ * @property shots the selected tab's shots, newest first, each keeping its session-wide `#n`. Unlike
+ *   the web UI's list, the list follows the tab, like the stats and the dispersion chart.
+ * @property dispersion the dispersion chart for the selected tab; `null` when no shot can be
+ *   plotted (none yet, or only swing reps).
+ * @property selectedShot the shot selected on the chart or in the list, while it's on the chart.
  * @property showSimulateShot the "Simulate Shot" button: visible only when the Pi runs `--mock`.
  * @property simulateLabel "Simulate Swing" in swing-speed mode, otherwise "Simulate Shot".
  * @property simulateAvailability why [SessionEvent.SimulateShot] can't run, if it can't.
@@ -47,6 +51,8 @@ data class SessionUiState(
     val stats: ClubStats = ClubStats.EMPTY,
     val swingStats: SwingSpeedStats? = null,
     val shots: List<SessionShotRow> = emptyList(),
+    val dispersion: SessionDispersionUiState? = null,
+    val selectedShot: SelectedShotCard? = null,
     val showSimulateShot: Boolean = false,
     val simulateLabel: String = SIMULATE_SHOT,
     val simulateAvailability: PiFeatureAvailability =

@@ -35,34 +35,40 @@ class FlightInputResolver {
         val provenance: FlightInputProvenance,
     )
 
-    fun resolve(shot: ShotEvent): FlightInput {
+    fun resolve(shot: ShotEvent): FlightInput = resolve(shot.toFlightMeasurements())
+
+    /**
+     * Same as [resolve] for a [ShotEvent], for sources that aren't one (for example a Pi session
+     * row). [FlightMeasurements.id] becomes [FlightInput.eventId].
+     */
+    fun resolve(shot: FlightMeasurements): FlightInput {
         validate(shot)
         val measurements = resolveMeasurements(shot, defaultsForClub(shot.club))
 
         return FlightInput(
-            eventId = shot.eventId,
+            eventId = shot.id,
             ballSpeedMetersPerSecond = shot.ballSpeedMph * MILES_PER_HOUR_TO_METERS_PER_SECOND,
             launchAngleDegrees = measurements.launchDegrees,
             horizontalLaunchDegrees = measurements.horizontalDegrees,
             spinRpm = measurements.spinRpm,
             spinAxisDegrees = measurements.spinAxisDegrees,
-            targetCarryMeters = shot.estimatedCarryYards * YARDS_TO_METERS,
+            targetCarryMeters = shot.carryYards * YARDS_TO_METERS,
             windMetersPerSecond = Vec3.ZERO,
             provenance = measurements.provenance,
         )
     }
 
-    private fun validate(shot: ShotEvent) {
+    private fun validate(shot: FlightMeasurements) {
         if (!shot.ballSpeedMph.isFinite() || shot.ballSpeedMph <= 0) {
             throw FlightInputResolutionError.InvalidBallSpeed
         }
-        if (!shot.estimatedCarryYards.isFinite() || shot.estimatedCarryYards <= 0) {
+        if (!shot.carryYards.isFinite() || shot.carryYards <= 0) {
             throw FlightInputResolutionError.InvalidCarry
         }
     }
 
     private fun resolveMeasurements(
-        shot: ShotEvent,
+        shot: FlightMeasurements,
         defaults: ClubFlightDefaults,
     ): ResolvedMeasurements {
         val estimated = mutableSetOf<FlightParameter>()

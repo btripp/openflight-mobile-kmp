@@ -14,6 +14,12 @@ object SessionTestTags {
     const val STATS = "session.stats"
     const val EMPTY = "session.empty"
     const val ALL_TAB = "session.tab.all"
+    const val DISPERSION = "session.dispersion"
+    const val SELECTED = "session.selected"
+    const val SELECTED_CLOSE = "session.selected.close"
+    const val SELECTED_DELETE = "session.selected.delete"
+    const val SPREAD = "session.spread"
+    const val BAD_READ_NOTE = "session.selected.badRead"
 
     /** A club tab, by its wire value (e.g. `"7-iron"`). */
     fun tab(club: String): String = "session.tab.$club"

@@ -7,11 +7,15 @@ import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isSelected
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -22,6 +26,8 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import dev.openflight.companion.core.designsystem.OfTheme
 import dev.openflight.companion.core.insights.ClubChip
 import dev.openflight.companion.core.insights.ClubStats
+import dev.openflight.companion.core.insights.DispersionArc
+import dev.openflight.companion.core.insights.DispersionViewport
 import dev.openflight.companion.core.insights.SwingSpeedStats
 import dev.openflight.companion.core.insights.UnitSystem
 import dev.openflight.companion.core.model.pi.PiFeatureAvailability
@@ -215,6 +221,138 @@ class SessionScreenTest {
         composeRule.onNode(hasScrollToNodeAction()).performScrollToNode(hasTestTag(row))
         composeRule.onNodeWithTag(row).performTouchInput { swipeLeft() }
         composeRule.waitForIdle()
+
+        // With no swipe-to-delete, a drag that stays on the row reads as a tap (selecting it on
+        // the chart, which Bluetooth allows). What matters is that nothing is deleted.
+        assertEquals(emptyList<SessionEvent>(), events.filterIsInstance<SessionEvent.DeleteShot>())
+    }
+
+    private val withChart =
+        withShots.copy(
+            dispersion =
+                SessionDispersionUiState(
+                    points =
+                        listOf(
+                            DispersionPoint(previewRows[0].id, 2, "7-iron", "7i", 1, 165.0, -3.0, sideEstimated = true),
+                            DispersionPoint(previewRows[1].id, 1, "driver", "D", 0, 264.0, 6.0, sideEstimated = false),
+                        ),
+                    ellipses = emptyList(),
+                    viewport =
+                        DispersionViewport(
+                            minCarryYards = 150.0,
+                            maxCarryYards = 280.0,
+                            halfWidthYards = 20.0,
+                            arcs = listOf(DispersionArc(200.0, 200), DispersionArc(250.0, 250)),
+                        ),
+                    estimatedSideCount = 1,
+                ),
+        )
+
+    private val selectedDriver =
+        SelectedShotCard(
+            id = previewRows[1].id,
+            shotNumber = 1,
+            clubName = "Driver",
+            carryYards = 264.0,
+            spinRpm = 2439.0,
+            clubSpeedMph = 112.1,
+        )
+
+    @Test
+    fun givenShotsOnTheChart_whenShown_thenTheDispersionCardDescribesThem() {
+        show(withChart)
+
+        composeRule
+            .onNodeWithContentDescription("Dispersion chart, 2 shots: 7-Iron, Driver", substring = true)
+            .assertIsDisplayed()
+        composeRule.onNodeWithText(estimatedCaption(1)).assertIsDisplayed()
+    }
+
+    @Test
+    fun givenNoPlottableShots_whenShown_thenTheChartIsHidden() {
+        show(withShots)
+
+        composeRule.onAllNodes(hasTestTag(SessionTestTags.DISPERSION)).assertCountEquals(0)
+    }
+
+    @Test
+    fun givenAShot_whenItsRowIsTapped_thenItIsSelectedOnTheChart() {
+        show(withChart)
+        val row = SessionTestTags.shot(previewRows[1].id)
+        composeRule.onNode(hasScrollToNodeAction()).performScrollToNode(hasTestTag(row))
+
+        composeRule.onNodeWithTag(row).performClick()
+
+        assertEquals(listOf<SessionEvent>(SessionEvent.SelectShot(previewRows[1].id)), events)
+    }
+
+    @Test
+    fun givenASelection_whenShown_thenTheCardShowsCarrySpinAndClubSpeed() {
+        show(withChart.copy(selectedShot = selectedDriver))
+        composeRule.onNode(hasScrollToNodeAction()).performScrollToNode(hasTestTag(SessionTestTags.SELECTED))
+
+        composeRule.onNodeWithText("Shot 1 · Driver").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Carry, 264", substring = true).assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Spin, 2,439", substring = true).assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Club speed, 112.1", substring = true).assertIsDisplayed()
+        val row = SessionTestTags.shot(previewRows[1].id)
+        composeRule.onNode(hasScrollToNodeAction()).performScrollToNode(hasTestTag(row))
+        composeRule
+            .onNode(isSelected() and hasAnyAncestor(hasTestTag(row)), useUnmergedTree = true)
+            .assertExists()
+    }
+
+    @Test
+    fun givenASelection_whenTheCardIsClosed_thenTheSelectionIsCleared() {
+        show(withChart.copy(selectedShot = selectedDriver))
+        composeRule.onNode(hasScrollToNodeAction()).performScrollToNode(hasTestTag(SessionTestTags.SELECTED_CLOSE))
+
+        composeRule.onNodeWithTag(SessionTestTags.SELECTED_CLOSE).performClick()
+
+        assertEquals(listOf<SessionEvent>(SessionEvent.SelectShot(null)), events)
+    }
+
+    @Test
+    fun givenASelection_whenDeleteIsTappedOnTheCard_thenThatShotIsDeleted() {
+        show(withChart.copy(selectedShot = selectedDriver))
+        composeRule.onNode(hasScrollToNodeAction()).performScrollToNode(hasTestTag(SessionTestTags.SELECTED_DELETE))
+
+        composeRule.onNodeWithTag(SessionTestTags.SELECTED_DELETE).performClick()
+
+        assertEquals(listOf<SessionEvent>(SessionEvent.DeleteShot(previewRows[1].id)), events)
+    }
+
+    @Test
+    fun givenAClubSpread_whenShown_thenItIsSummarisedUnderTheChart() {
+        val spread = ClubSpread("7-iron", "7-Iron", 5, 162.0, 1.4, 9.2, 12.0, excludedCount = 1)
+        show(withChart.copy(dispersion = withChart.dispersion!!.copy(clubSpread = spread, possibleBadReadCount = 1)))
+
+        composeRule
+            .onNodeWithTag(
+                SessionTestTags.SPREAD,
+            ).assertTextEquals(DispersionCopy.spreadSummary(spread, UnitSystem.IMPERIAL))
+        composeRule.onNodeWithText(DispersionCopy.badReadCaption(1)).assertIsDisplayed()
+    }
+
+    @Test
+    fun givenAPossibleBadRead_whenSelected_thenTheCardSaysSo() {
+        show(withChart.copy(selectedShot = selectedDriver.copy(possibleBadRead = true)))
+        composeRule.onNode(hasScrollToNodeAction()).performScrollToNode(hasTestTag(SessionTestTags.BAD_READ_NOTE))
+
+        composeRule.onNodeWithTag(SessionTestTags.BAD_READ_NOTE).assertIsDisplayed()
+    }
+
+    @Test
+    fun givenBluetoothAndASelection_whenShown_thenTheCardsDeleteIsDisabled() {
+        show(
+            withChart.copy(
+                selectedShot = selectedDriver,
+                editAvailability = PiFeatureAvailability.forDeleteAndClear(overBluetooth = true),
+            ),
+        )
+        composeRule.onNode(hasScrollToNodeAction()).performScrollToNode(hasTestTag(SessionTestTags.SELECTED_DELETE))
+
+        composeRule.onNodeWithTag(SessionTestTags.SELECTED_DELETE).assertIsNotEnabled().performClick()
 
         assertEquals(emptyList<SessionEvent>(), events)
     }

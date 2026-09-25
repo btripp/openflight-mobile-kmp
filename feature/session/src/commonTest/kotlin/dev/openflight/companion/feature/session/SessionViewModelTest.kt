@@ -9,6 +9,8 @@ import assertk.assertions.isCloseTo
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
+import assertk.assertions.isGreaterThan
+import assertk.assertions.isLessThan
 import assertk.assertions.isNotNull
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
@@ -90,7 +92,7 @@ class SessionViewModelTest {
         }
 
     @Test
-    fun selectingAClubFiltersTheStatsToThatClubOnly() =
+    fun selectingAClubFiltersTheStatsAndTheListToThatClubOnly() =
         runTest {
             shots.setHistory(listOf(shot(2, club = "7-iron", ballSpeedMph = 120.0), shot(1, ballSpeedMph = 150.0)))
 
@@ -100,9 +102,10 @@ class SessionViewModelTest {
 
                 assertThat(state.stats.shotCount).isEqualTo(1)
                 assertThat(state.stats.avgBallSpeedMph).isEqualTo(120.0)
-                // allCount, the chips and the rows stay over the full history, not the filtered tab.
+                // allCount and the chips stay over the full history; the rows follow the tab.
                 assertThat(state.allCount).isEqualTo(2)
-                assertThat(state.shots.size).isEqualTo(2)
+                assertThat(state.shots.map { it.id }).containsExactly(shotId(2))
+                assertThat(state.shots.single().shotNumber).isEqualTo(2)
             }
         }
 
@@ -420,6 +423,259 @@ class SessionViewModelTest {
             viewModel.uiState.testIgnoringRest {
                 assertThat(awaitUntil { true }.editAvailability).isEqualTo(PiFeatureAvailability.Available)
             }
+        }
+
+    // endregion
+
+    // region dispersion chart
+
+    @Test
+    fun aHorizontalLaunchToTheRightLandsRightAndToTheLeftLandsLeft() =
+        runTest {
+            viewModel.uiState.testIgnoringRest {
+                shots.setHistory(listOf(shot(2, launchAngleHorizontal = -4.0), shot(1, launchAngleHorizontal = 4.0)))
+
+                val points = awaitUntil { it.dispersion?.points?.size == 2 }.dispersion!!.points
+                assertThat(points.map { it.id }).containsExactly(shotId(2), shotId(1))
+                assertThat(points[0].offlineYards).isLessThan(0.0)
+                assertThat(points[1].offlineYards).isGreaterThan(0.0)
+                assertThat(points.map { it.sideEstimated }).containsExactly(false, false)
+                assertThat(points.map { it.shotNumber }).containsExactly(2, 1)
+            }
+        }
+
+    @Test
+    fun aShotWithNoSideDataSitsOnTheTargetLineAndIsFlagged() =
+        runTest {
+            viewModel.uiState.testIgnoringRest {
+                shots.setHistory(listOf(shot(1)))
+
+                val dispersion = awaitUntil { it.dispersion != null }.dispersion!!
+                assertThat(dispersion.points.single().offlineYards).isCloseTo(0.0, 0.001)
+                assertThat(dispersion.points.single().sideEstimated).isTrue()
+                assertThat(dispersion.estimatedSideCount).isEqualTo(1)
+            }
+        }
+
+    @Test
+    fun swingRepsAreLeftOffThePisChart() =
+        runTest {
+            viewModel.uiState.testIgnoringRest {
+                piSession.linkState.value = PiLinkState.Connected
+                piSession.setSession(listOf(swingRep(2, speedMph = 95.0), detail(1, club = "7-iron")))
+
+                val state = awaitUntil { it.source == SessionSource.PI && it.dispersion != null }
+                val point = state.dispersion!!.points.single()
+                assertThat(point.id).isEqualTo(timestamp(1))
+                assertThat(point.shortLabel).isEqualTo("7i")
+            }
+        }
+
+    @Test
+    fun theClubTabFiltersTheChartButKeepsEachClubsColour() =
+        runTest {
+            viewModel.uiState.testIgnoringRest {
+                shots.setHistory(
+                    listOf(
+                        shot(4, club = "7-iron", carryYards = 160.0),
+                        shot(3, launchAngleHorizontal = 2.0),
+                        shot(2, launchAngleHorizontal = 0.5, carryYards = 240.0),
+                        shot(1, launchAngleHorizontal = -2.0, carryYards = 260.0),
+                    ),
+                )
+                val all = awaitUntil { it.dispersion?.points?.size == 4 }.dispersion!!
+                assertThat(all.ellipses.map { it.club }).containsExactly("driver")
+                assertThat(all.points.first().colorIndex).isEqualTo(1)
+
+                viewModel.onEvent(SessionEvent.SelectClub("7-iron"))
+
+                val ironOnly = awaitUntil { it.dispersion?.points?.size == 1 }.dispersion!!
+                assertThat(ironOnly.points.single().colorIndex).isEqualTo(1)
+                assertThat(ironOnly.ellipses).isEmpty()
+            }
+        }
+
+    @Test
+    fun selectingAShotFillsTheCardAndDeletingItClearsIt() =
+        runTest {
+            viewModel.uiState.testIgnoringRest {
+                shots.setHistory(listOf(shot(2), shot(1, club = "7-iron", carryYards = 162.0)))
+                awaitUntil { it.dispersion?.points?.size == 2 }
+
+                viewModel.onEvent(SessionEvent.SelectShot(shotId(1)))
+
+                val card = awaitUntil { it.selectedShot != null }.selectedShot!!
+                assertThat(card).isEqualTo(
+                    SelectedShotCard(
+                        id = shotId(1),
+                        shotNumber = 1,
+                        clubName = "7-Iron",
+                        carryYards = 162.0,
+                        spinRpm = null,
+                        clubSpeedMph = null,
+                    ),
+                )
+
+                shots.setHistory(listOf(shot(2)))
+
+                assertThat(awaitUntil { it.shots.size == 1 }.selectedShot).isNull()
+            }
+        }
+
+    @Test
+    fun selectingAShotFromAnotherClubSwitchesBackToAll() =
+        runTest {
+            viewModel.uiState.testIgnoringRest {
+                shots.setHistory(listOf(shot(2), shot(1, club = "7-iron")))
+                viewModel.onEvent(SessionEvent.SelectClub("driver"))
+                awaitUntil { it.selectedClub == "driver" && it.dispersion?.points?.size == 1 }
+
+                viewModel.onEvent(SessionEvent.SelectShot(shotId(1)))
+
+                val state = awaitUntil { it.selectedShot != null }
+                assertThat(state.selectedClub).isNull()
+                assertThat(state.selectedShot?.id).isEqualTo(shotId(1))
+            }
+        }
+
+    @Test
+    fun switchingTheClubTabClearsTheSelection() =
+        runTest {
+            viewModel.uiState.testIgnoringRest {
+                shots.setHistory(listOf(shot(2), shot(1)))
+                viewModel.onEvent(SessionEvent.SelectShot(shotId(2)))
+                awaitUntil { it.selectedShot != null }
+
+                viewModel.onEvent(SessionEvent.SelectClub("driver"))
+
+                val state = awaitUntil { it.selectedClub == "driver" }
+                assertThat(state.selectedShot).isNull()
+            }
+        }
+
+    @Test
+    fun shotsWithoutSideDataDoNotShapeTheEllipse() =
+        runTest {
+            viewModel.uiState.testIgnoringRest {
+                // Two measured drivers and three without side data: too few measured for an ellipse.
+                shots.setHistory(
+                    listOf(
+                        shot(5),
+                        shot(4, carryYards = 255.0),
+                        shot(3, carryYards = 245.0),
+                        shot(2, launchAngleHorizontal = 3.0, carryYards = 260.0),
+                        shot(1, launchAngleHorizontal = -3.0, carryYards = 240.0),
+                    ),
+                )
+
+                val dispersion = awaitUntil { it.dispersion?.points?.size == 5 }.dispersion!!
+                assertThat(dispersion.ellipses).isEmpty()
+            }
+        }
+
+    @Test
+    fun aShotFarFromTheRestOfItsClubIsAPossibleBadReadAndLeftOutOfTheSpread() =
+        runTest {
+            viewModel.uiState.testIgnoringRest {
+                shots.setHistory(
+                    listOf(
+                        shot(6, club = "7-iron", launchAngleHorizontal = 1.0, carryYards = 238.0),
+                        shot(5, club = "7-iron", launchAngleHorizontal = -1.0, carryYards = 160.0),
+                        shot(4, club = "7-iron", launchAngleHorizontal = 2.0, carryYards = 164.0),
+                        shot(3, club = "7-iron", launchAngleHorizontal = -2.0, carryYards = 158.0),
+                        shot(2, club = "7-iron", launchAngleHorizontal = 0.5, carryYards = 166.0),
+                        shot(1, club = "7-iron", launchAngleHorizontal = 1.5, carryYards = 162.0),
+                    ),
+                )
+                viewModel.onEvent(SessionEvent.SelectClub("7-iron"))
+
+                val dispersion = awaitUntil { it.dispersion?.clubSpread != null }.dispersion!!
+                assertThat(dispersion.points.filter { it.possibleBadRead }.map { it.id }).containsExactly(shotId(6))
+                assertThat(dispersion.possibleBadReadCount).isEqualTo(1)
+                val spread = dispersion.clubSpread!!
+                assertThat(spread.clubName).isEqualTo("7-Iron")
+                assertThat(spread.shotCount).isEqualTo(5)
+                assertThat(spread.excludedCount).isEqualTo(1)
+                assertThat(spread.avgCarryYards).isCloseTo(162.0, 0.001)
+                assertThat(spread.avgOfflineYards).isNotNull().isGreaterThan(0.0)
+                assertThat(spread.widthYards).isNotNull().isGreaterThan(0.0)
+                assertThat(spread.depthYards).isNotNull().isGreaterThan(0.0)
+
+                viewModel.onEvent(SessionEvent.SelectShot(shotId(6)))
+
+                assertThat(awaitUntil { it.selectedShot != null }.selectedShot!!.possibleBadRead).isTrue()
+            }
+        }
+
+    @Test
+    fun theAllTabHasNoClubSpread() =
+        runTest {
+            viewModel.uiState.testIgnoringRest {
+                shots.setHistory(listOf(shot(3), shot(2), shot(1)))
+
+                assertThat(awaitUntil { it.dispersion != null }.dispersion!!.clubSpread).isNull()
+            }
+        }
+
+    @Test
+    fun onlyTheActiveProfilesShotsAreOnTheChartWithTheirRowsIdsAndNumbers() =
+        runTest {
+            piSession.linkState.value = PiLinkState.Connected
+            piSession.setSession(
+                listOf(
+                    detail(3, profileId = "sam"),
+                    detail(2, club = "7-iron", profileId = "alex"),
+                    detail(1, profileId = "alex"),
+                ),
+            )
+            piSession.profiles.value =
+                ProfilesState(
+                    profiles = listOf(Profile(id = "alex", name = "Alex"), Profile(id = "sam", name = "Sam")),
+                    activeProfileId = "alex",
+                    loaded = true,
+                )
+
+            viewModel.uiState.testIgnoringRest {
+                val state = awaitUntil { it.source == SessionSource.PI && it.dispersion?.points?.size == 2 }
+                val points = state.dispersion!!.points
+                assertThat(points.map { it.id }).containsExactly(timestamp(2), timestamp(1))
+                assertThat(points.map { it.id }).isEqualTo(state.shots.map { it.id })
+                assertThat(points.map { it.shotNumber }).isEqualTo(state.shots.map { it.shotNumber })
+
+                viewModel.onEvent(SessionEvent.SelectShot(timestamp(2)))
+                assertThat(awaitUntil { it.selectedShot != null }.selectedShot!!.shotNumber).isEqualTo(2)
+
+                piSession.profiles.value = piSession.profiles.value.copy(activeProfileId = "sam")
+                val sam = awaitUntil { it.dispersion?.points?.size == 1 }
+                assertThat(
+                    sam.dispersion!!
+                        .points
+                        .single()
+                        .id,
+                ).isEqualTo(timestamp(3))
+                // The selected shot belongs to the other profile now: no card.
+                assertThat(sam.selectedShot).isNull()
+            }
+        }
+
+    @Test
+    fun overBluetoothAShotCanStillBeSelectedButNotDeleted() =
+        runTest {
+            settings.transport.value = TransportType.BLUETOOTH
+            piSession.linkState.value = PiLinkState.WifiOnly
+            shots.setHistory(listOf(shot(1)))
+
+            viewModel.uiState.testIgnoringRest {
+                viewModel.onEvent(SessionEvent.SelectShot(shotId(1)))
+                assertThat(awaitUntil { it.selectedShot != null }.selectedShot!!.id).isEqualTo(shotId(1))
+                viewModel.effects.test {
+                    viewModel.onEvent(SessionEvent.DeleteShot(shotId(1)))
+
+                    assertThat(awaitItem())
+                        .isEqualTo(SessionEffect.Message(PiFeatureAvailability.WIFI_ONLY_ON_BLUETOOTH))
+                }
+            }
+            assertThat(shots.deleteShotCalls).isEmpty()
         }
 
     // endregion

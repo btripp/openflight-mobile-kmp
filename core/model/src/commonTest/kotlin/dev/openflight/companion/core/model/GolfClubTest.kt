@@ -43,4 +43,41 @@ class GolfClubTest {
             assertThat(json.encodeToString(GolfClub.serializer(), club)).isEqualTo("\"$wireValue\"")
         }
     }
+
+    @Test
+    fun everyClubHasACompactShortLabel() {
+        val labels = GolfClub.entries.map { it.shortLabel }
+
+        assertThat(labels).isEqualTo(
+            listOf(
+                "D",
+                "3W",
+                "5W",
+                "7W",
+                "3H",
+                "5H",
+                "7H",
+                "9H",
+                "2i",
+                "3i",
+                "4i",
+                "5i",
+                "6i",
+                "7i",
+                "8i",
+                "9i",
+                "PW",
+                "GW",
+                "SW",
+                "LW",
+            ),
+        )
+    }
+
+    @Test
+    fun shortLabelForAnUnknownWireValueFallsBackToItsFirstTwoCharacters() {
+        assertThat(GolfClub.shortLabelFor("7-iron")).isEqualTo("7i")
+        assertThat(GolfClub.shortLabelFor("putter")).isEqualTo("pu")
+        assertThat(GolfClub.shortLabelFor("")).isEqualTo("?")
+    }
 }

@@ -16,7 +16,6 @@ import kotlinx.coroutines.runBlocking
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.get
 import org.koin.core.parameter.parametersOf
-import org.koin.dsl.module
 import org.koin.mp.KoinPlatform
 import platform.Foundation.NSProcessInfo
 import kotlin.experimental.ExperimentalNativeApi
@@ -34,14 +33,6 @@ fun startKoinForIos() {
         val arguments = NSProcessInfo.processInfo.arguments.map { it.toString() }
         val options = LaunchOptions.fromArguments(arguments)
         runBlocking { koin.applyLaunchOptions(options) }
-        if (options.usesFakeRepository) {
-            // Let the UI tests delete and clear shots in the preview history.
-            val preview = koin.get<ShotRepository>()
-            koin.loadModules(
-                listOf(module { single<ShotRepository> { LocalEditsShotRepository(preview) } }),
-                allowOverride = true,
-            )
-        }
     }
 }
 

@@ -103,7 +103,28 @@ fun SessionScreen(
             if (!uiState.hasShots) {
                 item(key = "empty") { EmptySession() }
             } else {
+                uiState.dispersion?.let { dispersion ->
+                    item(key = "dispersion") {
+                        DispersionCard(
+                            dispersion = dispersion,
+                            units = uiState.units,
+                            selectedId = uiState.selectedShot?.id,
+                            onSelect = { onEvent(SessionEvent.SelectShot(it)) },
+                        )
+                    }
+                }
                 item(key = "tabs") { ClubTabs(uiState) { onEvent(SessionEvent.SelectClub(it)) } }
+                uiState.selectedShot?.let { card ->
+                    item(key = "selected") {
+                        SelectedShotCardView(
+                            card = card,
+                            units = uiState.units,
+                            onClose = { onEvent(SessionEvent.SelectShot(null)) },
+                            onDelete = { onEvent(SessionEvent.DeleteShot(card.id)) },
+                            deletable = uiState.editAvailability.isAvailable,
+                        )
+                    }
+                }
                 item(key = "stats") { StatsCard(uiState) }
                 item(key = "actions") {
                     ActionsRow(
@@ -123,6 +144,8 @@ fun SessionScreen(
                     SessionShotRowItem(
                         shot = shot,
                         units = uiState.units,
+                        selected = shot.id == uiState.selectedShot?.id,
+                        onSelect = { onEvent(SessionEvent.SelectShot(shot.id)) },
                         onDelete = { onEvent(SessionEvent.DeleteShot(shot.id)) },
                         modifier = Modifier.animateItem(),
                         deletable = uiState.editAvailability.isAvailable,

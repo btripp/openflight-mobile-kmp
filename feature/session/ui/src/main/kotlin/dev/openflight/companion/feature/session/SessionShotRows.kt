@@ -2,6 +2,8 @@
 package dev.openflight.companion.feature.session
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -12,7 +14,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import dev.openflight.companion.core.designsystem.OfColorTokens
@@ -34,7 +40,9 @@ private const val CLOCK_LENGTH = 8
 
 /**
  * One `ShotList.tsx` row, deleted by an end-to-start swipe (or TalkBack's "Delete" action). Without
- * [deletable] (over Bluetooth, plan R8e) it is a plain row with no delete gesture.
+ * [deletable] (over Bluetooth, plan R8e) it is a plain row with no delete gesture. With [onSelect]
+ * (the live session screen, not the stored-session detail) a tap selects it on the dispersion chart
+ * either way; the [selected] row gets a gold outline.
  */
 @Composable
 internal fun SessionShotRowItem(
@@ -43,12 +51,14 @@ internal fun SessionShotRowItem(
     onDelete: () -> Unit,
     modifier: Modifier = Modifier,
     deletable: Boolean = true,
+    selected: Boolean = false,
+    onSelect: (() -> Unit)? = null,
 ) {
     val tagged = modifier.testTag(SessionTestTags.shot(shot.id))
     if (deletable) {
-        OfSwipeToDelete(onDelete = onDelete, modifier = tagged) { ShotRowContent(shot, units) }
+        OfSwipeToDelete(onDelete = onDelete, modifier = tagged) { ShotRowContent(shot, units, selected, onSelect) }
     } else {
-        Row(modifier = tagged) { ShotRowContent(shot, units) }
+        Row(modifier = tagged) { ShotRowContent(shot, units, selected, onSelect) }
     }
 }
 
@@ -56,13 +66,26 @@ internal fun SessionShotRowItem(
 private fun ShotRowContent(
     shot: SessionShotRow,
     units: UnitSystem,
+    selected: Boolean,
+    onSelect: (() -> Unit)?,
 ) {
+    val shape = RoundedCornerShape(12.dp)
     Row(
         modifier =
             Modifier
                 .fillMaxWidth()
-                .background(OfColorTokens.BgCard, RoundedCornerShape(12.dp))
-                .padding(horizontal = OfSpacing.Lg, vertical = OfSpacing.Md),
+                .clip(shape)
+                .background(OfColorTokens.BgCard, shape)
+                .border(1.dp, if (selected) OfColorTokens.Gold else Color.Transparent, shape)
+                .then(
+                    if (onSelect != null) {
+                        Modifier
+                            .clickable(onClickLabel = "Show on chart", onClick = onSelect)
+                            .semantics { this.selected = selected }
+                    } else {
+                        Modifier
+                    },
+                ).padding(horizontal = OfSpacing.Lg, vertical = OfSpacing.Md),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(OfSpacing.Md),
     ) {

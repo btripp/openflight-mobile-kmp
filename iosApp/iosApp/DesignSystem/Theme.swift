@@ -29,6 +29,23 @@ enum Theme {
     /// The idle/unknown status tone (the reference's `.gray`).
     static let neutral = Color(hex: 0x8A8A96)
 
+    /// Per-club chart colours, the same values as Android's `OfClubPalette`. Charts number the
+    /// clubs they show (driver first); past eight clubs the hues repeat.
+    static let clubColors: [Color] = [
+        Color(hex: 0x60A5FA), // blue
+        Color(hex: 0x4ADE80), // green
+        Color(hex: 0xF87171), // red
+        Color(hex: 0xC084FC), // purple
+        Color(hex: 0xFB923C), // orange
+        Color(hex: 0x2DD4BF), // teal
+        Color(hex: 0xF472B6), // pink
+        Color(hex: 0xFACC15), // yellow
+    ]
+
+    static func clubColor(_ index: Int) -> Color {
+        clubColors[((index % clubColors.count) + clubColors.count) % clubColors.count]
+    }
+
     /// The screen background: the reference's diagonal gradient, in our palette.
     static let background = LinearGradient(
         colors: [bgElevated, bgDeep],

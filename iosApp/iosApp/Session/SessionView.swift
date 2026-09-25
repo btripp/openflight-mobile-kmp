@@ -84,13 +84,41 @@ struct SessionContent: View {
                 Section { simulateButton }.listRowBackground(Theme.bgCard)
             }
             if state.hasShots {
+                if let dispersion = state.dispersion {
+                    Section {
+                        DispersionChartView(
+                            dispersion: dispersion,
+                            units: units,
+                            selectedId: state.selectedShot?.id,
+                            onSelect: { send(SessionEventSelectShot(id: $0)) }
+                        )
+                    }
+                    .listRowBackground(Theme.bgCard)
+                }
                 Section { SessionClubTabs(state: state) { send(SessionEventSelectClub(club: $0)) } }
                     .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
+                if let card = state.selectedShot {
+                    Section {
+                        SelectedShotCardView(
+                            card: card,
+                            units: units,
+                            deletable: canEdit,
+                            onClose: { send(SessionEventSelectShot(id: nil)) },
+                            onDelete: { send(SessionEventDeleteShot(id: card.id)) }
+                        )
+                    }
+                    .listRowBackground(Theme.bgElevated)
+                }
                 Section { SessionStatsGrid(state: state) }.listRowBackground(Theme.bgCard)
                 Section { actions }.listRowBackground(Theme.bgCard)
                 Section {
                     ForEach(state.shots, id: \.id) { row in
+                        let selected = row.id == state.selectedShot?.id
                         SessionShotRowView(row: row, units: units)
+                            .contentShape(Rectangle())
+                            .onTapGesture { send(SessionEventSelectShot(id: row.id)) }
+                            .accessibilityAddTraits(selected ? [.isSelected, .isButton] : .isButton)
+                            .accessibilityHint("Shows this shot on the chart")
                             .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                                 if canEdit {
                                     Button(role: .destructive) {
@@ -101,8 +129,8 @@ struct SessionContent: View {
                                     .tint(.red)
                                 }
                             }
+                            .listRowBackground(selected ? Theme.gold.opacity(0.14) : Theme.bgCard)
                     }
-                    .listRowBackground(Theme.bgCard)
                 } header: {
                     Text(canEdit ? "SHOTS · swipe left to delete" : "SHOTS")
                         .font(.ofEyebrow)

@@ -7,6 +7,8 @@ kotlin {
         commonMain.dependencies {
             // A feature depends on core modules only, never on another feature.
             implementation(projects.core.data)
+            // Offline distance isn't on the wire: the dispersion chart flies each shot.
+            implementation(projects.core.flight)
             implementation(projects.core.insights)
             implementation(projects.core.model)
             implementation(libs.kotlinx.coroutines.core)

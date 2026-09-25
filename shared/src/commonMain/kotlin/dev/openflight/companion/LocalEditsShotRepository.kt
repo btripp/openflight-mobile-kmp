@@ -9,9 +9,9 @@ import kotlinx.coroutines.flow.StateFlow
 /**
  * The `--ui-testing`/`--preview-shot` repository ([PreviewShotRepository]) with the phone-local
  * history edits of the real repository: [deleteShot], [deleteShotByTimestamp] and [clearHistory]
- * remove shots from [history] and [latestShot], so the iOS session screen's swipe-to-delete and
- * Clear can be exercised by XCUITests without a Pi. Debug launch hooks only; iOS-only because the
- * Android device UI tests drive the session screen with their own fakes.
+ * remove shots from [history] and [latestShot], so the session screen's swipe-to-delete, card
+ * Delete and Clear work without a Pi (XCUITests on iOS, manual checks on both platforms). Debug
+ * launch hooks only.
  */
 internal class LocalEditsShotRepository(
     private val delegate: ShotRepository,
