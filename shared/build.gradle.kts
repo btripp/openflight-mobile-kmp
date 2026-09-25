@@ -27,6 +27,8 @@ kotlin {
             export(projects.feature.training)
             export(projects.feature.camera)
             export(projects.feature.settings)
+            // Plan F9a: the games engine and its ViewModels, for F9c's SwiftUI screens.
+            export(projects.feature.games)
         }
     }
 
@@ -47,6 +49,7 @@ kotlin {
             api(projects.feature.training)
             api(projects.feature.camera)
             api(projects.feature.settings)
+            api(projects.feature.games)
             // Plan F4: core:speech's speechModule joins the app's Koin graph below. Not exported
             // to Swift yet — no UI touches SpeechEngine directly until F7.
             implementation(projects.core.speech)
