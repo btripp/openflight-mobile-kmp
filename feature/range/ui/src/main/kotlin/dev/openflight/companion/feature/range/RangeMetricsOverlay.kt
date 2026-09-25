@@ -33,7 +33,9 @@ import dev.openflight.companion.core.model.ShotMetricFormatter
 /**
  * The metrics over the scene (RangeMetricsOverlay.swift): ball speed and carry on top; at the
  * bottom the club error, the estimated-flight badge and the detail metrics with the "NEXT CLUB"
- * selector, in one row in landscape or a two-column grid in portrait.
+ * selector, in one row in landscape or a two-column grid in portrait. While a ball flies and
+ * through the landing dwell ([compactMetrics], plan R7b) the detail metrics fold into one strip so
+ * the landing area stays visible.
  */
 @Composable
 internal fun RangeMetricsOverlay(
@@ -87,7 +89,16 @@ internal fun RangeMetricsOverlay(
                 modifier = Modifier.testTag(RangeTestTags.ESTIMATED),
             )
         }
-        DetailMetrics(shot, uiState.club, isLandscape, onSelectClub)
+        if (uiState.compactMetrics) {
+            // Plan R7b: one strip while the ball flies and lands, so the landing area stays visible.
+            Pill(
+                text = uiState.compactMetricsSummary,
+                color = OfColorTokens.Cream,
+                modifier = Modifier.testTag(RangeTestTags.METRICS_COMPACT),
+            )
+        } else {
+            DetailMetrics(shot, uiState.club, isLandscape, onSelectClub)
+        }
     }
 }
 
@@ -100,7 +111,10 @@ private fun DetailMetrics(
 ) {
     val metrics = detailMetrics(shot)
     if (isLandscape) {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(OfSpacing.Sm)) {
+        Row(
+            modifier = Modifier.fillMaxWidth().testTag(RangeTestTags.METRICS_DETAIL),
+            horizontalArrangement = Arrangement.spacedBy(OfSpacing.Sm),
+        ) {
             ClubMetric(club, onSelectClub, Modifier.weight(CLUB_CELL_WEIGHT))
             for (metric in metrics) DetailMetric(metric, Modifier.weight(1f))
         }
@@ -109,7 +123,10 @@ private fun DetailMetrics(
         val cells: List<(@Composable (Modifier) -> Unit)> =
             listOf<@Composable (Modifier) -> Unit>({ ClubMetric(club, onSelectClub, it) }) +
                 metrics.map { metric -> { modifier: Modifier -> DetailMetric(metric, modifier) } }
-        Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(OfSpacing.Sm)) {
+        Column(
+            modifier = Modifier.fillMaxWidth().testTag(RangeTestTags.METRICS_DETAIL),
+            verticalArrangement = Arrangement.spacedBy(OfSpacing.Sm),
+        ) {
             for (row in cells.chunked(2)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(OfSpacing.Sm)) {
                     for (cell in row) cell(Modifier.weight(1f))

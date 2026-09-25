@@ -29,6 +29,44 @@ final class DrivingRangeUITests: XCTestCase {
         XCTAssertTrue(rangeButton.waitForExistence(timeout: 5))
     }
 
+    /// Plan R7b: the camera button flips Follow/Fixed, and the choice (shared settings, like
+    /// Android's) is still there after leaving the range and coming back. Restores what it found,
+    /// since the setting persists across launches.
+    func testCameraToggleFlipsAndPersistsAcrossLeavingTheRange() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing", "--preview-shot"]
+        app.launch()
+
+        let rangeButton = app.buttons["dashboard.range"]
+        XCTAssertTrue(rangeButton.waitForExistence(timeout: 10))
+        rangeButton.tap()
+
+        let toggle = app.buttons["range.cameraMode"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 5))
+        XCTAssertTrue(toggle.isEnabled)
+        let initial = toggle.label.contains("Follow") ? "Follow" : "Fixed"
+        let flipped = initial == "Follow" ? "Fixed" : "Follow"
+        XCTAssertTrue(toggle.label.contains(initial), "toggle label: \(toggle.label)")
+
+        toggle.tap()
+        expectation(for: NSPredicate(format: "label CONTAINS %@", flipped), evaluatedWith: toggle)
+        waitForExpectations(timeout: 5)
+
+        // Leave and come back: a new range screen (and ViewModel) reads the stored choice.
+        app.buttons["range.exit"].tap()
+        XCTAssertTrue(rangeButton.waitForExistence(timeout: 5))
+        rangeButton.tap()
+        let again = app.buttons["range.cameraMode"]
+        XCTAssertTrue(again.waitForExistence(timeout: 5))
+        expectation(for: NSPredicate(format: "label CONTAINS %@", flipped), evaluatedWith: again)
+        waitForExpectations(timeout: 5)
+
+        // Restore.
+        again.tap()
+        expectation(for: NSPredicate(format: "label CONTAINS %@", initial), evaluatedWith: again)
+        waitForExpectations(timeout: 5)
+    }
+
     func testRangeModeWithoutAShotShowsTheReadyCard() {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-testing", "--range-mode"]
@@ -50,8 +88,13 @@ final class DrivingRangeUITests: XCTestCase {
         XCTAssertTrue(carry.waitForExistence(timeout: 10))
         XCTAssertTrue(carry.label.contains("264"), "carry label: \(carry.label)")
         XCTAssertTrue(app.descendants(matching: .any)["range.ballSpeed"].label.contains("151.4"))
-        XCTAssertTrue(app.staticTexts["1.47"].exists) // smash
-        XCTAssertTrue(app.staticTexts["2,380"].exists) // spin
+
+        // In the air (plan R7b) the detail metrics fold into one strip so the landing area shows.
+        let compact = app.descendants(matching: .any)["range.metricsCompact"]
+        XCTAssertTrue(compact.waitForExistence(timeout: 5))
+        XCTAssertTrue(compact.label.contains("2,380 rpm"), "compact label: \(compact.label)")
+        XCTAssertFalse(app.descendants(matching: .any)["range.metricsDetail"].exists)
+        XCTAssertFalse(app.descendants(matching: .any)["range.clubSelector"].exists)
 
         // The flight plays (3.5-6 s), lands, dwells 1.25 s and returns to waiting; replay shows
         // again once nothing is preparing or flying.
@@ -59,11 +102,16 @@ final class DrivingRangeUITests: XCTestCase {
         XCTAssertTrue(status.waitForExistence(timeout: 5))
         let replay = app.buttons["range.replay"]
         XCTAssertTrue(replay.waitForExistence(timeout: 15))
-        let landedOrWaiting = NSPredicate(
-            format: "label CONTAINS %@ OR label CONTAINS %@", "Shot complete", "Ready for the next shot"
-        )
-        expectation(for: landedOrWaiting, evaluatedWith: status)
+        let waiting = NSPredicate(format: "label CONTAINS %@", "Ready for the next shot")
+        expectation(for: waiting, evaluatedWith: status)
         waitForExpectations(timeout: 5)
+
+        // After the dwell the full panel is back.
+        XCTAssertTrue(app.descendants(matching: .any)["range.metricsDetail"].waitForExistence(timeout: 3))
+        XCTAssertFalse(compact.exists)
+        XCTAssertTrue(app.descendants(matching: .any)["range.clubSelector"].exists)
+        XCTAssertTrue(app.staticTexts["1.47"].exists) // smash
+        XCTAssertTrue(app.staticTexts["2,380"].exists) // spin
 
         // Replay flies it again.
         replay.tap()

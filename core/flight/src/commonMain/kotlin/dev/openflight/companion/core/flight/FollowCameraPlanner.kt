@@ -2,6 +2,8 @@
 package dev.openflight.companion.core.flight
 
 import kotlin.math.PI
+import kotlin.math.abs
+import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.sqrt
@@ -23,16 +25,20 @@ import kotlin.math.sqrt
  * 3. **Descent** (the last [DESCENT_FRACTION] of the flight). The target eases toward the landing
  *    spot while the camera rises, pulls back and widens its field of view, so the ball and the
  *    landing area are both in frame.
- * 4. **Landed.** Over [SETTLE_SECONDS] the camera settles into a raised view looking down at the
- *    landing spot, lined up so the nearest yardage marker is in frame, and then holds.
+ * 4. **Landed.** Over [SETTLE_SECONDS] the camera settles into a raised view behind the landing
+ *    spot, looking down the flight line at it with the next yardage marker beyond it in frame, and
+ *    then holds (see [settledPose]).
  *
  * @param fixedPose the tee camera to start from (and to fall back to for an empty trajectory).
- * @param markers the yardage markers' ground positions in scene space.
+ * @param scene the range whose yardage markers the settled view frames (and keeps out of its foreground).
  */
 class FollowCameraPlanner(
     private val fixedPose: RangeCameraPose = RangeCameraPlanner().pose,
-    private val markers: List<Vec3> = RangeSceneDescription.standard(treeCount = 0).markerScenePositions,
+    scene: RangeSceneDescription = RangeSceneDescription.standard(treeCount = 0),
 ) {
+    private val markerPositions: List<Vec3> = scene.markerScenePositions
+    private val markerRadii: List<Double> = scene.markers.map { it.radiusMeters }
+
     /**
      * The pose at [timeSeconds] of flight time (0 to [FlightTrajectory.flightTime], clamped), or,
      * once the ball has landed, [landedElapsedSeconds] after the landing (then [timeSeconds] is
@@ -111,55 +117,81 @@ class FollowCameraPlanner(
     }
 
     /**
-     * Where the camera comes to rest: [SETTLED_HEIGHT_METERS] up, looking down at the landing spot
-     * along the line from the nearest yardage marker, so that marker is in frame too. The camera
-     * always stays on the tee side of the landing spot (the line is turned at most
-     * [MAX_SETTLE_TURN_DEGREES] away from the carry direction), and backs off far enough to keep a
-     * marker that is short of the landing spot above the bottom of the frame.
+     * Where the camera comes to rest (plan R7b): behind the landing spot along the ball's heading
+     * as it came down, raised [SETTLED_HEIGHT_METERS] and looking down the flight line at the
+     * landing spot, so the next yardage marker *beyond* it is in frame.
+     *
+     * - The line is turned at most [MAX_SETTLE_TURN_DEGREES] toward that next marker, so the view
+     *   stays within a few degrees of where the chase camera was already looking.
+     * - A marker short of the landing spot whose disc would sit between the camera and the landing
+     *   spot is put behind the camera instead, by pulling the camera in (never closer than
+     *   [MIN_SETTLED_SETBACK_METERS]) and lowering it with the setback so the pitch, and with it the
+     *   marker beyond, stays in frame. A marker too close to the landing spot for that is kept at
+     *   least [SHORT_MARKER_MIN_DISTANCE_METERS] in front of the camera by backing off instead, so it
+     *   never shows up as a huge disc in the foreground.
      */
     fun settledPose(trajectory: FlightTrajectory): RangeCameraPose {
         if (trajectory.points.isEmpty() || trajectory.flightTime <= 0.0) return fixedPose
         val landing = landing(trajectory)
-        val carryDirection = horizontalDirection(landing, fallback = DOWNRANGE)
-        val marker = markers.minByOrNull { horizontalDistance(it, landing) }
-        val toMarker = marker?.let { it - landing } ?: Vec3.ZERO
-        val markerDistance = horizontalDistance(toMarker, Vec3.ZERO)
-        val markerIsShort = toMarker.x * carryDirection.x + toMarker.z * carryDirection.z < 0
+        val heading = landingHeading(trajectory, landing)
+        val look = turnTowardNextMarker(heading, landing)
 
-        val look =
-            when {
-                markerDistance < MARKER_ALIGN_MIN_METERS -> carryDirection
-                markerIsShort -> turnToward(carryDirection, -toMarker)
-                else -> turnToward(carryDirection, toMarker)
+        var setback = SETTLED_SETBACK_METERS
+        for (index in markerPositions.indices) {
+            val offset = markerPositions[index] - landing
+            val behind = -(offset.x * look.x + offset.z * look.z)
+            val lateral = abs(offset.x * look.z - offset.z * look.x)
+            val nearEdge = behind - markerRadii[index]
+            val inForeground =
+                behind > 0 && lateral < FOREGROUND_LATERAL_METERS && nearEdge < setback - FOREGROUND_GAP_METERS
+            if (inForeground) {
+                val pastMarker = nearEdge + FOREGROUND_GAP_METERS - 1.0
+                setback =
+                    if (pastMarker >= MIN_SETTLED_SETBACK_METERS) {
+                        minOf(setback, pastMarker)
+                    } else {
+                        // Too close to the landing spot to get past: back off so it is small.
+                        maxOf(setback, behind + SHORT_MARKER_MIN_DISTANCE_METERS)
+                    }
             }
-        val setback =
-            if (markerIsShort) {
-                maxOf(SETTLED_SETBACK_METERS, markerDistance + SHORT_MARKER_CLEARANCE_METERS)
-            } else {
-                SETTLED_SETBACK_METERS
-            }
+        }
+        val height = (setback * SETTLED_HEIGHT_PER_SETBACK).coerceIn(MIN_SETTLED_HEIGHT_METERS, SETTLED_HEIGHT_METERS)
         return RangeCameraPose(
-            position = Vec3(landing.x - look.x * setback, SETTLED_HEIGHT_METERS, landing.z - look.z * setback),
+            position = Vec3(landing.x - look.x * setback, height, landing.z - look.z * setback),
             target = landing,
             verticalFovDegrees = SETTLED_FOV_DEGREES,
         )
     }
 
-    /** [desired]'s horizontal direction, turned toward from [base] by at most [MAX_SETTLE_TURN_DEGREES]. */
-    private fun turnToward(
-        base: Vec3,
-        desired: Vec3,
+    /** The ball's horizontal direction of travel as it lands (the carry direction if it has none). */
+    private fun landingHeading(
+        trajectory: FlightTrajectory,
+        landing: Vec3,
+    ): Vec3 =
+        horizontalDirection(
+            scene(trajectory.points.last().velocityMetersPerSecond),
+            fallback = horizontalDirection(landing, fallback = DOWNRANGE),
+        )
+
+    /** [heading] turned toward the first marker beyond [landing], by at most [MAX_SETTLE_TURN_DEGREES]. */
+    private fun turnTowardNextMarker(
+        heading: Vec3,
+        landing: Vec3,
     ): Vec3 {
-        val wanted = horizontalDirection(desired, fallback = base)
-        val cosine = base.x * wanted.x + base.z * wanted.z
-        if (cosine >= cos(MAX_SETTLE_TURN_RADIANS)) return wanted
-        // Turn `base` by the maximum angle, toward the side `wanted` is on.
-        val side = if (base.x * wanted.z - base.z * wanted.x >= 0) 1.0 else -1.0
-        val angle = MAX_SETTLE_TURN_RADIANS * side
+        val next =
+            markerPositions
+                .filter { (it.x - landing.x) * heading.x + (it.z - landing.z) * heading.z > 0 }
+                .minByOrNull { (it.x - landing.x) * heading.x + (it.z - landing.z) * heading.z }
+                ?: return heading
+        val wanted = horizontalDirection(next - landing, fallback = heading)
+        // Signed angle from heading to wanted, about +y in the x/z plane.
+        val angle =
+            atan2(heading.x * wanted.z - heading.z * wanted.x, heading.x * wanted.x + heading.z * wanted.z)
+                .coerceIn(-MAX_SETTLE_TURN_RADIANS, MAX_SETTLE_TURN_RADIANS)
         return Vec3(
-            base.x * cos(angle) - base.z * sin(angle),
+            heading.x * cos(angle) - heading.z * sin(angle),
             0.0,
-            base.x * sin(angle) + base.z * cos(angle),
+            heading.x * sin(angle) + heading.z * cos(angle),
         )
     }
 
@@ -194,12 +226,22 @@ class FollowCameraPlanner(
         private const val DESCENT_TARGET_WEIGHT = 0.5
         private const val DESCENT_FOV_DEGREES = 66.0
 
-        private const val SETTLED_HEIGHT_METERS = 16.0
-        private const val SETTLED_SETBACK_METERS = 25.0
-        private const val SHORT_MARKER_CLEARANCE_METERS = 18.0
-        private const val SETTLED_FOV_DEGREES = 62.0
-        private const val MARKER_ALIGN_MIN_METERS = 4.0
-        private const val MAX_SETTLE_TURN_DEGREES = 50.0
+        private const val SETTLED_HEIGHT_METERS = 13.0
+        private const val MIN_SETTLED_HEIGHT_METERS = 8.0
+        private const val SETTLED_HEIGHT_PER_SETBACK = 0.55
+        private const val SETTLED_SETBACK_METERS = 26.0
+        private const val MIN_SETTLED_SETBACK_METERS = 10.0
+        private const val SETTLED_FOV_DEGREES = 64.0
+
+        /** A short marker's disc is out of shot once its near edge is this far in front of the camera or less. */
+        private const val FOREGROUND_GAP_METERS = 3.0
+
+        /** How far in front of the camera a short marker it can't get past is kept. */
+        private const val SHORT_MARKER_MIN_DISTANCE_METERS = 32.0
+
+        /** Markers further than this to either side of the flight line never reach the foreground. */
+        private const val FOREGROUND_LATERAL_METERS = 30.0
+        private const val MAX_SETTLE_TURN_DEGREES = 14.0
         private const val MAX_SETTLE_TURN_RADIANS = MAX_SETTLE_TURN_DEGREES * PI / 180.0
 
         /** Simulator space (+z downrange) to scene space (−z downrange). */
@@ -212,11 +254,6 @@ class FollowCameraPlanner(
             val length = sqrt(vector.x * vector.x + vector.z * vector.z)
             return if (length < MIN_DIRECTION_LENGTH) fallback else Vec3(vector.x / length, 0.0, vector.z / length)
         }
-
-        private fun horizontalDistance(
-            a: Vec3,
-            b: Vec3,
-        ): Double = sqrt((a.x - b.x) * (a.x - b.x) + (a.z - b.z) * (a.z - b.z))
 
         private fun lerp(
             from: Vec3,

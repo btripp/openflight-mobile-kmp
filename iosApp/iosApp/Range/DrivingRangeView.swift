@@ -33,9 +33,14 @@ struct DrivingRangeView: View {
         )
         .toolbar(.hidden, for: .navigationBar)
         .onAppear {
+            // Reduced motion fixes the camera and locks its toggle (plan R7a/R7b).
+            host.send(DrivingRangeEventReduceMotionChanged(enabled: reduceMotion))
             if autoplay {
                 host.send(DrivingRangeEventReplay.shared)
             }
+        }
+        .onChange(of: reduceMotion) {
+            host.send(DrivingRangeEventReduceMotionChanged(enabled: reduceMotion))
         }
         .onChange(of: scenePhase) {
             if scenePhase != .active {
@@ -63,6 +68,7 @@ struct DrivingRangeContent: View {
             ZStack {
                 RangeSceneView(
                     flight: state.activeFlight,
+                    cameraMode: state.cameraMode,
                     reduceMotion: reduceMotion,
                     onFlightCompleted: { send(DrivingRangeEventFlightCompleted.shared) }
                 )
@@ -121,6 +127,8 @@ struct DrivingRangeContent: View {
                 .accessibilityElement(children: .combine)
                 .accessibilityIdentifier(RangeTestTags.shared.STATUS)
 
+            cameraToggle
+
             if DrivingRangeUiStateKt.canReplay(state) {
                 Button {
                     send(DrivingRangeEventReplay.shared)
@@ -138,6 +146,33 @@ struct DrivingRangeContent: View {
                 .accessibilityIdentifier(RangeTestTags.shared.REPLAY)
             }
         }
+    }
+
+    /// The camera-mode button (plan R7b, like Android's): shows the camera in use, "Follow" or
+    /// "Fixed", and switches to the other one; the choice persists in the shared settings. Disabled
+    /// (and fixed) while the system asks for reduced motion.
+    private var cameraToggle: some View {
+        let label = state.cameraMode == RangeCameraMode.follow ? "Follow" : "Fixed"
+        let locked = state.cameraModeLocked
+        return Button {
+            send(DrivingRangeEventToggleCameraMode.shared)
+        } label: {
+            Label(label, systemImage: locked ? "video.slash" : "video")
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(locked ? Theme.creamDim : Theme.cream)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .background(.black.opacity(0.6), in: Capsule())
+                .overlay {
+                    Capsule().stroke(.white.opacity(0.2), lineWidth: 1)
+                }
+        }
+        .buttonStyle(.plain)
+        .disabled(locked)
+        .accessibilityLabel("\(label) camera")
+        .accessibilityValue(locked ? "Fixed by reduced motion" : "")
+        .accessibilityHint(locked ? "" : "Switches between following the ball and the fixed tee camera")
+        .accessibilityIdentifier(RangeTestTags.shared.CAMERA_MODE)
     }
 
     private var waitingCard: some View {

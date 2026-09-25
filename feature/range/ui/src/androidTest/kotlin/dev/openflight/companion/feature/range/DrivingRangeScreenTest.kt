@@ -2,6 +2,9 @@
 package dev.openflight.companion.feature.range
 
 import androidx.activity.ComponentActivity
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
@@ -137,6 +140,39 @@ class DrivingRangeScreenTest {
         show(DrivingRangeUiState.Ready(RangeClubState(selectionEnabled = false)))
 
         composeRule.onNodeWithTag(RangeTestTags.CLUB_SELECTOR).assertIsNotEnabled()
+    }
+
+    @Test
+    fun givenAFlyingShot_whenShown_thenTheDetailMetricsFoldIntoOneStrip() {
+        show(DrivingRangeUiState.Showing(shot, RangePhase.Flying, ActiveFlight(estimatedTrajectory, playbackId = 1)))
+
+        composeRule
+            .onNodeWithTag(RangeTestTags.METRICS_COMPACT)
+            .assertIsDisplayed()
+            .assert(hasText("Club 103.2 mph · Launch 12.6° · Spin 2,380 rpm"))
+        composeRule.onAllNodes(hasTestTag(RangeTestTags.METRICS_DETAIL)).assertCountEquals(0)
+        composeRule.onAllNodes(hasTestTag(RangeTestTags.CLUB_SELECTOR)).assertCountEquals(0)
+        // The headline tiles stay.
+        composeRule.onNodeWithTag(RangeTestTags.CARRY).assertIsDisplayed()
+        composeRule.onNodeWithTag(RangeTestTags.BALL_SPEED).assertIsDisplayed()
+    }
+
+    @Test
+    fun givenTheLandingDwell_whenItEnds_thenTheDetailMetricsExpandAgain() {
+        var state by mutableStateOf<DrivingRangeUiState>(DrivingRangeUiState.Showing(shot, RangePhase.Landed, null))
+        composeRule.setContent {
+            OfTheme {
+                DrivingRangeScreen(uiState = state, reduceMotion = true, onEvent = {}, onExit = {})
+            }
+        }
+        composeRule.onNodeWithTag(RangeTestTags.METRICS_COMPACT).assertIsDisplayed()
+        composeRule.onAllNodes(hasTestTag(RangeTestTags.METRICS_DETAIL)).assertCountEquals(0)
+
+        state = DrivingRangeUiState.Showing(shot, RangePhase.Waiting, null)
+
+        composeRule.onNodeWithTag(RangeTestTags.METRICS_DETAIL).assertIsDisplayed()
+        composeRule.onNodeWithTag(RangeTestTags.CLUB_SELECTOR).assertIsDisplayed()
+        composeRule.onAllNodes(hasTestTag(RangeTestTags.METRICS_COMPACT)).assertCountEquals(0)
     }
 
     @Test
