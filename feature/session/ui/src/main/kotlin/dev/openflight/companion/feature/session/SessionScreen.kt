@@ -64,6 +64,7 @@ fun SessionScreen(
     onOpenHistory: (() -> Unit)? = null,
 ) {
     val canEdit = uiState.canEdit
+    val reduceMotion = rememberReduceMotionEnabled()
     OfScaffold(
         modifier = modifier,
         messages = messages,
@@ -162,7 +163,7 @@ fun SessionScreen(
                         selected = shot.id == uiState.selectedShot?.id,
                         onSelect = { onEvent(SessionEvent.SelectShot(shot.id)) },
                         onDelete = { onEvent(SessionEvent.DeleteShot(shot.id)) },
-                        modifier = Modifier.animateItem(),
+                        modifier = animateItemUnless(reduceMotion),
                         deletable = canEdit,
                     )
                 }

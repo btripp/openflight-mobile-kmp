@@ -44,8 +44,30 @@ struct DispersionChartView: View {
             }
             .frame(height: chartHeight)
             .clipped()
+            // Plan R8f: the chart in words (per club: count, average carry and side), the
+            // selected dot as its value, and swipe up/down to step through the dots.
             .accessibilityElement()
-            .accessibilityLabel(chartDescription)
+            .accessibilityLabel(DispersionCopy.shared.chartSummary(dispersion: dispersion, units: units))
+            .accessibilityValue(
+                DispersionCopy.shared.selectionDescription(dispersion: dispersion, selectedId: selectedId, units: units)
+            )
+            .accessibilityHint("Swipe up or down to step through the shots.")
+            .accessibilityAdjustableAction { direction in
+                let forward: Bool
+                switch direction {
+                case .increment: forward = true
+                case .decrement: forward = false
+                @unknown default: return
+                }
+                if let id = DispersionCopy.shared.adjacentShotId(
+                    points: dispersion.points,
+                    selectedId: selectedId,
+                    forward: forward
+                ) {
+                    onSelect(id)
+                }
+            }
+            .accessibilityAction(named: DispersionCopy.shared.CLEAR_SELECTION) { onSelect(nil) }
             .accessibilityIdentifier("session.dispersion")
             if let spread = dispersion.clubSpread {
                 Text(DispersionCopy.shared.spreadSummary(spread: spread, units: units))
@@ -67,13 +89,6 @@ struct DispersionChartView: View {
     }
 
     private var unitSuffix: String { units == .metric ? "m" : "y" }
-
-    private var chartDescription: String {
-        let clubs = dispersion.points.map { Units.clubLabel($0.club) }.uniqued().joined(separator: ", ")
-        let count = dispersion.points.count
-        let shots = count == 1 ? "1 shot" : "\(count) shots"
-        return "Dispersion chart, \(shots): \(clubs). Select a shot in the list to see its details."
-    }
 
     private var estimatedCaption: String {
         let count = dispersion.estimatedSideCount
@@ -252,13 +267,5 @@ struct SelectedShotCardView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
-    }
-}
-
-private extension Array where Element: Hashable {
-    /// The elements in order, without repeats.
-    func uniqued() -> [Element] {
-        var seen = Set<Element>()
-        return filter { seen.insert($0).inserted }
     }
 }

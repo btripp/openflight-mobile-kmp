@@ -171,6 +171,7 @@ struct SessionContent: View {
         .listStyle(.insetGrouped)
         .listSectionSpacing(.compact)
         .screenBackground()
+        .reducingMotion()
         .sessionActionDialog(
             state.action,
             onConfirm: { send(SessionEventConfirmAction.shared) },

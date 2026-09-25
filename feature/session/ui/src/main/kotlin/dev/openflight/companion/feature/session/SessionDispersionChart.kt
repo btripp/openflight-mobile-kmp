@@ -24,8 +24,11 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
@@ -53,6 +56,7 @@ import dev.openflight.companion.core.insights.convertSpeedFromMph
 import dev.openflight.companion.core.insights.distanceUnitLabel
 import dev.openflight.companion.core.insights.speedUnitLabel
 import dev.openflight.companion.core.model.ShotMetricFormatter
+import kotlin.math.min
 
 private val ChartHeight = 280.dp
 private val DotRadius = 11.dp
@@ -96,8 +100,13 @@ internal fun DispersionCard(
                     .fillMaxWidth()
                     .height(ChartHeight)
                     .clipToBounds()
-                    .semantics { contentDescription = chartDescription(dispersion) }
-                    .pointerInput(dispersion) {
+                    .semantics {
+                        // Plan R8f: the chart in words, the selected dot, and actions to step
+                        // through the dots, since they can't be found by touch with TalkBack.
+                        contentDescription = DispersionCopy.chartSummary(dispersion, units)
+                        stateDescription = DispersionCopy.selectionDescription(dispersion, selectedId, units)
+                        customActions = chartActions(dispersion, selectedId) { currentOnSelect(it) }
+                    }.pointerInput(dispersion) {
                         detectTapGestures { tap ->
                             val projection =
                                 DispersionProjection(dispersion.viewport, size.width.toDouble(), size.height.toDouble())
@@ -113,7 +122,7 @@ internal fun DispersionCard(
                     }.drawWithCache {
                         val projection =
                             DispersionProjection(dispersion.viewport, size.width.toDouble(), size.height.toDouble())
-                        val labels = ChartLabels(textMeasurer)
+                        val labels = ChartLabels(textMeasurer, fontScale)
                         onDrawBehind {
                             drawArcs(dispersion, projection, labels, unitSuffix)
                             drawCentreLine(projection)
@@ -153,19 +162,32 @@ internal fun estimatedCaption(count: Int): String =
         "$count shots have no side data and sit on the centre line (hollow dots)."
     }
 
-private fun chartDescription(dispersion: SessionDispersionUiState): String {
-    val clubs =
-        dispersion.points
-            .map { clubLabel(it.club) }
-            .distinct()
-            .joinToString(", ")
-    val shots = if (dispersion.points.size == 1) "1 shot" else "${dispersion.points.size} shots"
-    return "Dispersion chart, $shots: $clubs. Select a shot in the list to see its details."
-}
+/** Next / previous shot (when there is one) and, with a selection, clear it. */
+private fun chartActions(
+    dispersion: SessionDispersionUiState,
+    selectedId: String?,
+    onSelect: (String?) -> Unit,
+): List<CustomAccessibilityAction> =
+    buildList {
+        DispersionCopy.adjacentShotId(dispersion.points, selectedId, forward = true)?.let { next ->
+            add(CustomAccessibilityAction(DispersionCopy.NEXT_SHOT) { onSelect(next).let { true } })
+        }
+        DispersionCopy.adjacentShotId(dispersion.points, selectedId, forward = false)?.let { previous ->
+            add(CustomAccessibilityAction(DispersionCopy.PREVIOUS_SHOT) { onSelect(previous).let { true } })
+        }
+        if (selectedId != null) {
+            add(CustomAccessibilityAction(DispersionCopy.CLEAR_SELECTION) { onSelect(null).let { true } })
+        }
+    }
 
-/** Text layouts for arc labels and dot labels, measured once per draw cache. */
+/**
+ * Text layouts for arc labels and dot labels, measured once per draw cache. Large text (plan R8f)
+ * grows the arc labels up to [MAX_ARC_LABEL_SCALE] but not the dot labels, which have to fit
+ * inside their fixed-size dots; the chart's spoken summary carries the same information at any size.
+ */
 private class ChartLabels(
     private val measurer: TextMeasurer,
+    private val fontScale: Float,
 ) {
     private val cache = HashMap<Pair<String, Color>, TextLayoutResult>()
 
@@ -173,11 +195,17 @@ private class ChartLabels(
         text: String,
         color: Color,
         sizeSp: Int,
+        scalesWithText: Boolean = true,
     ): TextLayoutResult =
         cache.getOrPut(text to color) {
-            measurer.measure(text, TextStyle(color = color, fontSize = sizeSp.sp, fontWeight = FontWeight.Bold))
+            // `sp` is multiplied by the font scale when drawn; divide it back out as needed.
+            val scale = if (scalesWithText) min(fontScale, MAX_ARC_LABEL_SCALE) else 1f
+            val size = (sizeSp * scale / fontScale).sp
+            measurer.measure(text, TextStyle(color = color, fontSize = size, fontWeight = FontWeight.Bold))
         }
 }
+
+private const val MAX_ARC_LABEL_SCALE = 1.5f
 
 /**
  * Distance arcs around the tee (usually below the chart; ovals when offline is stretched),
@@ -263,7 +291,7 @@ private fun DrawScope.drawDots(
             drawCircle(color, radius = radius, center = center)
             labelColor = OfColorTokens.BgDeep
         }
-        val layout = labels.layout(point.shortLabel, labelColor, DOT_LABEL_SP)
+        val layout = labels.layout(point.shortLabel, labelColor, DOT_LABEL_SP, scalesWithText = false)
         drawText(layout, topLeft = Offset(center.x - layout.size.width / 2f, center.y - layout.size.height / 2f))
         var ringRadius = radius + SelectedRingGap.toPx()
         if (point.possibleBadRead) {

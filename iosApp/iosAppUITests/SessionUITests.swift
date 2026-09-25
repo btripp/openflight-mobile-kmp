@@ -52,6 +52,24 @@ final class SessionUITests: XCTestCase {
         XCTAssertTrue(card.waitForNonExistence(timeout: 5))
     }
 
+    /// Plan R8f: VoiceOver reads the chart per club, and the selected dot as the chart's value.
+    func testTheChartIsSummarisedPerClubAndItsSelectionIsItsValue() {
+        let app = Self.openSession()
+
+        let chart = app.descendants(matching: .any)["session.dispersion"]
+        XCTAssertTrue(chart.waitForExistence(timeout: 5))
+        XCTAssertTrue(chart.label.contains("Driver: 1 shot, 264 yds average carry"), "chart: \(chart.label)")
+        XCTAssertEqual(chart.value as? String, "No shot selected")
+
+        let row = app.descendants(matching: .any)[Self.previewShotRow]
+        XCTAssertTrue(Self.reveal(row, in: app))
+        row.tap()
+
+        XCTAssertTrue(Self.reveal(chart, in: app, scrollingUp: true))
+        let value = chart.value as? String ?? ""
+        XCTAssertTrue(value.hasPrefix("Shot 1, Driver, 264 yds carry"), "value: \(value)")
+    }
+
     /// Plan R8f: a delete asks first, then says it's done.
     func testDeleteOnTheShotCardAsksThenRemovesTheShot() {
         let app = Self.openSession()

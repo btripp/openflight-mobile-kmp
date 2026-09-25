@@ -317,6 +317,7 @@ internal fun selectedShotCard(
 }
 
 /** Dispersion wording shared by both platforms, so Android and iOS say the same thing. */
+@Suppress("TooManyFunctions") // The shown and the spoken wording, with their small formatters.
 object DispersionCopy {
     const val BAD_READ_NOTE: String =
         "Possible bad read: it lands far from this club's other shots. Delete it if the data looks wrong."
@@ -328,6 +329,122 @@ object DispersionCopy {
             "1 possible bad read (amber ring). Tap it to check, and delete it if it's wrong."
         } else {
             "$count possible bad reads (amber rings). Tap one to check, and delete it if it's wrong."
+        }
+
+    /** How a screen reader asks to step through the dots (plan R8f). */
+    const val NEXT_SHOT: String = "Next shot"
+    const val PREVIOUS_SHOT: String = "Previous shot"
+    const val CLEAR_SELECTION: String = "Clear selection"
+    const val NO_SELECTION: String = "No shot selected"
+
+    /**
+     * What a screen reader says for the whole chart (plan R8f): the shot count and clubs, then, per
+     * club in bag order, its count, average carry and average side (over shots with a measured
+     * side), so the picture isn't the only way to read the dispersion. e.g. "Dispersion chart, 3
+     * shots: Driver, 7-Iron. Driver: 2 shots, 257 yds average carry, 4 yds right on average.
+     * 7-Iron: 1 shot, 165 yds average carry, side not measured."
+     */
+    fun chartSummary(
+        dispersion: SessionDispersionUiState,
+        units: UnitSystem,
+    ): String {
+        val points = dispersion.points
+        val clubs = points.map { clubName(it.club) }.distinct().joinToString(", ")
+        val header = "Dispersion chart, ${shotCount(points.size)}: $clubs."
+        val perClub =
+            points
+                .groupBy { it.club }
+                .values
+                .sortedBy { clubPoints -> clubPoints.first().colorIndex }
+                .map { clubPoints -> clubSummary(clubPoints, units) }
+        return (listOf(header) + perClub).joinToString(" ")
+    }
+
+    /** "Driver: 2 shots, 257 yds average carry, 4 yds right on average." */
+    private fun clubSummary(
+        clubPoints: List<DispersionPoint>,
+        units: UnitSystem,
+    ): String {
+        val measured = clubPoints.filter { !it.sideEstimated }
+        val side =
+            if (measured.isEmpty()) {
+                "side not measured"
+            } else {
+                "${sideText(measured.map { it.offlineYards }.average(), units)} on average"
+            }
+        val badReads = clubPoints.count { it.possibleBadRead }
+        val badReadText =
+            when (badReads) {
+                0 -> null
+                1 -> "1 possible bad read"
+                else -> "$badReads possible bad reads"
+            }
+        return listOfNotNull(
+            "${clubName(clubPoints.first().club)}: ${shotCount(clubPoints.size)}",
+            "${distanceText(clubPoints.map { it.carryYards }.average(), units)} average carry",
+            side,
+            badReadText,
+        ).joinToString(", ") + "."
+    }
+
+    /** One dot for a screen reader: "Shot 3, Driver, 250 yds carry, 4 yds right". */
+    fun pointDescription(
+        point: DispersionPoint,
+        units: UnitSystem,
+    ): String =
+        listOfNotNull(
+            "Shot ${point.shotNumber}",
+            clubName(point.club),
+            "${distanceText(point.carryYards, units)} carry",
+            if (point.sideEstimated) "side not measured" else sideText(point.offlineYards, units),
+            if (point.possibleBadRead) "possible bad read" else null,
+        ).joinToString(", ")
+
+    /** The selected dot's description, or [NO_SELECTION]. */
+    fun selectionDescription(
+        dispersion: SessionDispersionUiState,
+        selectedId: String?,
+        units: UnitSystem,
+    ): String =
+        dispersion.points.firstOrNull { it.id == selectedId }?.let { pointDescription(it, units) } ?: NO_SELECTION
+
+    /**
+     * The shot after (or before) [selectedId] in shot-number order, for stepping through the dots
+     * without seeing them; with nothing selected, the oldest (or newest). `null` past either end.
+     */
+    fun adjacentShotId(
+        points: List<DispersionPoint>,
+        selectedId: String?,
+        forward: Boolean,
+    ): String? {
+        val ordered = points.sortedBy { it.shotNumber }
+        val index = ordered.indexOfFirst { it.id == selectedId }
+        val next =
+            when {
+                index < 0 -> if (forward) ordered.firstOrNull() else ordered.lastOrNull()
+                forward -> ordered.getOrNull(index + 1)
+                else -> ordered.getOrNull(index - 1)
+            }
+        return next?.id
+    }
+
+    private fun shotCount(count: Int): String = if (count == 1) "1 shot" else "$count shots"
+
+    private fun clubName(club: String): String = GolfClub.fromWireValue(club)?.displayName ?: club.ifEmpty { "Unknown" }
+
+    private fun distanceText(
+        yards: Double,
+        units: UnitSystem,
+    ): String = ShotMetricFormatter.number(convertDistanceFromYards(yards, units), 0) + " " + distanceUnitLabel(units)
+
+    private fun sideText(
+        offlineYards: Double,
+        units: UnitSystem,
+    ): String =
+        when {
+            abs(convertDistanceFromYards(offlineYards, units)) < ON_LINE_UNITS -> "on line"
+            offlineYards > 0 -> "${distanceText(offlineYards, units)} right"
+            else -> "${distanceText(-offlineYards, units)} left"
         }
 
     /** e.g. "5 shots · 162 yds avg carry · 1 yds right · 9 yds wide × 12 yds deep". */

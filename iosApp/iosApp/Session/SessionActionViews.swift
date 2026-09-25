@@ -75,7 +75,25 @@ struct SessionActionPanel: View {
     }
 }
 
+/// Plan R8f: with Reduce Motion on, the session lists change without animating rows in and out.
+private struct ReducingMotion: ViewModifier {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        content.transaction { transaction in
+            if reduceMotion {
+                transaction.disablesAnimations = true
+                transaction.animation = nil
+            }
+        }
+    }
+}
+
 extension View {
+    func reducingMotion() -> some View {
+        modifier(ReducingMotion())
+    }
+
     /// The confirmation for a `SessionActionStateConfirming` state. Dismissing it without choosing
     /// sends `onCancel`; the ViewModel ignores that once the action has started.
     func sessionActionDialog(

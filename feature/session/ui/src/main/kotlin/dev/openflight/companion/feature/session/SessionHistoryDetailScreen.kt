@@ -65,6 +65,7 @@ fun SessionHistoryDetailScreen(
     modifier: Modifier = Modifier,
 ) {
     val session = uiState.session
+    val reduceMotion = rememberReduceMotionEnabled()
     OfScaffold(
         modifier = modifier,
         topBar = {
@@ -124,7 +125,7 @@ fun SessionHistoryDetailScreen(
                         shot = shot,
                         units = session.units,
                         onDelete = { onEvent(SessionHistoryDetailEvent.DeleteShot(shot.id)) },
-                        modifier = Modifier.animateItem(),
+                        modifier = animateItemUnless(reduceMotion),
                         deletable = uiState.canDelete,
                     )
                 }

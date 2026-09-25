@@ -80,6 +80,7 @@ struct SessionHistoryContent: View {
         .listStyle(.insetGrouped)
         .accessibilityIdentifier(SessionHistoryTestTags.shared.LIST)
         .screenBackground()
+        .reducingMotion()
         .sessionActionDialog(
             state.action,
             onConfirm: { send(SessionHistoryEventConfirmAction.shared) },
@@ -214,6 +215,7 @@ struct SessionHistoryDetailContent: View {
         .listStyle(.insetGrouped)
         .listSectionSpacing(.compact)
         .screenBackground()
+        .reducingMotion()
         .sessionActionDialog(
             state.action,
             onConfirm: { send(SessionHistoryDetailEventConfirmAction.shared) },
