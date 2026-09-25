@@ -1,5 +1,13 @@
 # Hardware test matrix
 
+**Status: PENDING — blocked on a Raspberry Pi.** As of this step (R4, 2026-09-24) the user
+does not yet have a Raspberry Pi running OpenFlight, so **every row below is
+BLOCKED-ON-HARDWARE** and none has been run. Everything so far has been verified on the
+Android emulator and iOS Simulator against `openflight-server --mock --web-port <port>`
+instead (see the plan's Execution Log for those simulator/emulator runs). Re-run this whole
+matrix, row by row, once a Pi is available, and flip each **Result** from
+BLOCKED-ON-HARDWARE to pass/fail as you go.
+
 Everything below needs real hardware (a Raspberry Pi running the OpenFlight server, a
 physical Android phone, a physical iPhone, and — for two rows — a TI IWR6843 radar). None of
 it can be verified by an agent in CI or on emulators/simulators, so it stays a **human-gated**
@@ -9,6 +17,20 @@ Execution Log (`plans/openflight-kmp-app.md`) and Step 10's matrix.
 Run each row, fill in **Result** (pass / fail) and **Notes**, and link a GitHub issue for any
 failure instead of leaving the row blank. A row that can't be run (no TI hardware, no second
 phone, etc.) should say **BLOCKED-ON-HARDWARE** and why, not be left empty.
+
+## Verify the app (run this first, on real hardware, before the detailed rows below)
+
+The reference iOS app's own "verify the app" checklist (`ios/README.md`), which applies to
+both platforms here:
+
+1. Reach **Connected** over the selected transport.
+2. Fire or hit a shot and confirm it appears on the dashboard.
+3. Open **Driving Range** and confirm the trajectory renders.
+4. Change **Club for next shot** and confirm the Pi accepts it.
+5. If an IWR6843 radar is attached and enabled (`--iwr6843`), run the phone calibration once.
+
+The Pi replays its most recent completed shot when the app connects, so a fresh install
+doesn't need to wait for a new shot if one was already recorded during the current server run.
 
 Setup once, before starting:
 - Pi: `uv sync && uv run openflight-server` (real radar) or `--mock` for the rows that don't
