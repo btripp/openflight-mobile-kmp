@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(./gradlew *)",
+      "Bash(xcodebuild -project iosApp/iosApp.xcodeproj *)",
+      "Bash(xcodebuild -list *)",
+      "Bash(xcrun simctl list *)",
+      "Bash(git status *)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git show *)",
+      "Bash(git branch *)",
+      "Bash(git fetch *)",
+      "Bash(git pull --ff-only *)"
+    ],
+    "ask": [
+      "Bash(git commit *)",
+      "Bash(git push *)"
+    ],
+    "deny": [
+      "Bash(./gradlew *publish*)",
+      "Bash(./gradlew --init-script*)",
+      "Bash(./gradlew -I *)",
+      "Bash(./gradlew wrapper*)",
+      "Bash(git push --force*)",
+      "Bash(git push -f*)",
+      "Bash(git reset --hard*)",
+      "Edit(**/local.properties)",
+      "Read(**/*.jks)",
+      "Read(**/*.keystore)",
+      "Edit(**/*.jks)",
+      "Edit(**/*.keystore)",
+      "Read(**/.env*)",
+      "Edit(**/.env*)"
+    ]
+  },
+  "extraKnownMarketplaces": {
+    "Kotlin": {
+      "source": { "source": "github", "repo": "Kotlin/kotlin-agent-skills" }
+    }
+  },
+  "enabledPlugins": {
+    "swift-lsp@claude-plugins-official": true,
+    "kotlin-agent-skills@Kotlin": true
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/commit-gate.sh\"",
+            "timeout": 1800
+          }
+        ]
+      }
+    ]
+  }
+}

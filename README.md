@@ -320,6 +320,40 @@ a bare IP).
   because the app only talks to the user's own device on the LAN and never sends credentials.
   Revisit it if the app ever talks to internet hosts.
 
+## Working with Claude Code
+
+The repo ships a shared [Claude Code](https://code.claude.com) setup. It takes effect once you
+trust the folder the first time you run `claude` here.
+
+| Path | What it does |
+|---|---|
+| [`CLAUDE.md`](CLAUDE.md) | Architecture, module rules, invariants and CI. Loaded every session. |
+| [`.claude/rules/`](.claude/rules) | Path-scoped rules for shared KMP code, the Compose UI and the SwiftUI app. Each loads only when Claude reads a matching file. |
+| [`.claude/settings.json`](.claude/settings.json) | Pre-approves `./gradlew`, `xcodebuild` and read-only git commands. Asks before `git commit` and `git push`. Blocks Gradle publish tasks and init scripts, force-push, `reset --hard`, and reading signing keys or `.env` files. |
+| [`.claude/hooks/commit-gate.sh`](.claude/hooks/commit-gate.sh) | Before any `git commit` Claude makes, runs `spotlessCheck detekt allTests :androidApp:assembleDebug` (plus the iOS framework link on macOS) and blocks the commit unless Gradle exits 0. Markdown-only commits skip the build. Set `OPENFLIGHT_SKIP_COMMIT_GATE=1` to bypass it. |
+| [`.claude/skills/verify`](.claude/skills/verify/SKILL.md) | `/verify` runs the same chain on demand, and the Xcode build too when iOS code changed. |
+
+It also enables two plugins:
+- **`swift-lsp`**, from Anthropic's official marketplace. It gives Claude Swift diagnostics
+  through `sourcekit-lsp`, which ships with Xcode.
+- **`kotlin-agent-skills`**, JetBrains' skills from
+  [Kotlin/kotlin-agent-skills](https://github.com/Kotlin/kotlin-agent-skills), including
+  Kotlin/Native build performance.
+
+To opt out of either, set it to `false` under `enabledPlugins` in your own
+`.claude/settings.local.json`. That file is gitignored, and so is `CLAUDE.local.md`; put
+personal overrides in either one.
+
+Optional extras, not enabled by default:
+- `kotlin-lsp@claude-plugins-official`, Kotlin diagnostics via JetBrains'
+  [kotlin-lsp](https://github.com/Kotlin/kotlin-lsp) (`brew install JetBrains/utils/kotlin-lsp`).
+  It's alpha and doesn't support KMP source sets yet, so it mostly helps in the Android-only
+  `:ui` modules.
+- [chrisbanes/skills](https://github.com/chrisbanes/skills) for Compose performance, state, UI
+  testing and Flow.
+- [android/skills](https://github.com/android/skills) for Google's Android guidance, most of
+  it outside this app's scope.
+
 ## Credits
 
 - Upstream project: [jewbetcha/openflight](https://github.com/jewbetcha/openflight) (the

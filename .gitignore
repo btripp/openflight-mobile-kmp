@@ -42,4 +42,9 @@ iosApp/build/
 __pycache__/
 .venv/
 node_modules/
-.claude/
+
+# Claude Code: .claude/ (settings, hooks, rules, skills) is shared and committed.
+# Only personal overrides and agent worktrees stay local.
+.claude/settings.local.json
+.claude/worktrees/
+CLAUDE.local.md
