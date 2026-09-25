@@ -47,4 +47,81 @@ object OfIcons {
                 }
             }.build()
     }
+
+    /** A house: the dashboard (home) entry of the app navigation (F1a). */
+    val Home: ImageVector by lazy {
+        icon("OfHome") {
+            moveTo(12f, 3f)
+            lineTo(21f, 11f)
+            lineTo(18.5f, 11f)
+            lineTo(18.5f, 20f)
+            lineTo(14f, 20f)
+            lineTo(14f, 14f)
+            lineTo(10f, 14f)
+            lineTo(10f, 20f)
+            lineTo(5.5f, 20f)
+            lineTo(5.5f, 11f)
+            lineTo(3f, 11f)
+            close()
+        }
+    }
+
+    /** Three bars of a list: the session (shot list and stats) entry (F1a). */
+    val Session: ImageVector by lazy {
+        icon("OfSession") {
+            for (top in listOf(5f, 10.75f, 16.5f)) {
+                moveTo(4f, top)
+                lineTo(20f, top)
+                lineTo(20f, top + 2.5f)
+                lineTo(4f, top + 2.5f)
+                close()
+            }
+        }
+    }
+
+    /** A lightning bolt: the swing-speed training entry (F1a). */
+    val Training: ImageVector by lazy {
+        icon("OfTraining") {
+            moveTo(13.5f, 2f)
+            lineTo(5f, 13.5f)
+            lineTo(11f, 13.5f)
+            lineTo(10f, 22f)
+            lineTo(19f, 10f)
+            lineTo(13f, 10f)
+            close()
+        }
+    }
+
+    /** Three sliders: the settings entry (F1a). */
+    val Settings: ImageVector by lazy {
+        icon("OfSettings") {
+            // (track y, knob x) per slider.
+            for ((y, knob) in listOf(6f to 15f, 12f to 8f, 18f to 13f)) {
+                moveTo(3f, y - 1f)
+                lineTo(21f, y - 1f)
+                lineTo(21f, y + 1f)
+                lineTo(3f, y + 1f)
+                close()
+                moveTo(knob - 2f, y - 2.5f)
+                lineTo(knob + 2f, y - 2.5f)
+                lineTo(knob + 2f, y + 2.5f)
+                lineTo(knob - 2f, y + 2.5f)
+                close()
+            }
+        }
+    }
+
+    private fun icon(
+        name: String,
+        pathBuilder: androidx.compose.ui.graphics.vector.PathBuilder.() -> Unit,
+    ): ImageVector =
+        ImageVector
+            .Builder(
+                name = name,
+                defaultWidth = 24.dp,
+                defaultHeight = 24.dp,
+                viewportWidth = 24f,
+                viewportHeight = 24f,
+            ).apply { path(fill = SolidColor(Color.Black), pathBuilder = pathBuilder) }
+            .build()
 }

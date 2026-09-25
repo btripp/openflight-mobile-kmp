@@ -10,6 +10,8 @@ import androidx.lifecycle.ProcessLifecycleOwner
 import dev.openflight.companion.core.data.AppLifecycle
 import dev.openflight.companion.core.data.LifecycleConnectionPolicy
 import dev.openflight.companion.core.designsystem.OfTheme
+import dev.openflight.companion.core.designsystem.OfWindowClass
+import dev.openflight.companion.core.designsystem.rememberOfWindowClass
 import org.koin.compose.koinInject
 
 /**
@@ -21,12 +23,14 @@ import org.koin.compose.koinInject
  * [AppLifecycle.onBackground]. This feeds it from [ProcessLifecycleOwner] (`ON_START`/`ON_STOP`),
  * which ignores rotations and brief activity switches, using this composition's Koin graph (the one
  * the debug launch options and instrumented tests set up).
+ *
+ * @param windowClass the phone or tablet layout (plan F1a); tests force one, the app follows the window.
  */
 @Composable
-fun OpenFlightApp() {
+fun OpenFlightApp(windowClass: OfWindowClass = rememberOfWindowClass()) {
     OfTheme {
         AppLifecycleSource()
-        AppNavHost()
+        AppNavHost(windowClass = windowClass)
     }
 }
 

@@ -6,10 +6,6 @@ package dev.openflight.companion.feature.dashboard
  * [DashboardTestTags] (commonMain), which the iOS UI uses too.
  */
 object DashboardUiTags {
-    const val SESSION = "dashboard.nav.session"
-    const val TRAINING = "dashboard.nav.training"
-    const val CAMERA = "dashboard.nav.camera"
-    const val SETTINGS = "dashboard.nav.settings"
     const val SHOT_FLASH = "dashboard.shotFlash"
     const val CLUB_CHIPS = "dashboard.clubChips"
     const val CARRY = "dashboard.carry"

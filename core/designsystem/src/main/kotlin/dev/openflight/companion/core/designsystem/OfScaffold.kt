@@ -2,14 +2,9 @@
 package dev.openflight.companion.core.designsystem
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Snackbar
@@ -19,7 +14,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.remember
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -30,7 +24,8 @@ import androidx.compose.ui.tooling.preview.Preview
  * [Scaffold] with a transparent container, so every screen (dashboard,
  * calibration, range) gets the same backdrop without repeating it.
  *
- * @param bottomBar for example the dashboard's [OfBottomBar].
+ * @param bottomBar a screen's own bottom bar, if any. The app's top-level navigation lives in
+ *   [OfAdaptiveScaffold] around the screens, not here.
  * @param messages where [OfMessageHostState.show] messages (snackbars) appear.
  */
 @Composable
@@ -90,28 +85,6 @@ class OfMessageHostState internal constructor(
 
 @Composable
 fun rememberOfMessageHostState(): OfMessageHostState = remember { OfMessageHostState(SnackbarHostState()) }
-
-/**
- * A compact bottom bar of text entries, for example the dashboard's Session / Training / Camera /
- * Settings row. Pads itself above the system navigation bar.
- */
-@Composable
-fun OfBottomBar(
-    modifier: Modifier = Modifier,
-    content: @Composable RowScope.() -> Unit,
-) {
-    Row(
-        modifier =
-            modifier
-                .fillMaxWidth()
-                .background(OfColorTokens.BgCard)
-                .navigationBarsPadding()
-                .padding(horizontal = OfSpacing.Sm, vertical = OfSpacing.Xs),
-        horizontalArrangement = Arrangement.SpaceEvenly,
-        verticalAlignment = Alignment.CenterVertically,
-        content = content,
-    )
-}
 
 @Preview
 @Composable
