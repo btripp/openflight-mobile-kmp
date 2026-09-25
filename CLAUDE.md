@@ -34,29 +34,41 @@ iosApp (SwiftUI, Xcode) ──> Shared.framework = shared, exporting core:model/
                              + feature:* + KoinHelper/NativeViewModels bridge; AppIcon asset catalog
 shared ──> feature:dashboard | calibration | range | session | training | camera | settings (KMP, VMs)
              └──> core:data ──> core:ble / core:network / core:socketio ──> core:protocol ──> core:model
+                        └──> core:database (Room 3 KMP shot history; internal to core:data)
 feature:range ──> core:flight ; feature:calibration ──> core:sensors ; others ──> core:insights
 core:testing → fake repositories shared by VM tests (test-only, no app depends on it directly)
 ```
 
 Current leaf `core:*` modules: `model`, `protocol`, `ble`, `network`, `socketio`, `data`,
-`flight`, `sensors`, `insights`, `designsystem`, `testing`. Current `feature:*` modules:
+`database`, `flight`, `sensors`, `insights`, `designsystem`, `testing`. Current `feature:*` modules:
 `dashboard`, `calibration`, `range`, `session`, `training`, `camera`, `settings` (each with a
 matching Android-only `feature:<name>:ui`).
 
 ## Adding a module
 1. Add `include(":core:foo")` to `settings.gradle.kts`.
 2. In `core/foo/build.gradle.kts`, add `plugins { alias(libs.plugins.openflight.kmp.library) }`
-   for shared (KMP) code, or `openflight.android.library.compose` for an Android-only Jetpack
-   Compose module (a `feature:<name>:ui` or `core:designsystem`).
+   for shared (KMP) code, `openflight.kmp.room` for a KMP module holding a Room database (it
+   applies `openflight.kmp.library` plus KSP and the Room plugin), or
+   `openflight.android.library.compose` for an Android-only Jetpack Compose module (a
+   `feature:<name>:ui` or `core:designsystem`).
 3. The namespace defaults to `dev.openflight.companion.core.foo`. For KMP: Android + iosArm64 +
    iosSimulatorArm64 targets, Android host tests and the commonTest deps. For Android Compose:
    the Compose BOM, `src/test` (JUnit 4 kotlin.test + assertk) and `src/androidTest` device UI
    tests. Spotless and detekt come with both.
 4. Depend on other modules through typesafe accessors: `implementation(projects.core.model)`.
 
-Convention plugin ids: `openflight.kmp.library`, `openflight.android.library.compose`,
-`openflight.android.application`, `openflight.spotless`, `openflight.detekt`
-(`build-logic/convention`).
+Convention plugin ids: `openflight.kmp.library`, `openflight.kmp.room`,
+`openflight.android.library.compose`, `openflight.android.application`, `openflight.spotless`,
+`openflight.detekt` (`build-logic/convention`).
+
+## Persistent history (Room)
+- `core:database` holds the Room 3 KMP database (`androidx.room3`, bundled SQLite). Schemas are
+  exported to `core/database/schemas/` and **committed** (they are source, not goldens). A new
+  schema version needs a `Migration` plus a case in `ShotHistoryMigrationTest` (iOS simulator;
+  room3-testing's file-based helper is native-only). Never use destructive fallback.
+- Only `core:data` sees Room: `ShotHistoryRepository` is the public API.
+- Android host tests load the host's SQLite binary from `sqlite-bundled-jvm`
+  (`BundledSqliteHostTests.kt`), so in-memory Room tests run in `testAndroidHostTest` too.
 
 ## Tests
 - commonTest: `kotlin.test` + **assertk** (Truth-style assertions), **Turbine** for Flows,

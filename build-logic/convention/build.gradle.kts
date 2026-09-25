@@ -25,6 +25,8 @@ dependencies {
     compileOnly(libs.kotlin.composeCompilerGradlePlugin)
     compileOnly(libs.spotless.gradlePlugin)
     compileOnly(libs.detekt.gradlePlugin)
+    compileOnly(libs.ksp.gradlePlugin)
+    compileOnly(libs.androidx.room3.gradlePlugin)
 }
 
 tasks {
@@ -70,6 +72,13 @@ gradlePlugin {
                     .get()
                     .pluginId
             implementationClass = "dev.openflight.buildlogic.AndroidLibraryComposeConventionPlugin"
+        }
+        register("kmpRoom") {
+            id =
+                libs.plugins.openflight.kmp.room
+                    .get()
+                    .pluginId
+            implementationClass = "dev.openflight.buildlogic.KmpRoomConventionPlugin"
         }
     }
 }

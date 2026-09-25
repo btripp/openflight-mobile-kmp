@@ -51,15 +51,18 @@ internal val PiJson: Json =
 
 /** One decoded server event (server.py `socketio.emit(...)` names). */
 internal sealed interface PiEvent {
+    /** @property raw the `shot` object exactly as received, for the persistent history (R8h). */
     data class Shot(
         val detail: ShotDetail,
         val stats: SessionStats?,
+        val raw: JsonElement? = null,
     ) : PiEvent
 
     /** `shot_update`: the enriched (or enrichment-skipped) final version of a shot already sent. */
     data class ShotUpdate(
         val detail: ShotDetail,
         val stats: SessionStats?,
+        val raw: JsonElement? = null,
     ) : PiEvent
 
     data class Processing(
@@ -211,12 +214,18 @@ internal fun decodePiEvent(event: SocketEvent): PiEvent? {
 private fun <T> JsonElement.decode(strategy: DeserializationStrategy<T>): T =
     PiJson.decodeFromJsonElement(strategy, this)
 
+/** The payload's `shot` object, undecoded (every key, known or not). */
+private fun JsonElement.rawShot(): JsonElement? = (this as? JsonObject)?.get("shot")
+
 /** One decoder per server event name (server.py `socketio.emit(...)`). */
 private val PI_EVENT_DECODERS: Map<String, (JsonElement) -> PiEvent> =
     mapOf(
-        "shot" to { data -> data.decode(ShotPayload.serializer()).let { PiEvent.Shot(it.shot, it.stats) } },
-        "shot_update" to
-            { data -> data.decode(ShotPayload.serializer()).let { PiEvent.ShotUpdate(it.shot, it.stats) } },
+        "shot" to { data ->
+            data.decode(ShotPayload.serializer()).let { PiEvent.Shot(it.shot, it.stats, data.rawShot()) }
+        },
+        "shot_update" to { data ->
+            data.decode(ShotPayload.serializer()).let { PiEvent.ShotUpdate(it.shot, it.stats, data.rawShot()) }
+        },
         "shot_processing" to { data -> PiEvent.Processing(data.decode(ProcessingPayload.serializer()).state) },
         "swing_speed" to
             { data -> data.decode(SwingSpeedPayload.serializer()).let { PiEvent.SwingSpeed(it.event, it.stats) } },

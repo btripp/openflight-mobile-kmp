@@ -34,6 +34,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -92,6 +93,7 @@ internal class DefaultPiSessionRepository(
     override val cloudUploadStatus: StateFlow<CloudUploadStatus> = store.cloudUploadStatus.asStateFlow()
     override val mockMode: StateFlow<Boolean?> = store.mockMode.asStateFlow()
     override val notices: SharedFlow<PiNotice> = store.notices.asSharedFlow()
+    override val liveShots: Flow<PiLiveShot> = store.liveShots.asSharedFlow()
 
     private val activeSocket = MutableStateFlow<PiSocket?>(null)
     private var currentKey: SessionKey? = null

@@ -19,6 +19,8 @@ import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension
  * - `allTests`/`check` also run `verifyNoComposeInCommonMain` (ADR 0001: no Compose in
  *   shared code; Android UI lives in `openflight.android.library.compose` modules).
  *
+ * - Android host tests can open a bundled-SQLite Room database (`configureBundledSqliteHostTests`).
+ *
  * Namespace defaults to `dev.openflight.companion.<gradle path>`.
  */
 class KmpLibraryConventionPlugin : Plugin<Project> {
@@ -56,6 +58,7 @@ class KmpLibraryConventionPlugin : Plugin<Project> {
             }
 
             registerNoComposeInCommonMainCheck()
+            configureBundledSqliteHostTests()
         }
     }
 }
