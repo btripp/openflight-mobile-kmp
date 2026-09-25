@@ -54,6 +54,8 @@ class MainActivity : ComponentActivity() {
             host = getStringExtra(EXTRA_HOST)?.takeIf { it.isNotBlank() },
             previewHistory = getBooleanExtra(EXTRA_PREVIEW_HISTORY, false),
             previewHistoryStuck = getBooleanExtra(EXTRA_PREVIEW_HISTORY_STUCK, false),
+            previewPiSession = getBooleanExtra(EXTRA_PREVIEW_PI_SESSION, false),
+            previewPiSessionStuck = getBooleanExtra(EXTRA_PREVIEW_PI_SESSION_STUCK, false),
         )
 
     private companion object {
@@ -65,6 +67,8 @@ class MainActivity : ComponentActivity() {
         const val EXTRA_HOST = "host"
         const val EXTRA_PREVIEW_HISTORY = "preview_history"
         const val EXTRA_PREVIEW_HISTORY_STUCK = "preview_history_stuck"
+        const val EXTRA_PREVIEW_PI_SESSION = "preview_pi_session"
+        const val EXTRA_PREVIEW_PI_SESSION_STUCK = "preview_pi_session_stuck"
 
         var launchOptionsApplied = false
     }

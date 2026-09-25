@@ -56,6 +56,17 @@ class LaunchOptionsTest {
     }
 
     @Test
+    fun previewPiSessionFlagsAreSeparateFromTheShotRepository() {
+        val answered = LaunchOptions.fromArguments(listOf("app", "--preview-pi-session"))
+        val stuck = LaunchOptions.fromArguments(listOf("app", "--preview-pi-session-stuck"))
+
+        assertThat(answered.previewPiSession).isTrue()
+        assertThat(answered.previewPiSessionStuck).isFalse()
+        assertThat(stuck.previewPiSessionStuck).isTrue()
+        assertThat(stuck.usesFakeRepository).isFalse()
+    }
+
+    @Test
     fun missingOrUnknownValuesAreIgnored() {
         val options = LaunchOptions.fromArguments(listOf("app", "--transport", "carrier-pigeon", "--host"))
 

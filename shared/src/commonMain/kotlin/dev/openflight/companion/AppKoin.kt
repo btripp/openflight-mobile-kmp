@@ -4,6 +4,7 @@ package dev.openflight.companion
 import com.rickclephas.kmp.nativecoroutines.NativeCoroutinesIgnore
 import dev.openflight.companion.core.data.AppLifecycle
 import dev.openflight.companion.core.data.LifecycleConnectionPolicy
+import dev.openflight.companion.core.data.PiSessionRepository
 import dev.openflight.companion.core.data.SettingsRepository
 import dev.openflight.companion.core.data.ShotHistoryRepository
 import dev.openflight.companion.core.data.ShotRepository
@@ -69,6 +70,16 @@ suspend fun Koin.applyLaunchOptions(options: LaunchOptions) {
     if (options.previewHistory || options.previewHistoryStuck) {
         loadModules(listOf(previewHistoryModule(stuck = options.previewHistoryStuck)), allowOverride = true)
     }
+    if (options.previewPiSession || options.previewPiSessionStuck) {
+        val real = get<PiSessionRepository>()
+        val preview =
+            PreviewPiSessionRepository(
+                delegate = real,
+                answerDelayMillis =
+                    if (options.previewPiSessionStuck) null else PreviewPiSessionRepository.DEFAULT_ANSWER_DELAY_MILLIS,
+            )
+        loadModules(listOf(module { single<PiSessionRepository> { preview } }), allowOverride = true)
+    }
     val settings = get<SettingsRepository>()
     options.transport?.let { settings.setTransport(it) }
     options.host?.let { settings.setHost(it) }
@@ -78,7 +89,10 @@ private fun previewModule(showPreviewShot: Boolean): Module =
     module {
         // Deletes and Clear edit the preview history in memory, like the real repository.
         single<ShotRepository> {
-            LocalEditsShotRepository(PreviewShotRepository(settings = get(), showPreviewShot = showPreviewShot))
+            LocalEditsShotRepository(
+                PreviewShotRepository(settings = get(), showPreviewShot = showPreviewShot),
+                pi = get(),
+            )
         }
     }
 

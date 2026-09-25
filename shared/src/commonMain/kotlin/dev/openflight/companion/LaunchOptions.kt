@@ -10,10 +10,11 @@ import dev.openflight.companion.core.data.TransportType
  *
  * - iOS reads them from `NSProcessInfo.arguments`: `--ui-testing`, `--preview-shot`,
  *   `--range-mode`, `--preview-flight`, `--transport wifi|bluetooth`, `--host <host[:port]>`,
- *   `--preview-history`, `--preview-history-stuck`.
+ *   `--preview-history`, `--preview-history-stuck`, `--preview-pi-session`, `--preview-pi-session-stuck`.
  * - Android reads intent extras: `--ez ui_testing true`, `--ez preview_shot true`,
  *   `--ez range_mode true`, `--ez preview_flight true`, `--es transport wifi`,
- *   `--es host 10.0.2.2:8091`, `--ez preview_history true`, `--ez preview_history_stuck true`.
+ *   `--es host 10.0.2.2:8091`, `--ez preview_history true`, `--ez preview_history_stuck true`,
+ *   `--ez preview_pi_session true`, `--ez preview_pi_session_stuck true`.
  *
  * @property uiTesting swap in [PreviewShotRepository] so no transport ever starts.
  * @property previewShot like [uiTesting], and the fake history holds the preview shot.
@@ -24,6 +25,9 @@ import dev.openflight.companion.core.data.TransportType
  * @property previewHistory swap in [PreviewShotHistoryRepository]: two stored sessions whose
  *   deletes land after a short delay (plan R8f, so the pending state can be seen).
  * @property previewHistoryStuck like [previewHistory], but deletes never land (the failure state).
+ * @property previewPiSession swap in [PreviewPiSessionRepository]: a connected Pi whose deletes and
+ *   clears are confirmed after a short delay (plan R8f). Use with [uiTesting].
+ * @property previewPiSessionStuck like [previewPiSession], but the Pi never answers.
  */
 data class LaunchOptions(
     val uiTesting: Boolean = false,
@@ -34,6 +38,8 @@ data class LaunchOptions(
     val host: String? = null,
     val previewHistory: Boolean = false,
     val previewHistoryStuck: Boolean = false,
+    val previewPiSession: Boolean = false,
+    val previewPiSessionStuck: Boolean = false,
 ) {
     val usesFakeRepository: Boolean
         get() = uiTesting || previewShot
@@ -47,6 +53,8 @@ data class LaunchOptions(
         const val HOST = "--host"
         const val PREVIEW_HISTORY = "--preview-history"
         const val PREVIEW_HISTORY_STUCK = "--preview-history-stuck"
+        const val PREVIEW_PI_SESSION = "--preview-pi-session"
+        const val PREVIEW_PI_SESSION_STUCK = "--preview-pi-session-stuck"
 
         /** Parses process arguments; unknown arguments (Xcode adds its own) are ignored. */
         fun fromArguments(arguments: List<String>): LaunchOptions {
@@ -63,6 +71,8 @@ data class LaunchOptions(
                 host = valueAfter(HOST)?.takeIf { it.isNotBlank() && !it.startsWith("--") },
                 previewHistory = PREVIEW_HISTORY in arguments,
                 previewHistoryStuck = PREVIEW_HISTORY_STUCK in arguments,
+                previewPiSession = PREVIEW_PI_SESSION in arguments,
+                previewPiSessionStuck = PREVIEW_PI_SESSION_STUCK in arguments,
             )
         }
     }
