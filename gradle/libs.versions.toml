@@ -42,6 +42,17 @@ androidx-navigation = "2.10.2"
 # 1.0.6 is built for Kotlin 2.4.20 (compiler-plugin mode, no KSP). Keep it in step with the
 # Swift package pinned in iosApp.xcodeproj.
 kmp-nativecoroutines = "1.0.6"
+# Persistent shot history (R8h), checked on 2026-09-25 against Google Maven and the Room/KMP docs
+# (developer.android.com/kotlin/multiplatform/room, /jetpack/androidx/releases/room3):
+# - Room 3 (`androidx.room3`, 3.0.3 stable, 2026-09-09) is the KMP-first line the KMP guide now
+#   uses: SQLiteDriver-only, coroutine-only, KSP-only. Room 2.8.5 is still maintained but carries
+#   the SupportSQLite/Android surface we don't need.
+# - sqlite-bundled 2.7.1 is the version room3-runtime 3.0.3 itself depends on.
+# - KSP 2.3.x is decoupled from the Kotlin version; 2.3.12 (2026-09-09) is the latest, and 2.3.10
+#   fixed KSP with Kotlin 2.4 module names and AGP 9 built-in Kotlin.
+room3 = "3.0.3"
+sqlite = "2.7.1"
+ksp = "2.3.12"
 
 [libraries]
 # Test
@@ -82,6 +93,14 @@ androidx-compose-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling
 androidx-compose-ui-test-junit4 = { module = "androidx.compose.ui:ui-test-junit4" }
 androidx-compose-ui-test-manifest = { module = "androidx.compose.ui:ui-test-manifest" }
 
+# Persistent history (R8h): Room 3 KMP + the bundled SQLite driver.
+androidx-room3-runtime = { module = "androidx.room3:room3-runtime", version.ref = "room3" }
+androidx-room3-compiler = { module = "androidx.room3:room3-compiler", version.ref = "room3" }
+androidx-room3-testing = { module = "androidx.room3:room3-testing", version.ref = "room3" }
+androidx-sqlite-bundled = { module = "androidx.sqlite:sqlite-bundled", version.ref = "sqlite" }
+# Only for its host binaries: Android host tests load them (build-logic BundledSqliteHostTests.kt).
+androidx-sqlite-bundled-jvm = { module = "androidx.sqlite:sqlite-bundled-jvm", version.ref = "sqlite" }
+
 # DI
 koin-bom = { module = "io.insert-koin:koin-bom", version.ref = "koin" }
 koin-core = { module = "io.insert-koin:koin-core" }
@@ -105,6 +124,8 @@ kotlin-gradlePlugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", ve
 kotlin-composeCompilerGradlePlugin = { module = "org.jetbrains.kotlin:compose-compiler-gradle-plugin", version.ref = "kotlin" }
 spotless-gradlePlugin = { module = "com.diffplug.spotless:spotless-plugin-gradle", version.ref = "spotless" }
 detekt-gradlePlugin = { module = "io.gitlab.arturbosch.detekt:detekt-gradle-plugin", version.ref = "detekt" }
+ksp-gradlePlugin = { module = "com.google.devtools.ksp:symbol-processing-gradle-plugin", version.ref = "ksp" }
+androidx-room3-gradlePlugin = { module = "androidx.room3:room3-gradle-plugin", version.ref = "room3" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
@@ -116,6 +137,8 @@ spotless = { id = "com.diffplug.spotless", version.ref = "spotless" }
 detekt = { id = "io.gitlab.arturbosch.detekt", version.ref = "detekt" }
 android-library = { id = "com.android.library", version.ref = "agp" }
 kmp-nativecoroutines = { id = "com.rickclephas.kmp.nativecoroutines", version.ref = "kmp-nativecoroutines" }
+ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
+androidx-room3 = { id = "androidx.room3", version.ref = "room3" }
 
 # Convention plugins (build-logic/convention)
 openflight-kmp-library = { id = "openflight.kmp.library" }
@@ -123,3 +146,4 @@ openflight-android-application = { id = "openflight.android.application" }
 openflight-spotless = { id = "openflight.spotless" }
 openflight-detekt = { id = "openflight.detekt" }
 openflight-android-library-compose = { id = "openflight.android.library.compose" }
+openflight-kmp-room = { id = "openflight.kmp.room" }

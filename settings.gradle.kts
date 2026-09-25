@@ -34,6 +34,7 @@ dependencyResolutionManagement {
 include(":androidApp")
 include(":shared")
 include(":core:data")
+include(":core:database")
 include(":core:designsystem")
 include(":core:flight")
 include(":core:insights")

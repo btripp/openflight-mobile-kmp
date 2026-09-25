@@ -12,11 +12,14 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.toRoute
 import dev.openflight.companion.feature.calibration.CalibrationRoute
 import dev.openflight.companion.feature.camera.CameraRoute
 import dev.openflight.companion.feature.dashboard.DashboardNavigation
 import dev.openflight.companion.feature.dashboard.DashboardRoute
 import dev.openflight.companion.feature.range.DrivingRangeRoute
+import dev.openflight.companion.feature.session.SessionHistoryDetailRoute
+import dev.openflight.companion.feature.session.SessionHistoryRoute
 import dev.openflight.companion.feature.session.SessionRoute
 import dev.openflight.companion.feature.settings.SettingsRoute
 import dev.openflight.companion.feature.training.TrainingRoute
@@ -38,6 +41,16 @@ data object Range
 /** Session stats, shot list, delete/clear and CSV export (R5b/R6c). */
 @Serializable
 data object Session
+
+/** Stored sessions, newest first (R8h). */
+@Serializable
+data object SessionHistory
+
+/** One stored session's stats, shots and CSV export (R8h). */
+@Serializable
+data class SessionHistoryDetail(
+    val sessionId: String,
+)
 
 /** Swing-speed training (R6c, Wi-Fi only). */
 @Serializable
@@ -83,7 +96,26 @@ fun AppNavHost(navController: NavHostController = rememberNavController()) {
         }
         composable<Calibration> { CalibrationRoute(onBack = onBack) }
         composable<Range> { DrivingRangeRoute(onExit = onBack, autoplay = launchOptions.previewFlight) }
-        composable<Session> { SessionRoute(onBack = onBack, onShareCsv = rememberCsvSharer()) }
+        composable<Session> {
+            SessionRoute(
+                onBack = onBack,
+                onShareCsv = rememberCsvSharer(),
+                onOpenHistory = { navController.navigate(SessionHistory) },
+            )
+        }
+        composable<SessionHistory> {
+            SessionHistoryRoute(
+                onBack = onBack,
+                onOpenSession = { navController.navigate(SessionHistoryDetail(it)) },
+            )
+        }
+        composable<SessionHistoryDetail> { entry ->
+            SessionHistoryDetailRoute(
+                sessionId = entry.toRoute<SessionHistoryDetail>().sessionId,
+                onBack = onBack,
+                onShareCsv = rememberCsvSharer(),
+            )
+        }
         composable<Training> { TrainingRoute(onBack = onBack) }
         composable<Camera> { CameraRoute(onBack = onBack) }
         composable<Settings> { SettingsRoute(onBack = onBack) }

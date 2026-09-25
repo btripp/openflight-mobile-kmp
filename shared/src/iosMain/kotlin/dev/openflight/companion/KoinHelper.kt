@@ -7,12 +7,15 @@ import dev.openflight.companion.feature.calibration.CalibrationViewModel
 import dev.openflight.companion.feature.camera.CameraViewModel
 import dev.openflight.companion.feature.dashboard.DashboardViewModel
 import dev.openflight.companion.feature.range.DrivingRangeViewModel
+import dev.openflight.companion.feature.session.SessionHistoryDetailViewModel
+import dev.openflight.companion.feature.session.SessionHistoryViewModel
 import dev.openflight.companion.feature.session.SessionViewModel
 import dev.openflight.companion.feature.settings.SettingsViewModel
 import dev.openflight.companion.feature.training.TrainingViewModel
 import kotlinx.coroutines.runBlocking
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.get
+import org.koin.core.parameter.parametersOf
 import org.koin.dsl.module
 import org.koin.mp.KoinPlatform
 import platform.Foundation.NSProcessInfo
@@ -48,6 +51,7 @@ fun startKoinForIos() {
  * through its ViewModel bridge when it goes away (step R2). Koin must be started first
  * ([startKoinForIos]).
  */
+@Suppress("TooManyFunctions") // One getter per ViewModel Swift builds.
 class KoinHelper : KoinComponent {
     fun dashboardViewModel(): DashboardViewModel = get()
 
@@ -56,6 +60,13 @@ class KoinHelper : KoinComponent {
     fun drivingRangeViewModel(): DrivingRangeViewModel = get()
 
     fun sessionViewModel(): SessionViewModel = get()
+
+    /** Plan R8h: the stored sessions, newest first. */
+    fun sessionHistoryViewModel(): SessionHistoryViewModel = get()
+
+    /** Plan R8h: one stored session. */
+    fun sessionHistoryDetailViewModel(sessionId: String): SessionHistoryDetailViewModel =
+        get { parametersOf(sessionId) }
 
     /** The app-wide shot stream. */
     fun shotRepository(): ShotRepository = get()

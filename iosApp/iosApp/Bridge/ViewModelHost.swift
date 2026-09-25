@@ -29,6 +29,8 @@ protocol SharedViewModel: Lifecycle_viewmodelViewModel {
 extension DashboardViewModel: SharedViewModel {}
 extension CalibrationViewModel: SharedViewModel {}
 extension SessionViewModel: SharedViewModel {}
+extension SessionHistoryViewModel: SharedViewModel {}
+extension SessionHistoryDetailViewModel: SharedViewModel {}
 extension TrainingViewModel: SharedViewModel {}
 extension CameraViewModel: SharedViewModel {}
 extension SettingsViewModel: SharedViewModel {}

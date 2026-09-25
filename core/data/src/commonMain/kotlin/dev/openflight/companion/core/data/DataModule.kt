@@ -31,7 +31,7 @@ expect val platformDataModule: Module
  */
 val dataModule: Module =
     module {
-        includes(platformDataModule)
+        includes(platformDataModule, shotHistoryModule)
 
         single<HttpClient> { openFlightHttpClient() }
         single<WifiTransportFactory> {
@@ -49,6 +49,8 @@ val dataModule: Module =
                 piControl = get(),
                 // R6b: started/stopped with the shot stream; delete/clear reach the Pi through it.
                 piSession = get(),
+                // R8h: every live shot is also filed in the persistent history.
+                persistentHistory = get(),
             )
         }
         // R8d: foreground-only transports. The shell reports the lifecycle; the policy follows it.

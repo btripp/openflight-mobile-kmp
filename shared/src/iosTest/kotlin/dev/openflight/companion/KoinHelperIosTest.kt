@@ -18,6 +18,8 @@ class KoinHelperIosTest {
             assertThat(helper.calibrationViewModel()).isNotNull()
             assertThat(helper.drivingRangeViewModel()).isNotNull()
             assertThat(helper.sessionViewModel()).isNotNull()
+            assertThat(helper.sessionHistoryViewModel()).isNotNull()
+            assertThat(helper.sessionHistoryDetailViewModel("session-1")).isNotNull()
             assertThat(helper.trainingViewModel()).isNotNull()
             assertThat(helper.cameraViewModel()).isNotNull()
             assertThat(helper.settingsViewModel()).isNotNull()

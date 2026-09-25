@@ -29,6 +29,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -62,6 +63,13 @@ internal fun interface WifiTransportFactory {
  * [clearHistory] are **server-confirmed**: the request goes to [piSession] and [history] changes
  * only once its [PiSessionRepository.deletionState] / [PiSessionRepository.clearState] reports
  * success. Without a Pi link they stay local (optimistic) edits.
+ *
+ * Plan R8h: [history] is the current session's cache; every shot is also written through to
+ * [persistentHistory] (SSE/BLE shots with their Socket.IO detail when known, plus the Pi's live
+ * `shot`/`shot_update`), each connect of the transport or of the Pi's Socket.IO link starts a
+ * history session, and deletes and per-profile clears
+ * are mirrored there once they take effect here. A local-only [clearHistory] leaves the stored
+ * history alone ("clear all history" is [ShotHistoryRepository.clearAll]).
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 @Suppress("TooManyFunctions") // The ShotRepository surface (9) plus the session helpers.
@@ -73,6 +81,7 @@ internal class DefaultShotRepository(
     private val piControl: PiControlClient,
     private val piSession: PiSessionRepository? = null,
     private val log: (String) -> Unit = {},
+    private val persistentHistory: ShotHistoryRepository? = null,
 ) : ShotRepository {
     private val mutableConnectionState = MutableStateFlow<ConnectionState>(ConnectionState.Idle)
     private val mutableHistory = MutableStateFlow(emptyList<ShotEvent>())
@@ -99,6 +108,22 @@ internal class DefaultShotRepository(
         if (sessionJob?.isActive == true) return
         sessionJob =
             scope.launch {
+                val pi = piSession
+                val history = persistentHistory
+                if (pi != null && history != null) {
+                    launch { pi.liveShots.collect(history::record) }
+                    // A current Pi (backend main) has no SSE stream, so on Wi-Fi its Socket.IO link
+                    // is the connection that counts: each (re)connect of it starts a session too.
+                    // An extra start before any shot is harmless (a session is stored with its first shot).
+                    launch {
+                        pi.linkState
+                            .map { it == PiLinkState.Connected }
+                            .distinctUntilChanged()
+                            .collect { connected ->
+                                if (connected) history.startSession(settings.host.first(), TransportType.WIFI)
+                            }
+                    }
+                }
                 combine(settings.transport, settings.host) { type, host ->
                     TransportKey(type, host.takeIf { type == TransportType.WIFI })
                 }.distinctUntilChanged()
@@ -158,13 +183,17 @@ internal class DefaultShotRepository(
         val pi = connectedPi()
         if (pi == null) {
             removeLocally(matches)
+            persistentHistory?.deleteShot(timestamp)
             return
         }
         onPi("delete_shot") {
             pi.deleteShot(timestamp)
             // Settled once the state is no longer this shot's pending deletion.
             val outcome = pi.deletionState.first { it !is DeletionState.Pending || it.timestamp != timestamp }
-            if (outcome is DeletionState.Deleted && outcome.timestamp == timestamp) removeLocally(matches)
+            if (outcome is DeletionState.Deleted && outcome.timestamp == timestamp) {
+                removeLocally(matches)
+                persistentHistory?.deleteShot(timestamp)
+            }
         }
     }
 
@@ -187,11 +216,17 @@ internal class DefaultShotRepository(
             mutableLatestShot.value = shotHistory.latestShot
             return
         }
+        // The rows the Pi is about to drop: its session's rows for this profile.
+        val cleared =
+            pi.sessionShots.value
+                .filter { it.profileId == profileId }
+                .map { it.timestamp }
         onPi("clear_session") {
             pi.clearSession(profileId)
             val outcome = pi.clearState.first { it !is ClearState.Pending || it.profileId != profileId }
             if (outcome is ClearState.Cleared && outcome.profileId == profileId) {
                 removeLocally { pi.detailFor(it)?.profileId == profileId }
+                persistentHistory?.deleteShots(cleared)
             }
         }
     }
@@ -245,7 +280,13 @@ internal class DefaultShotRepository(
                     // Subscribe before start() so no shot or state change is missed.
                     launch(start = CoroutineStart.UNDISPATCHED) { transport.shots.collect { record(it) } }
                     launch(start = CoroutineStart.UNDISPATCHED) {
-                        transport.state.collect { mutableConnectionState.value = it }
+                        transport.state.collect { state ->
+                            // R8h: every successful (re)connect is a new history session.
+                            if (state == ConnectionState.Connected && mutableConnectionState.value != state) {
+                                persistentHistory?.startSession(key.host, key.type)
+                            }
+                            mutableConnectionState.value = state
+                        }
                     }
                     launch(start = CoroutineStart.UNDISPATCHED) {
                         transport.supportsControls.collect { mutableSupportsControls.value = it }
@@ -275,6 +316,7 @@ internal class DefaultShotRepository(
         shotHistory = updated
         mutableHistory.value = updated.shots
         mutableLatestShot.value = updated.latestShot
+        persistentHistory?.record(shot, piSession?.detailFor(shot))
     }
 
     private suspend fun syncClubOnConnect(

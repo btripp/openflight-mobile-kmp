@@ -39,6 +39,7 @@ import dev.openflight.companion.core.designsystem.OfPill
 import dev.openflight.companion.core.designsystem.OfScaffold
 import dev.openflight.companion.core.designsystem.OfSpacing
 import dev.openflight.companion.core.designsystem.OfText
+import dev.openflight.companion.core.designsystem.OfTextButton
 import dev.openflight.companion.core.designsystem.OfTextRole
 import dev.openflight.companion.core.designsystem.OfTopBar
 import dev.openflight.companion.core.designsystem.StatusTone
@@ -64,6 +65,7 @@ fun SessionScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     messages: OfMessageHostState? = null,
+    onOpenHistory: (() -> Unit)? = null,
 ) {
     var confirmingClear by rememberSaveable { mutableStateOf(false) }
     OfScaffold(
@@ -74,6 +76,14 @@ fun SessionScreen(
                 title = "Session",
                 eyebrow = "OPENFLIGHT",
                 actions = {
+                    if (onOpenHistory != null) {
+                        // Plan R8h: past sessions, kept across launches.
+                        OfTextButton(
+                            text = "History",
+                            onClick = onOpenHistory,
+                            modifier = Modifier.testTag(SessionHistoryTestTags.OPEN),
+                        )
+                    }
                     OfOutlinedButton(
                         text = "Done",
                         onClick = onBack,
@@ -92,7 +102,7 @@ fun SessionScreen(
             if (!uiState.hasShots) {
                 item(key = "empty") { EmptySession() }
             } else {
-                item(key = "tabs") { ClubTabs(uiState, onEvent) }
+                item(key = "tabs") { ClubTabs(uiState) { onEvent(SessionEvent.SelectClub(it)) } }
                 item(key = "stats") { StatsCard(uiState) }
                 item(key = "actions") {
                     ActionsRow(onExport = { onEvent(SessionEvent.ExportCsv) }, onClear = { confirmingClear = true })
@@ -186,9 +196,9 @@ private fun EmptySession() {
 
 /** "All" plus one tab per club with its count (`StatsView.tsx`'s club filter). */
 @Composable
-private fun ClubTabs(
+internal fun ClubTabs(
     uiState: SessionUiState,
-    onEvent: (SessionEvent) -> Unit,
+    onSelectClub: (club: String?) -> Unit,
 ) {
     FlowRow(
         horizontalArrangement = Arrangement.spacedBy(OfSpacing.Sm),
@@ -198,7 +208,7 @@ private fun ClubTabs(
             label = "All",
             count = uiState.allCount,
             selected = uiState.selectedClub == null,
-            onClick = { onEvent(SessionEvent.SelectClub(null)) },
+            onClick = { onSelectClub(null) },
             modifier = Modifier.testTag(SessionTestTags.ALL_TAB),
         )
         uiState.clubChips.forEach { chip ->
@@ -206,7 +216,7 @@ private fun ClubTabs(
                 label = clubLabel(chip.club),
                 count = chip.count,
                 selected = uiState.selectedClub == chip.club,
-                onClick = { onEvent(SessionEvent.SelectClub(chip.club)) },
+                onClick = { onSelectClub(chip.club) },
                 modifier = Modifier.testTag(SessionTestTags.tab(chip.club)),
             )
         }

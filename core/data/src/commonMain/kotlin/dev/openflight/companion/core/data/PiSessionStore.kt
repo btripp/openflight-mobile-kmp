@@ -56,6 +56,9 @@ internal class PiSessionStore(
     val mockMode = MutableStateFlow<Boolean?>(null)
     val notices = MutableSharedFlow<PiNotice>(extraBufferCapacity = NOTICE_BUFFER)
 
+    /** Every live `shot` and `shot_update`, in arrival order (plan R8h: the history writes them). */
+    val liveShots = MutableSharedFlow<PiLiveShot>(extraBufferCapacity = LIVE_SHOT_BUFFER)
+
     suspend fun apply(event: PiEvent) {
         when (event) {
             is PiEvent.Notice -> notices.emit(event.notice)
@@ -131,11 +134,13 @@ internal class PiSessionStore(
                 shotProcessing.value = null
                 onShot(event.detail)
                 event.stats?.let { stats.value = it }
+                liveShots.tryEmit(PiLiveShot(event.detail, event.raw?.toString()))
             }
 
             is PiEvent.ShotUpdate -> {
                 upsert(event.detail)
                 event.stats?.let { stats.value = it }
+                liveShots.tryEmit(PiLiveShot(event.detail, event.raw?.toString()))
             }
 
             is PiEvent.Processing -> {
@@ -385,5 +390,6 @@ internal class PiSessionStore(
 
     private companion object {
         const val NOTICE_BUFFER = 16
+        const val LIVE_SHOT_BUFFER = 64
     }
 }

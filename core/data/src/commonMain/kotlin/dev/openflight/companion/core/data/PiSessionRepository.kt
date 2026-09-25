@@ -22,8 +22,10 @@ import dev.openflight.companion.core.model.pi.SimState
 import dev.openflight.companion.core.model.pi.SwingSpeedReading
 import dev.openflight.companion.core.model.pi.TrainingImplement
 import dev.openflight.companion.core.model.pi.TriggerStatus
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.emptyFlow
 
 /**
  * The Pi's live-session API over Socket.IO (plan R6a): everything the Pi's web UI can see and do
@@ -124,6 +126,13 @@ interface PiSessionRepository {
 
     /** Server errors and acknowledgements, one-shot (not replayed). */
     val notices: SharedFlow<PiNotice>
+
+    /**
+     * Every live `shot` and `shot_update` as it arrives, one-shot (not replayed, and never the
+     * rows of a `session_state` snapshot). The persistent history (plan R8h) files these, like the
+     * Expo app's `persistShot`. Defaults to no shots so fakes stay source-compatible.
+     */
+    val liveShots: Flow<PiLiveShot> get() = emptyFlow()
 
     /** The Socket.IO detail for an SSE/BLE shot, matched on timestamp. */
     fun detailFor(shot: ShotEvent): ShotDetail? = shotDetails.value[shot.timestamp]
@@ -238,6 +247,17 @@ interface PiSessionRepository {
         const val MAX_SESSION_SHOTS: Int = 200
     }
 }
+
+/**
+ * One live `shot` or `shot_update` from the Pi ([PiSessionRepository.liveShots]).
+ *
+ * @property rawJson the `shot` object exactly as the Pi sent it, unknown keys included, or `null`
+ *   if it couldn't be kept.
+ */
+data class PiLiveShot(
+    val detail: ShotDetail,
+    val rawJson: String?,
+)
 
 /** A Wi-Fi-only (Socket.IO) feature was used on Bluetooth, or while the link to the Pi is down. */
 class WifiOnlyFeatureException(

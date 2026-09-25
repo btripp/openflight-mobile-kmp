@@ -14,6 +14,10 @@ import dev.openflight.companion.feature.dashboard.DashboardViewModel
 import dev.openflight.companion.feature.range.DrivingRangeUiState
 import dev.openflight.companion.feature.range.DrivingRangeViewModel
 import dev.openflight.companion.feature.session.SessionEffect
+import dev.openflight.companion.feature.session.SessionHistoryDetailUiState
+import dev.openflight.companion.feature.session.SessionHistoryDetailViewModel
+import dev.openflight.companion.feature.session.SessionHistoryUiState
+import dev.openflight.companion.feature.session.SessionHistoryViewModel
 import dev.openflight.companion.feature.session.SessionUiState
 import dev.openflight.companion.feature.session.SessionViewModel
 import dev.openflight.companion.feature.settings.SettingsEffect
@@ -69,6 +73,19 @@ val SessionViewModel.state: StateFlow<SessionUiState>
 
 @NativeCoroutines
 val SessionViewModel.sideEffects: Flow<SessionEffect>
+    get() = effects
+
+/** Plan R8h: the stored session list has no one-shot effects. */
+@NativeCoroutinesState
+val SessionHistoryViewModel.state: StateFlow<SessionHistoryUiState>
+    get() = uiState
+
+@NativeCoroutinesState
+val SessionHistoryDetailViewModel.state: StateFlow<SessionHistoryDetailUiState>
+    get() = uiState
+
+@NativeCoroutines
+val SessionHistoryDetailViewModel.sideEffects: Flow<SessionEffect>
     get() = effects
 
 /** [TrainingViewModel] reports failures in its state (`error`), so only `state` is bridged. */
