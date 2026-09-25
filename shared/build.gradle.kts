@@ -47,6 +47,9 @@ kotlin {
             api(projects.feature.training)
             api(projects.feature.camera)
             api(projects.feature.settings)
+            // Plan F4: core:speech's speechModule joins the app's Koin graph below. Not exported
+            // to Swift yet — no UI touches SpeechEngine directly until F7.
+            implementation(projects.core.speech)
             implementation(libs.kotlinx.coroutines.core)
             api(project.dependencies.platform(libs.koin.bom))
             api(libs.koin.core)

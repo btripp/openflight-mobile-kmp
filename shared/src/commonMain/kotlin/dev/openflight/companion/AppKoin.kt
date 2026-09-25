@@ -9,6 +9,7 @@ import dev.openflight.companion.core.data.SettingsRepository
 import dev.openflight.companion.core.data.ShotHistoryRepository
 import dev.openflight.companion.core.data.ShotRepository
 import dev.openflight.companion.core.data.dataModule
+import dev.openflight.companion.core.speech.speechModule
 import dev.openflight.companion.feature.calibration.calibrationModule
 import dev.openflight.companion.feature.camera.cameraModule
 import dev.openflight.companion.feature.dashboard.dashboardModule
@@ -34,6 +35,9 @@ val appModules: List<Module> =
         trainingModule,
         cameraModule,
         settingsModule,
+        // Plan F4: core:speech's SpeechEngine binding, added at the end to keep this list's diff
+        // mergeable with the other wave-1/wave-2 steps that also touch it (§4a A7).
+        speechModule,
     )
 
 /**
