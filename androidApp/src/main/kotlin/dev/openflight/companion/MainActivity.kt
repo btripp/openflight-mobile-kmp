@@ -52,6 +52,8 @@ class MainActivity : ComponentActivity() {
             previewFlight = getBooleanExtra(EXTRA_PREVIEW_FLIGHT, false),
             transport = TransportType.fromStorageValue(getStringExtra(EXTRA_TRANSPORT)),
             host = getStringExtra(EXTRA_HOST)?.takeIf { it.isNotBlank() },
+            previewHistory = getBooleanExtra(EXTRA_PREVIEW_HISTORY, false),
+            previewHistoryStuck = getBooleanExtra(EXTRA_PREVIEW_HISTORY_STUCK, false),
         )
 
     private companion object {
@@ -61,6 +63,8 @@ class MainActivity : ComponentActivity() {
         const val EXTRA_PREVIEW_FLIGHT = "preview_flight"
         const val EXTRA_TRANSPORT = "transport"
         const val EXTRA_HOST = "host"
+        const val EXTRA_PREVIEW_HISTORY = "preview_history"
+        const val EXTRA_PREVIEW_HISTORY_STUCK = "preview_history_stuck"
 
         var launchOptionsApplied = false
     }

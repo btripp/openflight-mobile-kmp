@@ -2,7 +2,10 @@
 package dev.openflight.companion.feature.session
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -12,10 +15,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.openflight.companion.core.designsystem.OfChip
 import dev.openflight.companion.core.designsystem.OfColorTokens
 import dev.openflight.companion.core.designsystem.OfOutlinedButton
 import dev.openflight.companion.core.designsystem.OfScaffold
@@ -48,7 +53,10 @@ fun SessionHistoryDetailRoute(
     SessionHistoryDetailScreen(uiState = uiState, onEvent = viewModel::onEvent, onBack = onBack)
 }
 
-/** The live Session screen's tabs, stats and rows over one stored session, plus its CSV export. */
+/**
+ * The live Session screen's tabs, stats and rows over one stored session, plus its CSV export, a
+ * profile filter when more than one profile hit, and a confirmed delete with its progress (R8f).
+ */
 @Composable
 fun SessionHistoryDetailScreen(
     uiState: SessionHistoryDetailUiState,
@@ -79,8 +87,20 @@ fun SessionHistoryDetailScreen(
             contentPadding = PaddingValues(horizontal = OfSpacing.Xl, vertical = OfSpacing.Sm),
             verticalArrangement = Arrangement.spacedBy(OfSpacing.Lg),
         ) {
-            item(key = "subtitle") {
-                OfText(text = uiState.subtitle, role = OfTextRole.BodySmall, color = OfColorTokens.CreamDim)
+            item(key = "heading") { Heading(uiState) }
+            if (uiState.action !is SessionActionState.Idle) {
+                item(key = "action") {
+                    SessionActionPanel(
+                        state = uiState.action,
+                        onRetry = { onEvent(SessionHistoryDetailEvent.RetryAction) },
+                        onDismiss = { onEvent(SessionHistoryDetailEvent.DismissAction) },
+                    )
+                }
+            }
+            if (uiState.profileChips.isNotEmpty()) {
+                item(
+                    key = "profiles",
+                ) { ProfileChips(uiState) { onEvent(SessionHistoryDetailEvent.SelectProfile(it)) } }
             }
             if (session.hasShots) {
                 item(key = "tabs") { ClubTabs(session) { onEvent(SessionHistoryDetailEvent.SelectClub(it)) } }
@@ -93,7 +113,11 @@ fun SessionHistoryDetailScreen(
                     )
                 }
                 item(key = "shotsHeader") {
-                    OfText(text = "SHOTS · swipe left to delete", role = OfTextRole.Eyebrow, color = OfColorTokens.Gold)
+                    OfText(
+                        text = if (uiState.canDelete) "SHOTS · swipe left to delete" else "SHOTS",
+                        role = OfTextRole.Eyebrow,
+                        color = OfColorTokens.Gold,
+                    )
                 }
                 items(session.shots, key = { it.id }) { shot ->
                     SessionShotRowItem(
@@ -101,9 +125,67 @@ fun SessionHistoryDetailScreen(
                         units = session.units,
                         onDelete = { onEvent(SessionHistoryDetailEvent.DeleteShot(shot.id)) },
                         modifier = Modifier.animateItem(),
+                        deletable = uiState.canDelete,
                     )
                 }
             }
+        }
+    }
+    SessionActionDialog(
+        state = uiState.action,
+        onConfirm = { onEvent(SessionHistoryDetailEvent.ConfirmAction) },
+        onCancel = { onEvent(SessionHistoryDetailEvent.CancelAction) },
+    )
+}
+
+/** The time range and shot count, then how it was recorded and whether it's the current session. */
+@Composable
+private fun Heading(uiState: SessionHistoryDetailUiState) {
+    Column(verticalArrangement = Arrangement.spacedBy(OfSpacing.Xs)) {
+        OfText(text = uiState.subtitle, role = OfTextRole.BodySmall, color = OfColorTokens.CreamDim)
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(OfSpacing.Sm),
+        ) {
+            uiState.sourceLine?.let { source ->
+                OfText(
+                    text = source,
+                    role = OfTextRole.BodySmall,
+                    color = OfColorTokens.CreamDim,
+                    modifier = Modifier.weight(1f, fill = false).testTag(SessionHistoryTestTags.DETAIL_SOURCE),
+                )
+            }
+            if (uiState.isCurrent) CurrentBadge()
+        }
+    }
+}
+
+/** "All profiles" plus one chip per profile with its shot count. */
+@Composable
+private fun ProfileChips(
+    uiState: SessionHistoryDetailUiState,
+    onSelect: (profileId: String?) -> Unit,
+) {
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(OfSpacing.Sm),
+        verticalArrangement = Arrangement.spacedBy(OfSpacing.Sm),
+    ) {
+        OfChip(
+            label = "All profiles",
+            selected = uiState.selectedProfileId == null,
+            minTouchTarget = true,
+            onClick = { onSelect(null) },
+            modifier = Modifier.testTag(SessionHistoryTestTags.PROFILE_ALL),
+        )
+        uiState.profileChips.forEach { chip ->
+            OfChip(
+                label = chip.name,
+                count = chip.count,
+                selected = uiState.selectedProfileId == chip.id,
+                minTouchTarget = true,
+                onClick = { onSelect(chip.id) },
+                modifier = Modifier.testTag(SessionHistoryTestTags.profile(chip.id)),
+            )
         }
     }
 }
@@ -116,8 +198,11 @@ private fun SessionHistoryDetailPreview() {
             uiState =
                 SessionHistoryDetailUiState(
                     loaded = true,
-                    title = "2026-09-25",
+                    title = "Thu 25 Sep",
                     subtitle = "10:03 – 10:45 · 2 shots",
+                    sourceLine = "Wi-Fi · raspberrypi.local:8080",
+                    isCurrent = true,
+                    profileChips = listOf(HistoryProfileChip("ann", "Ann", 1), HistoryProfileChip("bo", "Bo", 1)),
                     session = SessionUiState(allCount = previewRows.size, shots = previewRows),
                 ),
             onEvent = {},

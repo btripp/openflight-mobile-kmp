@@ -19,12 +19,4 @@ object SessionActionTestTags {
 
     /** "Not connected — showing the last session received." */
     const val STALE_NOTE = "session.staleNote"
-
-    /** The profile whose shots the Pi session shows. */
-    const val PROFILE = "session.profile"
-
-    /** The history detail's profile filter chips: "All" and one per profile id. */
-    const val PROFILE_ALL = "session.history.profile.all"
-
-    fun profile(id: String): String = "session.history.profile.$id"
 }

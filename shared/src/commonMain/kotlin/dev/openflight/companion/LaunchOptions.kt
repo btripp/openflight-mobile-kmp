@@ -9,10 +9,11 @@ import dev.openflight.companion.core.data.TransportType
  * end-to-end runs.
  *
  * - iOS reads them from `NSProcessInfo.arguments`: `--ui-testing`, `--preview-shot`,
- *   `--range-mode`, `--preview-flight`, `--transport wifi|bluetooth`, `--host <host[:port]>`.
+ *   `--range-mode`, `--preview-flight`, `--transport wifi|bluetooth`, `--host <host[:port]>`,
+ *   `--preview-history`, `--preview-history-stuck`.
  * - Android reads intent extras: `--ez ui_testing true`, `--ez preview_shot true`,
  *   `--ez range_mode true`, `--ez preview_flight true`, `--es transport wifi`,
- *   `--es host 10.0.2.2:8091`.
+ *   `--es host 10.0.2.2:8091`, `--ez preview_history true`, `--ez preview_history_stuck true`.
  *
  * @property uiTesting swap in [PreviewShotRepository] so no transport ever starts.
  * @property previewShot like [uiTesting], and the fake history holds the preview shot.
@@ -20,6 +21,9 @@ import dev.openflight.companion.core.data.TransportType
  * @property previewFlight fly the displayed shot whenever the range opens (DrivingRangeView.swift).
  * @property transport persisted as the selected transport before the UI starts.
  * @property host persisted as the Wi-Fi host before the UI starts.
+ * @property previewHistory swap in [PreviewShotHistoryRepository]: two stored sessions whose
+ *   deletes land after a short delay (plan R8f, so the pending state can be seen).
+ * @property previewHistoryStuck like [previewHistory], but deletes never land (the failure state).
  */
 data class LaunchOptions(
     val uiTesting: Boolean = false,
@@ -28,6 +32,8 @@ data class LaunchOptions(
     val previewFlight: Boolean = false,
     val transport: TransportType? = null,
     val host: String? = null,
+    val previewHistory: Boolean = false,
+    val previewHistoryStuck: Boolean = false,
 ) {
     val usesFakeRepository: Boolean
         get() = uiTesting || previewShot
@@ -39,6 +45,8 @@ data class LaunchOptions(
         const val PREVIEW_FLIGHT = "--preview-flight"
         const val TRANSPORT = "--transport"
         const val HOST = "--host"
+        const val PREVIEW_HISTORY = "--preview-history"
+        const val PREVIEW_HISTORY_STUCK = "--preview-history-stuck"
 
         /** Parses process arguments; unknown arguments (Xcode adds its own) are ignored. */
         fun fromArguments(arguments: List<String>): LaunchOptions {
@@ -53,6 +61,8 @@ data class LaunchOptions(
                 previewFlight = PREVIEW_FLIGHT in arguments,
                 transport = valueAfter(TRANSPORT)?.let(TransportType::fromStorageValue),
                 host = valueAfter(HOST)?.takeIf { it.isNotBlank() && !it.startsWith("--") },
+                previewHistory = PREVIEW_HISTORY in arguments,
+                previewHistoryStuck = PREVIEW_HISTORY_STUCK in arguments,
             )
         }
     }

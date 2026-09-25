@@ -44,6 +44,18 @@ class LaunchOptionsTest {
     }
 
     @Test
+    fun previewHistoryFlagsKeepTheRealShotRepository() {
+        val slow = LaunchOptions.fromArguments(listOf("app", "--preview-history"))
+        val stuck = LaunchOptions.fromArguments(listOf("app", "--preview-history-stuck"))
+
+        assertThat(slow.previewHistory).isTrue()
+        assertThat(slow.previewHistoryStuck).isFalse()
+        assertThat(stuck.previewHistory).isFalse()
+        assertThat(stuck.previewHistoryStuck).isTrue()
+        assertThat(stuck.usesFakeRepository).isFalse()
+    }
+
+    @Test
     fun missingOrUnknownValuesAreIgnored() {
         val options = LaunchOptions.fromArguments(listOf("app", "--transport", "carrier-pigeon", "--host"))
 

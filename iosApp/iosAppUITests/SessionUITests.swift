@@ -154,9 +154,9 @@ final class SessionUITests: XCTestCase {
 
     /// Delete and clear need Wi-Fi (plan R8e), so these tests pin the transport rather than
     /// inheriting whatever an earlier run saved.
-    static func openSession(transport: String = "wifi") -> XCUIApplication {
+    static func openSession(transport: String = "wifi", extraArguments: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments = ["--ui-testing", "--preview-shot", "--transport", transport]
+        app.launchArguments = ["--ui-testing", "--preview-shot", "--transport", transport] + extraArguments
         app.launch()
         let tab = app.tabBars.buttons["Session"]
         XCTAssertTrue(tab.waitForExistence(timeout: 10))

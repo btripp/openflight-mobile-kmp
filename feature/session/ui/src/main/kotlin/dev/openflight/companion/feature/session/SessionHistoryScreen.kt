@@ -14,27 +14,27 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.openflight.companion.core.designsystem.OfCard
 import dev.openflight.companion.core.designsystem.OfColorTokens
-import dev.openflight.companion.core.designsystem.OfConfirmDialog
 import dev.openflight.companion.core.designsystem.OfOutlinedButton
+import dev.openflight.companion.core.designsystem.OfPill
 import dev.openflight.companion.core.designsystem.OfScaffold
 import dev.openflight.companion.core.designsystem.OfSpacing
 import dev.openflight.companion.core.designsystem.OfText
 import dev.openflight.companion.core.designsystem.OfTextRole
 import dev.openflight.companion.core.designsystem.OfTheme
 import dev.openflight.companion.core.designsystem.OfTopBar
+import dev.openflight.companion.core.designsystem.StatusTone
 import org.koin.androidx.compose.koinViewModel
 
 /** The session history destination (plan R8h): owns the [SessionHistoryViewModel]. */
@@ -53,7 +53,10 @@ fun SessionHistoryRoute(
     )
 }
 
-/** Every stored session, newest first: date, shot count and first/last shot time. */
+/**
+ * Every stored session, newest first: day, time range, shot count and how it was recorded, with
+ * the current one badged. "Clear all history" asks first and shows its progress (plan R8f).
+ */
 @Composable
 fun SessionHistoryScreen(
     uiState: SessionHistoryUiState,
@@ -62,7 +65,6 @@ fun SessionHistoryScreen(
     onOpenSession: (sessionId: String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var confirmingClear by rememberSaveable { mutableStateOf(false) }
     OfScaffold(
         modifier = modifier,
         topBar = {
@@ -84,6 +86,15 @@ fun SessionHistoryScreen(
             contentPadding = PaddingValues(horizontal = OfSpacing.Xl, vertical = OfSpacing.Sm),
             verticalArrangement = Arrangement.spacedBy(OfSpacing.Md),
         ) {
+            if (uiState.action !is SessionActionState.Idle) {
+                item(key = "action") {
+                    SessionActionPanel(
+                        state = uiState.action,
+                        onRetry = { onEvent(SessionHistoryEvent.RetryAction) },
+                        onDismiss = { onEvent(SessionHistoryEvent.DismissAction) },
+                    )
+                }
+            }
             if (!uiState.isPersistent) {
                 item(key = "notPersistent") {
                     OfText(
@@ -106,30 +117,22 @@ fun SessionHistoryScreen(
                 item(key = "clearAll") {
                     OfOutlinedButton(
                         text = "Clear all history",
-                        onClick = { confirmingClear = true },
+                        onClick = { onEvent(SessionHistoryEvent.ClearAll) },
+                        enabled = !uiState.action.isBusy,
                         modifier = Modifier.fillMaxWidth().testTag(SessionHistoryTestTags.CLEAR_ALL),
                     )
                 }
             }
         }
     }
-    if (confirmingClear) {
-        OfConfirmDialog(
-            title = "Clear all history?",
-            message = "Every stored session is deleted from this phone. The Pi's session is not affected.",
-            confirmLabel = "Clear all",
-            destructive = true,
-            onConfirm = {
-                confirmingClear = false
-                onEvent(SessionHistoryEvent.ClearAll)
-            },
-            onDismiss = { confirmingClear = false },
-            confirmTag = SessionHistoryTestTags.CLEAR_ALL_CONFIRM,
-            dismissTag = SessionHistoryTestTags.CLEAR_ALL_CANCEL,
-        )
-    }
+    SessionActionDialog(
+        state = uiState.action,
+        onConfirm = { onEvent(SessionHistoryEvent.ConfirmAction) },
+        onCancel = { onEvent(SessionHistoryEvent.CancelAction) },
+    )
 }
 
+/** One stored session, read by TalkBack as one sentence ([SessionHistoryRow.accessibilityLabel]). */
 @Composable
 private fun SessionHistoryRowItem(
     session: SessionHistoryRow,
@@ -139,8 +142,10 @@ private fun SessionHistoryRowItem(
         modifier =
             Modifier
                 .fillMaxWidth()
+                // Outside the clearing modifier below, which drops every semantics modifier after it.
+                .testTag(SessionHistoryTestTags.session(session.id))
                 .clickable(role = Role.Button, onClickLabel = "Open session", onClick = onClick)
-                .testTag(SessionHistoryTestTags.session(session.id)),
+                .clearAndSetSemantics { contentDescription = session.accessibilityLabel },
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -148,20 +153,24 @@ private fun SessionHistoryRowItem(
         ) {
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 OfText(text = session.date, role = OfTextRole.TitleSmall)
-                OfText(
-                    text = listOfNotNull(session.timeRange, session.transportLabel).joinToString(" · "),
-                    role = OfTextRole.BodySmall,
-                    color = OfColorTokens.CreamDim,
-                )
+                OfText(text = session.detailLine, role = OfTextRole.BodySmall, color = OfColorTokens.CreamDim)
             }
-            Column(horizontalAlignment = Alignment.End) {
+            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(OfSpacing.Xs)) {
                 OfText(text = session.shotCountLabel, role = OfTextRole.TitleSmall, color = OfColorTokens.Gold)
-                if (session.isCurrent) {
-                    OfText(text = "Current", role = OfTextRole.Label, color = OfColorTokens.CreamDim)
-                }
+                if (session.isCurrent) CurrentBadge()
             }
         }
     }
+}
+
+/** "Current": a labelled pill, the same on the list and the detail (and on iOS). */
+@Composable
+internal fun CurrentBadge(modifier: Modifier = Modifier) {
+    OfPill(
+        label = SessionHistoryRow.CURRENT_LABEL,
+        tone = StatusTone.Positive,
+        modifier = modifier.testTag(SessionHistoryTestTags.CURRENT),
+    )
 }
 
 @Composable
@@ -191,8 +200,16 @@ private fun SessionHistoryPreview() {
                     loaded = true,
                     sessions =
                         listOf(
-                            SessionHistoryRow("a", "2026-09-25", "10:03 – 10:45", 24, "Wi-Fi", isCurrent = true),
-                            SessionHistoryRow("b", "2026-09-21", "18:12", 1, "Bluetooth", isCurrent = false),
+                            SessionHistoryRow(
+                                "a",
+                                "Thu 25 Sep",
+                                "10:03 – 10:45",
+                                24,
+                                "Wi-Fi",
+                                isCurrent = true,
+                                host = "raspberrypi.local:8080",
+                            ),
+                            SessionHistoryRow("b", "Sun 21 Sep", "18:12", 1, "Bluetooth", isCurrent = false),
                         ),
                 ),
             onEvent = {},

@@ -29,6 +29,25 @@ class FakeShotHistoryRepository : ShotHistoryRepository {
     var clearAllCount = 0
         private set
 
+    /**
+     * `false` holds back [deleteShots] and [clearAll] (still counted) until [applyPendingWrites], like
+     * a store that hasn't written yet, so a test can see the pending state or a store that never
+     * answers.
+     */
+    var applyWrites = true
+    private val pendingWrites = mutableListOf<() -> Unit>()
+
+    /** Applies the writes held back while [applyWrites] was `false`. */
+    fun applyPendingWrites() {
+        val writes = pendingWrites.toList()
+        pendingWrites.clear()
+        writes.forEach { it() }
+    }
+
+    private fun write(change: () -> Unit) {
+        if (applyWrites) change() else pendingWrites += change
+    }
+
     /** Adds (or replaces) a session with [shots] (newest first). */
     fun put(
         sessionId: String,
@@ -85,16 +104,18 @@ class FakeShotHistoryRepository : ShotHistoryRepository {
 
     override fun deleteShots(timestamps: Collection<String>) {
         deletedTimestamps += timestamps
-        sessionsById.update { sessions ->
-            sessions.mapValues { (_, data) ->
-                data.copy(shots = data.shots.filterNot { it.detail.timestamp in timestamps })
+        write {
+            sessionsById.update { sessions ->
+                sessions.mapValues { (_, data) ->
+                    data.copy(shots = data.shots.filterNot { it.detail.timestamp in timestamps })
+                }
             }
         }
     }
 
     override fun clearAll() {
         clearAllCount++
-        sessionsById.value = emptyMap()
+        write { sessionsById.value = emptyMap() }
     }
 
     private data class SessionData(

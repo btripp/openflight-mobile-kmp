@@ -2,9 +2,10 @@
 import Shared
 import SwiftUI
 
-/// The stored session list (plan R8h), over the shared `SessionHistoryViewModel`: date, shot count
-/// and first/last shot time per session, newest first, and "Clear all history" behind a
-/// confirmation. Android's `SessionHistoryScreen.kt` renders the same state.
+/// The stored session list (plan R8h), over the shared `SessionHistoryViewModel`: day, time range,
+/// shot count and how each session was recorded, newest first, with the current one badged, and
+/// "Clear all history" behind a confirmation with its progress shown (plan R8f). Android's
+/// `SessionHistoryScreen.kt` renders the same state.
 struct SessionHistoryView: View {
     @StateObject private var host = ViewModelHost(KoinHelper().sessionHistoryViewModel())
 
@@ -19,10 +20,18 @@ struct SessionHistoryContent: View {
     let state: SessionHistoryUiState
     let send: (SessionHistoryEvent) -> Void
 
-    @State private var confirmingClear = false
-
     var body: some View {
         List {
+            if !(state.action is SessionActionStateIdle) && !(state.action is SessionActionStateConfirming) {
+                Section {
+                    SessionActionPanel(
+                        state: state.action,
+                        onRetry: { send(SessionHistoryEventRetryAction.shared) },
+                        onDismiss: { send(SessionHistoryEventDismissAction.shared) }
+                    )
+                }
+                .listRowBackground(Theme.bgElevated)
+            }
             if !state.isPersistent {
                 Section {
                     Text("History can't be saved on this device right now; these sessions last until the app closes.")
@@ -56,21 +65,14 @@ struct SessionHistoryContent: View {
                 }
                 Section {
                     Button(role: .destructive) {
-                        confirmingClear = true
+                        send(SessionHistoryEventClearAll.shared)
                     } label: {
                         Label("Clear all history", systemImage: "trash")
-                            .frame(maxWidth: .infinity)
+                            .frame(maxWidth: .infinity, minHeight: 44)
                     }
                     .tint(Theme.danger)
+                    .disabled(state.action.isBusy)
                     .accessibilityIdentifier(SessionHistoryTestTags.shared.CLEAR_ALL)
-                    .confirmationDialog("Clear all history?", isPresented: $confirmingClear, titleVisibility: .visible) {
-                        Button("Clear all", role: .destructive) { send(SessionHistoryEventClearAll.shared) }
-                            .accessibilityIdentifier(SessionHistoryTestTags.shared.CLEAR_ALL_CONFIRM)
-                        Button("Cancel", role: .cancel) {}
-                            .accessibilityIdentifier(SessionHistoryTestTags.shared.CLEAR_ALL_CANCEL)
-                    } message: {
-                        Text("Every stored session is deleted from this phone. The Pi's session is not affected.")
-                    }
                 }
                 .listRowBackground(Theme.bgCard)
             }
@@ -78,10 +80,25 @@ struct SessionHistoryContent: View {
         .listStyle(.insetGrouped)
         .accessibilityIdentifier(SessionHistoryTestTags.shared.LIST)
         .screenBackground()
+        .sessionActionDialog(
+            state.action,
+            onConfirm: { send(SessionHistoryEventConfirmAction.shared) },
+            onCancel: { send(SessionHistoryEventCancelAction.shared) }
+        )
     }
 }
 
-/// One stored session: its date and time range, and how many shots it holds.
+/// "Current": a labelled pill, the same on the list and the detail (and on Android).
+struct CurrentBadge: View {
+    var body: some View {
+        StatusPill(text: SessionHistoryRow.companion.CURRENT_LABEL, color: Theme.success)
+            .accessibilityIdentifier(SessionHistoryTestTags.shared.CURRENT)
+    }
+}
+
+/// One stored session: its day, time range and how it was recorded, and how many shots it holds.
+/// VoiceOver reads it as one sentence (`accessibilityLabel`, e.g. "Thursday 25 September 2026,
+/// 10:03 to 10:45, 24 shots, Wi-Fi, current session").
 struct SessionHistoryRowView: View {
     let session: SessionHistoryRow
 
@@ -90,29 +107,30 @@ struct SessionHistoryRowView: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(session.date)
                     .font(.of(.headline, weight: .semibold))
-                Text([session.timeRange, session.transportLabel].compactMap { $0 }.joined(separator: " · "))
+                Text(session.detailLine)
                     .font(.of(.caption))
                     .foregroundStyle(Theme.creamDim)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            VStack(alignment: .trailing, spacing: 2) {
+            VStack(alignment: .trailing, spacing: 4) {
                 Text(session.shotCountLabel)
                     .font(.of(.subheadline, weight: .bold).monospacedDigit())
                     .foregroundStyle(Theme.gold)
                 if session.isCurrent {
-                    Text("Current")
-                        .font(.of(.caption2, weight: .semibold))
-                        .foregroundStyle(Theme.creamDim)
+                    CurrentBadge()
                 }
             }
         }
         .padding(.vertical, 4)
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(session.accessibilityLabel)
     }
 }
 
 /// One stored session (plan R8h): the live Session screen's club tabs, stats and shot rows over the
-/// stored shots, with a CSV export through `ShareLink`.
+/// stored shots, a profile filter when more than one profile hit, and a CSV export through
+/// `ShareLink`. Deleting a shot asks first and shows its progress (plan R8f).
 struct SessionHistoryDetailView: View {
     @StateObject private var host: ViewModelHost<SessionHistoryDetailViewModel>
     @State private var export: CsvExport?
@@ -148,13 +166,22 @@ struct SessionHistoryDetailContent: View {
 
     var body: some View {
         List {
-            Section {
-                Text(state.subtitle)
-                    .font(.of(.subheadline))
-                    .foregroundStyle(Theme.creamDim)
-                    .accessibilityIdentifier(SessionHistoryTestTags.shared.DETAIL_TITLE)
+            Section { heading }
+                .listRowBackground(Color.clear)
+            if !(state.action is SessionActionStateIdle) && !(state.action is SessionActionStateConfirming) {
+                Section {
+                    SessionActionPanel(
+                        state: state.action,
+                        onRetry: { send(SessionHistoryDetailEventRetryAction.shared) },
+                        onDismiss: { send(SessionHistoryDetailEventDismissAction.shared) }
+                    )
+                }
+                .listRowBackground(Theme.bgElevated)
             }
-            .listRowBackground(Color.clear)
+            if !state.profileChips.isEmpty {
+                Section { profileChips }
+                    .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
+            }
             if session.hasShots {
                 Section { SessionClubTabs(state: session) { send(SessionHistoryDetailEventSelectClub(club: $0)) } }
                     .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
@@ -164,17 +191,20 @@ struct SessionHistoryDetailContent: View {
                     ForEach(session.shots, id: \.id) { row in
                         SessionShotRowView(row: row, units: session.units)
                             .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                Button(role: .destructive) {
-                                    send(SessionHistoryDetailEventDeleteShot(id: row.id))
-                                } label: {
-                                    Label("Delete", systemImage: "trash")
+                                if state.canDelete {
+                                    // Not `.destructive`: the row stays until the delete is confirmed.
+                                    Button {
+                                        send(SessionHistoryDetailEventDeleteShot(id: row.id))
+                                    } label: {
+                                        Label("Delete", systemImage: "trash")
+                                    }
+                                    .tint(.red)
                                 }
-                                .tint(.red)
                             }
                     }
                     .listRowBackground(Theme.bgCard)
                 } header: {
-                    Text("SHOTS · swipe left to delete")
+                    Text(state.canDelete ? "SHOTS · swipe left to delete" : "SHOTS")
                         .font(.ofEyebrow)
                         .tracking(1.4)
                         .foregroundStyle(Theme.gold)
@@ -184,6 +214,60 @@ struct SessionHistoryDetailContent: View {
         .listStyle(.insetGrouped)
         .listSectionSpacing(.compact)
         .screenBackground()
+        .sessionActionDialog(
+            state.action,
+            onConfirm: { send(SessionHistoryDetailEventConfirmAction.shared) },
+            onCancel: { send(SessionHistoryDetailEventCancelAction.shared) }
+        )
+    }
+
+    private var heading: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(state.subtitle)
+                .font(.of(.subheadline))
+                .foregroundStyle(Theme.creamDim)
+                .accessibilityIdentifier(SessionHistoryTestTags.shared.DETAIL_TITLE)
+            HStack(spacing: 8) {
+                if let source = state.sourceLine {
+                    Text(source)
+                        .font(.of(.caption))
+                        .foregroundStyle(Theme.creamDim)
+                        .accessibilityIdentifier(SessionHistoryTestTags.shared.DETAIL_SOURCE)
+                }
+                if state.isCurrent {
+                    CurrentBadge()
+                }
+            }
+        }
+    }
+
+    /// "All" plus one chip per profile, with its shot count.
+    private var profileChips: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ChipButton(
+                    label: "All profiles",
+                    isSelected: state.selectedProfileId == nil,
+                    minTouchTarget: true
+                ) {
+                    send(SessionHistoryDetailEventSelectProfile(profileId: nil))
+                }
+                .accessibilityIdentifier(SessionHistoryTestTags.shared.PROFILE_ALL)
+                ForEach(state.profileChips, id: \.id) { chip in
+                    ChipButton(
+                        label: chip.name,
+                        count: chip.count,
+                        isSelected: state.selectedProfileId == chip.id,
+                        minTouchTarget: true
+                    ) {
+                        send(SessionHistoryDetailEventSelectProfile(profileId: chip.id))
+                    }
+                    .accessibilityIdentifier(SessionHistoryTestTags.shared.profile(id: chip.id))
+                }
+            }
+            .padding(.horizontal, 2)
+        }
+        .listRowBackground(Color.clear)
     }
 
     private var exportButton: some View {
@@ -203,6 +287,7 @@ struct SessionHistoryDetailContent: View {
         }
         .font(.of(.body, weight: .semibold))
         .buttonStyle(.bordered)
+        .controlSize(.large)
         .tint(Theme.gold)
         .accessibilityIdentifier(SessionHistoryTestTags.shared.DETAIL_EXPORT)
     }

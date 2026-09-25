@@ -5,6 +5,7 @@ import com.rickclephas.kmp.nativecoroutines.NativeCoroutinesIgnore
 import dev.openflight.companion.core.data.AppLifecycle
 import dev.openflight.companion.core.data.LifecycleConnectionPolicy
 import dev.openflight.companion.core.data.SettingsRepository
+import dev.openflight.companion.core.data.ShotHistoryRepository
 import dev.openflight.companion.core.data.ShotRepository
 import dev.openflight.companion.core.data.dataModule
 import dev.openflight.companion.feature.calibration.calibrationModule
@@ -65,6 +66,9 @@ suspend fun Koin.applyLaunchOptions(options: LaunchOptions) {
     if (options.usesFakeRepository) {
         loadModules(listOf(previewModule(options.previewShot)), allowOverride = true)
     }
+    if (options.previewHistory || options.previewHistoryStuck) {
+        loadModules(listOf(previewHistoryModule(stuck = options.previewHistoryStuck)), allowOverride = true)
+    }
     val settings = get<SettingsRepository>()
     options.transport?.let { settings.setTransport(it) }
     options.host?.let { settings.setHost(it) }
@@ -75,6 +79,16 @@ private fun previewModule(showPreviewShot: Boolean): Module =
         // Deletes and Clear edit the preview history in memory, like the real repository.
         single<ShotRepository> {
             LocalEditsShotRepository(PreviewShotRepository(settings = get(), showPreviewShot = showPreviewShot))
+        }
+    }
+
+/** Plan R8f: stored sessions to show and edit without a Pi (debug launch hooks only). */
+private fun previewHistoryModule(stuck: Boolean): Module =
+    module {
+        single<ShotHistoryRepository> {
+            PreviewShotHistoryRepository(
+                writeDelayMillis = if (stuck) null else PreviewShotHistoryRepository.DEFAULT_WRITE_DELAY_MILLIS,
+            )
         }
     }
 

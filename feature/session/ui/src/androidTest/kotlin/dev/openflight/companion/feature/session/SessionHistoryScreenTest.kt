@@ -2,11 +2,21 @@
 package dev.openflight.companion.feature.session
 
 import androidx.activity.ComponentActivity
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasScrollToNodeAction
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeLeft
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import dev.openflight.companion.core.designsystem.OfTheme
 import org.junit.Rule
@@ -29,8 +39,17 @@ class SessionHistoryScreenTest {
             loaded = true,
             sessions =
                 listOf(
-                    SessionHistoryRow("newer", "2026-09-25", "10:03 – 10:45", 24, "Wi-Fi", isCurrent = true),
-                    SessionHistoryRow("older", "2026-09-21", "18:12", 1, "Bluetooth", isCurrent = false),
+                    SessionHistoryRow(
+                        "newer",
+                        "Fri 25 Sep",
+                        "10:03 – 10:45",
+                        24,
+                        "Wi-Fi",
+                        isCurrent = true,
+                        host = "raspberrypi.local:8080",
+                        spokenDate = "Friday 25 September 2026",
+                    ),
+                    SessionHistoryRow("older", "Mon 21 Sep", "18:12", 1, "Bluetooth", isCurrent = false),
                 ),
         )
 
@@ -48,14 +67,22 @@ class SessionHistoryScreenTest {
     }
 
     @Test
-    fun givenStoredSessions_whenShown_thenEachShowsItsDateTimesAndShotCount() {
+    fun givenStoredSessions_whenShown_thenEachReadsAsOneSentenceWithItsDayTimesAndSource() {
         showList(twoSessions)
 
-        composeRule.onNodeWithText("2026-09-25").assertIsDisplayed()
-        composeRule.onNodeWithText("10:03 – 10:45 · Wi-Fi").assertIsDisplayed()
-        composeRule.onNodeWithText("24 shots").assertIsDisplayed()
-        composeRule.onNodeWithText("1 shot").assertIsDisplayed()
-        composeRule.onNodeWithText("Current").assertIsDisplayed()
+        // One TalkBack stop per row (plan R8f): the day spelled out, the times, the count, the source.
+        composeRule
+            .onNodeWithTag(SessionHistoryTestTags.session("newer"))
+            .assertIsDisplayed()
+            .assert(
+                hasContentDescription(
+                    "Friday 25 September 2026, 10:03 to 10:45, 24 shots, Wi-Fi, " +
+                        "raspberrypi.local:8080, current session",
+                ),
+            )
+        composeRule
+            .onNodeWithTag(SessionHistoryTestTags.session("older"))
+            .assert(hasContentDescription("Mon 21 Sep, 18:12, 1 shot, Bluetooth"))
     }
 
     @Test
@@ -83,23 +110,52 @@ class SessionHistoryScreenTest {
     }
 
     @Test
-    fun whenClearAllIsCancelled_thenNothingIsSent() {
+    fun whenClearAllIsTapped_thenTheViewModelIsAskedToConfirm() {
         showList(twoSessions)
 
         composeRule.onNodeWithTag(SessionHistoryTestTags.CLEAR_ALL).performClick()
-        composeRule.onNodeWithTag(SessionHistoryTestTags.CLEAR_ALL_CANCEL).performClick()
 
-        assertEquals(emptyList(), events)
+        assertEquals(listOf<SessionHistoryEvent>(SessionHistoryEvent.ClearAll), events)
     }
 
     @Test
-    fun whenClearAllIsConfirmed_thenClearAllIsSent() {
-        showList(twoSessions)
+    fun givenClearAllToConfirm_whenConfirmedOrCancelled_thenThatIsSent() {
+        showList(twoSessions.copy(action = SessionActionCopy.confirmClearAll))
 
-        composeRule.onNodeWithTag(SessionHistoryTestTags.CLEAR_ALL).performClick()
-        composeRule.onNodeWithTag(SessionHistoryTestTags.CLEAR_ALL_CONFIRM).performClick()
+        composeRule.onNodeWithText("Clear all history?").assertIsDisplayed()
+        composeRule.onNodeWithTag(SessionActionTestTags.CONFIRM).performClick()
 
-        assertEquals(listOf<SessionHistoryEvent>(SessionHistoryEvent.ClearAll), events)
+        assertEquals(listOf<SessionHistoryEvent>(SessionHistoryEvent.ConfirmAction), events)
+    }
+
+    @Test
+    fun givenAPendingClearAll_whenShown_thenItSpinsAndClearAllIsDisabled() {
+        val clear = SessionAction.ClearAllHistory
+        showList(twoSessions.copy(action = SessionActionState.Pending(clear, SessionActionCopy.pending(clear))))
+
+        composeRule.onNodeWithText("Clearing history…").assertIsDisplayed()
+        composeRule.onNodeWithTag(SessionHistoryTestTags.CLEAR_ALL).assertIsNotEnabled()
+    }
+
+    @Test
+    fun givenAFailedClearAll_whenRetried_thenRetryIsSent() {
+        val clear = SessionAction.ClearAllHistory
+        showList(
+            twoSessions.copy(
+                action =
+                    SessionActionState.Failed(
+                        clear,
+                        SessionActionCopy.failedTitle(clear),
+                        SessionActionCopy.STORAGE_DID_NOT_RESPOND,
+                        canRetry = true,
+                    ),
+            ),
+        )
+
+        composeRule.onNodeWithText("Couldn't clear history").assertIsDisplayed()
+        composeRule.onNodeWithTag(SessionActionTestTags.RETRY).performClick()
+
+        assertEquals(listOf<SessionHistoryEvent>(SessionHistoryEvent.RetryAction), events)
     }
 
     @Test
@@ -110,8 +166,9 @@ class SessionHistoryScreenTest {
                     uiState =
                         SessionHistoryDetailUiState(
                             loaded = true,
-                            title = "2026-09-25",
+                            title = "Fri 25 Sep",
                             subtitle = "10:03 – 10:45 · 2 shots",
+                            sourceLine = "Wi-Fi · raspberrypi.local:8080",
                             session = SessionUiState(allCount = previewRows.size, shots = previewRows),
                         ),
                     onEvent = { detailEvents += it },
@@ -121,9 +178,71 @@ class SessionHistoryScreenTest {
         }
 
         composeRule.onNodeWithText("10:03 – 10:45 · 2 shots").assertIsDisplayed()
+        composeRule
+            .onNodeWithTag(
+                SessionHistoryTestTags.DETAIL_SOURCE,
+            ).assert(hasText("Wi-Fi · raspberrypi.local:8080"))
         composeRule.onNodeWithTag(SessionTestTags.STATS).assertIsDisplayed()
         composeRule.onNodeWithTag(SessionHistoryTestTags.DETAIL_EXPORT).performClick()
 
         assertEquals(listOf<SessionHistoryDetailEvent>(SessionHistoryDetailEvent.ExportCsv), detailEvents)
+    }
+
+    private fun showDetail(state: SessionHistoryDetailUiState) {
+        composeRule.setContent {
+            OfTheme { SessionHistoryDetailScreen(uiState = state, onEvent = { detailEvents += it }, onBack = {}) }
+        }
+    }
+
+    private val twoProfiles =
+        SessionHistoryDetailUiState(
+            loaded = true,
+            title = "Fri 25 Sep",
+            subtitle = "10:03 – 10:45 · 2 shots",
+            isCurrent = true,
+            profileChips = listOf(HistoryProfileChip("ann", "Ann", 1), HistoryProfileChip("bo", "Bo", 1)),
+            session = SessionUiState(allCount = previewRows.size, shots = previewRows),
+        )
+
+    @Test
+    fun givenTwoProfiles_whenOneIsTapped_thenTheDetailFiltersToIt() {
+        showDetail(twoProfiles)
+
+        composeRule.onNodeWithTag(SessionHistoryTestTags.PROFILE_ALL).assertIsSelected()
+        composeRule.onNodeWithTag(SessionHistoryTestTags.profile("bo")).performClick()
+
+        assertEquals(listOf<SessionHistoryDetailEvent>(SessionHistoryDetailEvent.SelectProfile("bo")), detailEvents)
+        composeRule.onNodeWithTag(SessionHistoryTestTags.CURRENT, useUnmergedTree = true).assertExists()
+    }
+
+    @Test
+    fun givenAStoredShot_whenSwipedLeft_thenTheViewModelIsAskedToConfirm() {
+        showDetail(twoProfiles)
+        val row = SessionTestTags.shot(previewRows.first().id)
+        composeRule.onNode(hasScrollToNodeAction()).performScrollToNode(hasTestTag(row))
+
+        composeRule.onNodeWithTag(row).performTouchInput { swipeLeft() }
+        composeRule.waitForIdle()
+
+        assertEquals(
+            listOf<SessionHistoryDetailEvent>(SessionHistoryDetailEvent.DeleteShot(previewRows.first().id)),
+            detailEvents,
+        )
+        // The row slides back while the confirmation is up.
+        composeRule.onNodeWithTag(row).assertIsDisplayed()
+    }
+
+    @Test
+    fun givenAPendingDelete_whenARowIsSwiped_thenNothingIsSent() {
+        val delete = SessionAction.DeleteShot(previewRows.first().id, 2, "7-Iron")
+        showDetail(twoProfiles.copy(action = SessionActionState.Pending(delete, SessionActionCopy.pending(delete))))
+        composeRule.onNodeWithText("Deleting shot #2…").assertIsDisplayed()
+        val row = SessionTestTags.shot(previewRows.last().id)
+        composeRule.onNode(hasScrollToNodeAction()).performScrollToNode(hasTestTag(row))
+
+        composeRule.onNodeWithTag(row).performTouchInput { swipeLeft() }
+        composeRule.waitForIdle()
+
+        assertEquals(emptyList(), detailEvents)
     }
 }

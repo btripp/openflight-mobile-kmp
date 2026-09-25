@@ -76,23 +76,32 @@ class SessionHistoryViewModelTest {
                 assertThat(state.sessions).containsExactly(
                     SessionHistoryRow(
                         id = "newer",
-                        date = "2026-09-25",
+                        date = "Fri 25 Sep",
                         timeRange = "10:03 – 10:45",
                         shotCount = 2,
                         transportLabel = "Wi-Fi",
                         isCurrent = true,
+                        host = "pi.local:8080",
+                        spokenDate = "Friday 25 September 2026",
                     ),
                     SessionHistoryRow(
                         id = "older",
-                        date = "2026-09-13",
+                        date = "Sun 13 Sep",
                         timeRange = "09:00",
                         shotCount = 1,
                         transportLabel = "Bluetooth",
                         isCurrent = false,
+                        host = "pi.local:8080",
+                        spokenDate = "Sunday 13 September 2026",
                     ),
                 )
                 assertThat(state.sessions[0].shotCountLabel).isEqualTo("2 shots")
                 assertThat(state.sessions[1].shotCountLabel).isEqualTo("1 shot")
+                assertThat(state.sessions[0].detailLine).isEqualTo("10:03 – 10:45 · Wi-Fi · pi.local:8080")
+                assertThat(state.sessions[0].accessibilityLabel)
+                    .isEqualTo(
+                        "Friday 25 September 2026, 10:03 to 10:45, 2 shots, Wi-Fi, pi.local:8080, current session",
+                    )
             }
         }
 
@@ -107,7 +116,53 @@ class SessionHistoryViewModelTest {
         }
 
     @Test
-    fun clearAllEmptiesTheHistory() =
+    fun aSessionFromAnotherYearShowsItsYear() =
+        runTest {
+            history.put("old", listOf(stored(1, "2025-12-31T23:59:00")), host = null)
+
+            SessionHistoryViewModel(history, now = { "2026-09-25T12:00:00Z" }).uiState.testIgnoringRest {
+                val row = awaitUntil { it.sessions.isNotEmpty() }.sessions.single()
+                assertThat(row.date).isEqualTo("Wed 31 Dec 2025")
+                assertThat(row.detailLine).isEqualTo("23:59 · Wi-Fi")
+            }
+        }
+
+    @Test
+    fun clearAllAsksFirstThenIsPendingUntilTheSessionsAreGone() =
+        runTest {
+            history.put("s1", listOf(stored(1, "2026-09-25T10:00:00")))
+            history.applyWrites = false
+            val viewModel = SessionHistoryViewModel(history)
+
+            viewModel.uiState.testIgnoringRest {
+                awaitUntil { it.sessions.size == 1 }
+                viewModel.onEvent(SessionHistoryEvent.ClearAll)
+                assertThat(awaitUntil { it.action is SessionActionState.Confirming }.action)
+                    .isEqualTo(SessionActionCopy.confirmClearAll)
+                assertThat(history.clearAllCount).isEqualTo(0)
+
+                viewModel.onEvent(SessionHistoryEvent.ConfirmAction)
+
+                val pending = awaitUntil { it.action is SessionActionState.Pending }
+                assertThat((pending.action as SessionActionState.Pending).message).isEqualTo("Clearing history…")
+                assertThat(history.clearAllCount).isEqualTo(1)
+                // No double submit while it's pending.
+                viewModel.onEvent(SessionHistoryEvent.ClearAll)
+                viewModel.onEvent(SessionHistoryEvent.ConfirmAction)
+                assertThat(history.clearAllCount).isEqualTo(1)
+
+                history.applyPendingWrites()
+
+                val done = awaitUntil { it.action is SessionActionState.Done }
+                assertThat((done.action as SessionActionState.Done).message).isEqualTo("History cleared.")
+                assertThat(done.sessions).isEmpty()
+                viewModel.onEvent(SessionHistoryEvent.DismissAction)
+                awaitUntil { it.action == SessionActionState.Idle }
+            }
+        }
+
+    @Test
+    fun cancellingClearAllKeepsTheHistory() =
         runTest {
             history.put("s1", listOf(stored(1, "2026-09-25T10:00:00")))
             val viewModel = SessionHistoryViewModel(history)
@@ -115,9 +170,39 @@ class SessionHistoryViewModelTest {
             viewModel.uiState.testIgnoringRest {
                 awaitUntil { it.sessions.size == 1 }
                 viewModel.onEvent(SessionHistoryEvent.ClearAll)
-                awaitUntil { it.sessions.isEmpty() }
+                awaitUntil { it.action is SessionActionState.Confirming }
+                viewModel.onEvent(SessionHistoryEvent.CancelAction)
+                awaitUntil { it.action == SessionActionState.Idle }
             }
-            assertThat(history.clearAllCount).isEqualTo(1)
+            assertThat(history.clearAllCount).isEqualTo(0)
+        }
+
+    @Test
+    fun aClearAllTheStoreNeverReflectsFailsAndCanBeRetried() =
+        runTest {
+            history.put("s1", listOf(stored(1, "2026-09-25T10:00:00")))
+            history.applyWrites = false
+            val viewModel = SessionHistoryViewModel(history)
+
+            viewModel.uiState.testIgnoringRest {
+                awaitUntil { it.sessions.size == 1 }
+                viewModel.onEvent(SessionHistoryEvent.ClearAll)
+                viewModel.onEvent(SessionHistoryEvent.ConfirmAction)
+                awaitUntil { it.action is SessionActionState.Pending }
+
+                testScheduler.advanceTimeBy(SessionHistoryViewModel.HISTORY_TIMEOUT_MILLIS + 1)
+
+                val failed = awaitUntil { it.action is SessionActionState.Failed }.action as SessionActionState.Failed
+                assertThat(failed.title).isEqualTo("Couldn't clear history")
+                assertThat(failed.message).isEqualTo(SessionActionCopy.STORAGE_DID_NOT_RESPOND)
+                assertThat(failed.canRetry).isTrue()
+
+                history.applyWrites = true
+                viewModel.onEvent(SessionHistoryEvent.RetryAction)
+
+                awaitUntil { it.action is SessionActionState.Done }
+            }
+            assertThat(history.clearAllCount).isEqualTo(2)
         }
 
     // endregion
@@ -137,9 +222,13 @@ class SessionHistoryViewModelTest {
             )
 
             detailViewModel().uiState.testIgnoringRest {
-                val state = awaitUntil { it.loaded }
-                assertThat(state.title).isEqualTo("2026-09-25")
+                val state = awaitUntil { it.loaded && it.sourceLine != null }
+                assertThat(state.title).isEqualTo("Fri 25 Sep")
                 assertThat(state.subtitle).isEqualTo("10:00 – 10:10 · 3 shots")
+                assertThat(state.sourceLine).isEqualTo("Wi-Fi · pi.local:8080")
+                assertThat(state.isCurrent).isFalse()
+                // One profile: nothing to filter.
+                assertThat(state.profileChips).isEmpty()
                 assertThat(state.session.allCount).isEqualTo(3)
                 // Same order as the live Session screen, which also reads the rows newest first.
                 assertThat(state.session.clubChips).containsExactly(ClubChip("7-iron", 1), ClubChip("driver", 2))
@@ -150,8 +239,9 @@ class SessionHistoryViewModelTest {
             }
         }
 
+    /** Plan R8f: like the live Session screen, the rows follow the tab (R8h kept them all). */
     @Test
-    fun aClubTabFiltersTheStatsButNotTheRows() =
+    fun aClubTabFiltersTheStatsAndTheRows() =
         runTest {
             history.put(
                 "s1",
@@ -167,7 +257,7 @@ class SessionHistoryViewModelTest {
                 viewModel.onEvent(SessionHistoryDetailEvent.SelectClub("7-iron"))
                 val state = awaitUntil { it.session.selectedClub == "7-iron" }
                 assertThat(state.session.stats.avgBallSpeedMph).isEqualTo(110.0)
-                assertThat(state.session.shots.size).isEqualTo(2)
+                assertThat(state.session.shots.map { it.shotNumber }).containsExactly(2)
             }
         }
 
@@ -201,17 +291,96 @@ class SessionHistoryViewModelTest {
         }
 
     @Test
-    fun deletingARowRemovesThatShotFromTheStoredHistory() =
+    fun deletingARowAsksFirstThenIsPendingUntilTheShotIsGone() =
         runTest {
-            history.put("s1", listOf(stored(2, "2026-09-25T10:05:00"), stored(1, "2026-09-25T10:00:00")))
+            history.put(
+                "s1",
+                listOf(stored(2, "2026-09-25T10:05:00"), stored(1, "2026-09-25T10:00:00", club = "7-iron")),
+            )
+            history.applyWrites = false
             val viewModel = detailViewModel()
 
             viewModel.uiState.testIgnoringRest {
                 awaitUntil { it.session.allCount == 2 }
                 viewModel.onEvent(SessionHistoryDetailEvent.DeleteShot("2026-09-25T10:00:00"))
-                awaitUntil { it.session.allCount == 1 }
+
+                val confirming = awaitUntil { it.action is SessionActionState.Confirming }.action
+                assertThat((confirming as SessionActionState.Confirming).title).isEqualTo("Delete shot #1?")
+                assertThat(confirming.message)
+                    .isEqualTo("This 7-Iron shot is removed from this phone's history. The Pi isn't changed.")
+                assertThat(history.deletedTimestamps).isEmpty()
+
+                viewModel.onEvent(SessionHistoryDetailEvent.ConfirmAction)
+                val pending = awaitUntil { it.action is SessionActionState.Pending }
+                assertThat(pending.canDelete).isFalse()
+                assertThat(history.deletedTimestamps).containsExactly("2026-09-25T10:00:00")
+
+                history.applyPendingWrites()
+
+                val done = awaitUntil { it.action is SessionActionState.Done }
+                assertThat(done.session.allCount).isEqualTo(1)
+                assertThat((done.action as SessionActionState.Done).message).isEqualTo("Shot #1 deleted.")
             }
-            assertThat(history.deletedTimestamps).containsExactly("2026-09-25T10:00:00")
+        }
+
+    @Test
+    fun aDeleteTheStoreNeverReflectsFails() =
+        runTest {
+            history.put("s1", listOf(stored(1, "2026-09-25T10:00:00")))
+            history.applyWrites = false
+            val viewModel = detailViewModel()
+
+            viewModel.uiState.testIgnoringRest {
+                awaitUntil { it.session.allCount == 1 }
+                viewModel.onEvent(SessionHistoryDetailEvent.DeleteShot("2026-09-25T10:00:00"))
+                viewModel.onEvent(SessionHistoryDetailEvent.ConfirmAction)
+                awaitUntil { it.action is SessionActionState.Pending }
+
+                testScheduler.advanceTimeBy(SessionHistoryViewModel.HISTORY_TIMEOUT_MILLIS + 1)
+
+                val failed = awaitUntil { it.action is SessionActionState.Failed }.action as SessionActionState.Failed
+                assertThat(failed.title).isEqualTo("Couldn't delete shot #1")
+                assertThat(failed.canRetry).isTrue()
+            }
+        }
+
+    @Test
+    fun withTwoProfilesTheDetailFiltersByProfileAndKeepsEachShotsNumber() =
+        runTest {
+            history.put(
+                "s1",
+                listOf(
+                    stored(3, "2026-09-25T10:10:00", club = "7-iron", ballSpeedMph = 110.0, profile = "bo" to "Bo"),
+                    stored(2, "2026-09-25T10:05:00", ballSpeedMph = 150.0, profile = "ann" to "Ann"),
+                    stored(1, "2026-09-25T10:00:00", ballSpeedMph = 140.0, profile = "ann" to "Ann"),
+                ),
+            )
+            history.currentSessionId.value = "s1"
+            val viewModel = detailViewModel()
+
+            viewModel.uiState.testIgnoringRest {
+                val all = awaitUntil { it.profileChips.isNotEmpty() && it.isCurrent }
+                // In first-shot order.
+                assertThat(all.profileChips)
+                    .containsExactly(HistoryProfileChip("ann", "Ann", 2), HistoryProfileChip("bo", "Bo", 1))
+                assertThat(all.selectedProfileId).isNull()
+                assertThat(all.session.allCount).isEqualTo(3)
+
+                viewModel.onEvent(SessionHistoryDetailEvent.SelectClub("7-iron"))
+                awaitUntil { it.session.selectedClub == "7-iron" }
+                viewModel.onEvent(SessionHistoryDetailEvent.SelectProfile("ann"))
+
+                val ann = awaitUntil { it.selectedProfileId == "ann" }
+                // A profile change starts from every club.
+                assertThat(ann.session.selectedClub).isNull()
+                assertThat(ann.session.allCount).isEqualTo(2)
+                assertThat(ann.session.clubChips).containsExactly(ClubChip("driver", 2))
+                assertThat(ann.session.stats.avgBallSpeedMph).isEqualTo(145.0)
+                assertThat(ann.session.shots.map { it.shotNumber }).containsExactly(2, 1)
+
+                viewModel.onEvent(SessionHistoryDetailEvent.SelectProfile(null))
+                assertThat(awaitUntil { it.selectedProfileId == null }.session.allCount).isEqualTo(3)
+            }
         }
 
     @Test
@@ -250,6 +419,26 @@ class SessionHistoryViewModelTest {
 
     // endregion
 
+    // region dates (plan R8f)
+
+    @Test
+    fun daysAreWrittenOutWithTheirWeekday() {
+        assertThat(historyDay("2026-09-25T10:03:35.906612")).isEqualTo("Fri 25 Sep")
+        assertThat(historyDay("2024-02-29T08:00:00")).isEqualTo("Thu 29 Feb")
+        assertThat(historyDay("2000-01-01T00:00:00")).isEqualTo("Sat 1 Jan")
+        assertThat(historyDay("2026-03-01T00:00:00", currentYear = 2026)).isEqualTo("Sun 1 Mar")
+        assertThat(historyDay("2025-12-31T23:59:00", currentYear = 2026)).isEqualTo("Wed 31 Dec 2025")
+        assertThat(historySpokenDay("2026-09-25T10:03:35")).isEqualTo("Friday 25 September 2026")
+    }
+
+    @Test
+    fun somethingThatIsNotADateIsShownAsItIs() {
+        assertThat(historyDay("yesterday")).isEqualTo("yesterday")
+        assertThat(historyDay("2026-13-01T00:00:00")).isEqualTo("2026-13-01")
+    }
+
+    // endregion
+
     private fun detailViewModel() = SessionHistoryDetailViewModel("s1", history, settings)
 
     private fun stored(
@@ -258,6 +447,7 @@ class SessionHistoryViewModelTest {
         club: String = "driver",
         ballSpeedMph: Double = 140.0,
         eventId: String? = null,
+        profile: Pair<String, String>? = null,
     ) = HistoryShot(
         id = number.toLong(),
         sessionId = "s1",
@@ -269,6 +459,8 @@ class SessionHistoryViewModelTest {
                 ballSpeedMph = ballSpeedMph,
                 estimatedCarryYards = 250.0,
                 club = club,
+                profileId = profile?.first,
+                profileName = profile?.second,
             ),
     )
 
