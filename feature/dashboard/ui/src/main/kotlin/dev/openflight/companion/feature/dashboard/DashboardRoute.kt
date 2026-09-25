@@ -26,7 +26,6 @@ import org.koin.androidx.compose.koinViewModel
 fun DashboardRoute(
     onOpenCalibration: () -> Unit,
     onOpenRange: () -> Unit,
-    navigation: DashboardNavigation = DashboardNavigation(),
     transportPermissionRequest: @Composable (transport: TransportType, onResult: (granted: Boolean) -> Unit) -> Unit =
         { _, _ -> },
     viewModel: DashboardViewModel = koinViewModel(),
@@ -55,7 +54,6 @@ fun DashboardRoute(
         }
     }
     DashboardScreen(
-        navigation = navigation,
         shotFlashes = shotFlashes,
         uiState = uiState,
         onEvent = viewModel::onEvent,

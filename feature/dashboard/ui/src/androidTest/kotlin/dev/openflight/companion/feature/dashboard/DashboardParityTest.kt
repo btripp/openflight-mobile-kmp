@@ -36,10 +36,7 @@ class DashboardParityTest {
     @get:Rule
     val composeRule = createAndroidComposeRule<ComponentActivity>()
 
-    private fun show(
-        state: DashboardUiState,
-        navigation: DashboardNavigation = DashboardNavigation(),
-    ) {
+    private fun show(state: DashboardUiState) {
         composeRule.setContent {
             OfTheme {
                 DashboardScreen(
@@ -47,7 +44,6 @@ class DashboardParityTest {
                     onEvent = {},
                     onOpenCalibration = {},
                     onOpenRange = {},
-                    navigation = navigation,
                 )
             }
         }
@@ -165,31 +161,32 @@ class DashboardParityTest {
     }
 
     @Test
-    fun whenTheBottomBarEntriesAreTapped_thenEachDestinationOpens() {
-        val opened = mutableListOf<String>()
-        show(
-            DashboardUiState.Waiting(ConnectionPanelState()),
-            DashboardNavigation(
-                onOpenSession = { opened += "session" },
-                onOpenTraining = { opened += "training" },
-                onOpenCamera = { opened += "camera" },
-                onOpenSettings = { opened += "settings" },
-            ),
-        )
-
-        for (tag in listOf(
-            DashboardUiTags.SESSION,
-            DashboardUiTags.TRAINING,
-            DashboardUiTags.CAMERA,
-            DashboardUiTags.SETTINGS,
-        )) {
-            composeRule.onNodeWithTag(tag).assertIsDisplayed().performClick()
+    fun whenShown_thenRangeAndCalibrateStayOnTheDashboard() {
+        // Plan F1a: Session, Training, Camera and Settings moved to the app shell's bottom bar or
+        // rail (androidApp's AppNavigationFlowTest); Range and Calibrate stay where they were.
+        var openedRange = false
+        var openedCalibration = false
+        composeRule.setContent {
+            OfTheme {
+                DashboardScreen(
+                    uiState = DashboardUiState.Waiting(ConnectionPanelState()),
+                    onEvent = {},
+                    onOpenCalibration = { openedCalibration = true },
+                    onOpenRange = { openedRange = true },
+                )
+            }
         }
-        // Range and Calibrate stay where they were.
-        composeRule.onNodeWithTag(DashboardTestTags.RANGE).assertIsDisplayed()
-        composeRule.onNodeWithTag(DashboardTestTags.CALIBRATE_RADAR).assertIsDisplayed()
 
-        assertEquals(listOf("session", "training", "camera", "settings"), opened)
+        composeRule.onNodeWithTag(DashboardTestTags.RANGE).assertIsDisplayed().performClick()
+        composeRule
+            .onNodeWithTag(
+                DashboardTestTags.CALIBRATE_RADAR,
+            ).performScrollTo()
+            .assertIsDisplayed()
+            .performClick()
+
+        assertEquals(true, openedRange)
+        assertEquals(true, openedCalibration)
     }
 
     private companion object {
