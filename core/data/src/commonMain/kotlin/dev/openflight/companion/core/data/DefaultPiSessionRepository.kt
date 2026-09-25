@@ -292,7 +292,7 @@ internal class DefaultPiSessionRepository(
             activeSocket.value = socket
             try {
                 launch(start = CoroutineStart.UNDISPATCHED) { socket.events.collect(::handle) }
-                launch(start = CoroutineStart.UNDISPATCHED) { followState(socket) }
+                launch(start = CoroutineStart.UNDISPATCHED) { followState(socket, key.host.orEmpty()) }
                 socket.connect()
                 awaitCancellation()
             } finally {
@@ -304,14 +304,21 @@ internal class DefaultPiSessionRepository(
         }
     }
 
-    private suspend fun followState(socket: PiSocket): Nothing =
+    private suspend fun followState(
+        socket: PiSocket,
+        host: String,
+    ): Nothing =
         coroutineScope {
             var wasConnected = false
             socket.state.collect { state ->
                 mutableLinkState.value = state.toLinkState()
                 val connected = state is SocketConnectionState.Connected
-                // Like socket.ts on 'connect': re-sync everything the server doesn't push.
-                if (connected && !wasConnected) launch { requestInitialState(socket) }
+                if (connected && !wasConnected) {
+                    // Plan R8d (Expo socket.ts): only a host that connected is saved for the next launch.
+                    launch { settings.rememberConnectedHost(host) }
+                    // Like socket.ts on 'connect': re-sync everything the server doesn't push.
+                    launch { requestInitialState(socket) }
+                }
                 if (!connected) store.linkLost()
                 wasConnected = connected
             }

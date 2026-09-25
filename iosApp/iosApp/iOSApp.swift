@@ -6,8 +6,9 @@ import SwiftUI
 struct iOSApp: App {
     @Environment(\.scenePhase) private var scenePhase
 
-    /// The app-wide shot stream (or the `--ui-testing` preview repository).
-    private let shots: ShotRepository
+    /// Foreground/background for the shared connection policy (plan R8d): it starts and stops the
+    /// shot stream (or the `--ui-testing` preview repository) and the Pi session.
+    private let lifecycle: AppLifecycle
     private let launchOptions: LaunchOptions
 
     init() {
@@ -16,7 +17,7 @@ struct iOSApp: App {
         // `--preview-shot` swap in a transport-free repository, so no connection ever starts.
         KoinHelperKt.startKoinForIos()
         let koin = KoinHelper()
-        shots = koin.shotRepository()
+        lifecycle = koin.appLifecycle()
         launchOptions = koin.launchOptions()
         AppearanceSetup.apply()
     }
@@ -25,12 +26,13 @@ struct iOSApp: App {
         WindowGroup {
             AppRoot(launchOptions: launchOptions)
         }
-        // Streaming is foreground-only, like the reference and Android's LifecycleStartEffect: it
+        // Streaming is foreground-only, like the reference and Android's ProcessLifecycleOwner: it
         // runs for every screen while the app is active and disconnects in the background.
+        // `.inactive` (Control Center, the app switcher) keeps the connection.
         .onChange(of: scenePhase, initial: true) { _, phase in
             switch phase {
-            case .active: shots.start()
-            case .background: shots.stop()
+            case .active: lifecycle.onForeground()
+            case .background: lifecycle.onBackground()
             default: break
             }
         }

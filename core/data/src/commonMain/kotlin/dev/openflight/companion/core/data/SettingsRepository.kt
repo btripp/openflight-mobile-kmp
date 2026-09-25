@@ -45,7 +45,12 @@ enum class RangeCameraMode(
 interface SettingsRepository {
     val transport: Flow<TransportType>
 
-    /** The Wi-Fi host exactly as the user submitted it; [ShotRepository] normalizes it per request. */
+    /**
+     * The Wi-Fi host to connect to, exactly as typed ([ShotRepository] normalizes it per request):
+     * the one submitted this launch ([setHost]), else the last host that reached `Connected`
+     * ([rememberConnectedHost]), else [DEFAULT_HOST]. Only a host that connected survives a
+     * relaunch (plan R8d, Expo `socket.ts`), so a typo can't strand the next launch.
+     */
     val host: Flow<String>
 
     val selectedClub: Flow<GolfClub>
@@ -65,8 +70,17 @@ interface SettingsRepository {
 
     suspend fun setTransport(transport: TransportType)
 
-    /** Call on submit, not per keystroke: every distinct value builds a new Wi-Fi transport. */
+    /**
+     * The host the user submitted. Call on submit, not per keystroke: every distinct value builds
+     * a new Wi-Fi transport. Kept for this launch only; see [rememberConnectedHost].
+     */
     suspend fun setHost(host: String)
+
+    /**
+     * Persists [host] as the last good host once a connection to it reached `Connected`. Default
+     * no-op so implementations without persistence (test fakes) needn't override it.
+     */
+    suspend fun rememberConnectedHost(host: String) {}
 
     suspend fun setSelectedClub(club: GolfClub)
 

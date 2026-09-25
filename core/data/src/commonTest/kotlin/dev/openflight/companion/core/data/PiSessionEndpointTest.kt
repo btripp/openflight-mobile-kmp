@@ -2,6 +2,7 @@
 package dev.openflight.companion.core.data
 
 import assertk.assertThat
+import assertk.assertions.containsExactly
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import dev.openflight.companion.core.model.pi.PiLinkState
@@ -14,7 +15,7 @@ import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 
-/** Plan R8d in the Pi session: the endpoint policy and the local-network flag. */
+/** Plan R8d in the Pi session: the endpoint policy, the local-network flag and the last-good host. */
 class PiSessionEndpointTest {
     private class RecordingTransport : EngineIoTransport {
         val urls = mutableListOf<String>()
@@ -54,5 +55,27 @@ class PiSessionEndpointTest {
 
             assertThat(h.repository.linkState.value)
                 .isEqualTo(PiLinkState.Reconnecting(1, 500, LocalNetworkDenial.MESSAGE, localNetworkDenied = true))
+        }
+
+    @Test
+    fun theHostIsRememberedOnlyOnceTheLinkConnects() =
+        runPiTest(host = "192.168.1.100:8080") { h ->
+            assertThat(h.settings.connectedHosts).isEmpty()
+            h.drop()
+            assertThat(h.settings.connectedHosts).isEmpty()
+
+            h.socket.serverAcks()
+
+            assertThat(h.settings.connectedHosts).containsExactly("192.168.1.100:8080")
+        }
+
+    @Test
+    fun aHostThatNeverConnectsIsNeverRemembered() =
+        runPiTest { h ->
+            h.connected()
+            h.settings.setHost("typo.local:8080")
+            h.drop()
+
+            assertThat(h.settings.connectedHosts).containsExactly("pi.local:8080")
         }
 }

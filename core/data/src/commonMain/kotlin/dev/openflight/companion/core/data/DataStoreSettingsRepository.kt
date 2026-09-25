@@ -11,7 +11,9 @@ import dev.openflight.companion.core.insights.UnitSystem
 import dev.openflight.companion.core.model.GolfClub
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import okio.IOException
@@ -32,9 +34,17 @@ internal class DataStoreSettingsRepository(
             .map { TransportType.fromStorageValue(it[TRANSPORT_KEY]) ?: SettingsRepository.DEFAULT_TRANSPORT }
             .distinctUntilChanged()
 
-    override val host: Flow<String> =
+    /** This launch's submitted host (plan R8d); never persisted, see [rememberConnectedHost]. */
+    private val submittedHost = MutableStateFlow<String?>(null)
+
+    /** The last host that reached `Connected`, persisted under the reference's `piHost` key. */
+    private val lastGoodHost: Flow<String> =
         preferences
             .map { it[HOST_KEY] ?: SettingsRepository.DEFAULT_HOST }
+            .distinctUntilChanged()
+
+    override val host: Flow<String> =
+        combine(submittedHost, lastGoodHost) { submitted, lastGood -> submitted ?: lastGood }
             .distinctUntilChanged()
 
     override val selectedClub: Flow<GolfClub> =
@@ -59,7 +69,11 @@ internal class DataStoreSettingsRepository(
     }
 
     override suspend fun setHost(host: String) {
-        dataStore.edit { it[HOST_KEY] = host }
+        submittedHost.value = host
+    }
+
+    override suspend fun rememberConnectedHost(host: String) {
+        dataStore.edit { if (it[HOST_KEY] != host) it[HOST_KEY] = host }
     }
 
     override suspend fun setSelectedClub(club: GolfClub) {

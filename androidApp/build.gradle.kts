@@ -41,6 +41,8 @@ dependencies {
     // FileProvider: the CSV export is shared from the cache dir (R5b).
     implementation(libs.androidx.core)
     implementation(libs.androidx.lifecycle.runtime.compose)
+    // R8d: ProcessLifecycleOwner feeds the shared foreground/background connection policy.
+    implementation(libs.androidx.lifecycle.process)
     implementation(libs.androidx.navigation.compose)
     implementation(libs.kotlinx.serialization.json)
     implementation(platform(libs.koin.bom))

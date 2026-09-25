@@ -51,6 +51,11 @@ val dataModule: Module =
                 piSession = get(),
             )
         }
+        // R8d: foreground-only transports. The shell reports the lifecycle; the policy follows it.
+        single { AppLifecycle() }
+        single {
+            LifecycleConnectionPolicy(get<AppLifecycle>().state, get(), CoroutineScope(Dispatchers.Unconfined))
+        }
         // R6a: the Wi-Fi-only Socket.IO session API, sharing the HttpClient's engine.
         single<PiSessionRepository> {
             val httpClient = get<HttpClient>()

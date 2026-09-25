@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 package dev.openflight.companion
 
+import dev.openflight.companion.core.data.AppLifecycle
 import dev.openflight.companion.core.data.ShotRepository
 import dev.openflight.companion.feature.calibration.CalibrationViewModel
 import dev.openflight.companion.feature.camera.CameraViewModel
@@ -56,11 +57,15 @@ class KoinHelper : KoinComponent {
 
     fun sessionViewModel(): SessionViewModel = get()
 
-    /**
-     * The app-wide shot stream. The SwiftUI shell calls `start()` when the scene becomes active
-     * and `stop()` when it leaves the foreground, like Android's `LifecycleStartEffect`.
-     */
+    /** The app-wide shot stream. */
     fun shotRepository(): ShotRepository = get()
+
+    /**
+     * The app lifecycle (plan R8d): the SwiftUI shell reports `onForeground()` when the scene
+     * becomes active and `onBackground()` when it enters the background; the shared policy then
+     * connects or disconnects every transport, like Android's `ProcessLifecycleOwner` source.
+     */
+    fun appLifecycle(): AppLifecycle = getKoin().appLifecycle()
 
     /** The debug [LaunchOptions] applied at launch (defaults in release builds). */
     fun launchOptions(): LaunchOptions = getKoin().launchOptions()

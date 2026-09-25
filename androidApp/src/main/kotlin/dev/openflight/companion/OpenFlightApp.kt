@@ -1,28 +1,58 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 package dev.openflight.companion
 
+import androidx.activity.compose.LocalActivity
 import androidx.compose.runtime.Composable
-import androidx.lifecycle.compose.LifecycleStartEffect
-import dev.openflight.companion.core.data.ShotRepository
+import androidx.compose.runtime.DisposableEffect
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.ProcessLifecycleOwner
+import dev.openflight.companion.core.data.AppLifecycle
+import dev.openflight.companion.core.data.LifecycleConnectionPolicy
 import dev.openflight.companion.core.designsystem.OfTheme
 import org.koin.compose.koinInject
 
 /**
- * The Android app shell: theme, the shot stream's lifecycle and the nav host. Koin must already be
- * started (`OpenFlightApplication`).
+ * The Android app shell: theme, the shared connection policy's lifecycle source and the nav host.
+ * Koin must already be started (`OpenFlightApplication`).
  *
- * Like the reference, streaming is foreground-only: the repository starts when the app comes to
- * the foreground and stops (disconnecting the transport) when it goes to the background. It runs
- * for every screen, not just the dashboard, so the range and calibration see live data too.
+ * Streaming is foreground-only for every screen, not just the dashboard (plan R8d): the shared
+ * [LifecycleConnectionPolicy] connects on [AppLifecycle.onForeground] and disconnects on
+ * [AppLifecycle.onBackground]. This feeds it from [ProcessLifecycleOwner] (`ON_START`/`ON_STOP`),
+ * which ignores rotations and brief activity switches, using this composition's Koin graph (the one
+ * the debug launch options and instrumented tests set up).
  */
 @Composable
 fun OpenFlightApp() {
     OfTheme {
-        val repository = koinInject<ShotRepository>()
-        LifecycleStartEffect(repository) {
-            repository.start()
-            onStopOrDispose { repository.stop() }
-        }
+        AppLifecycleSource()
         AppNavHost()
+    }
+}
+
+@Composable
+private fun AppLifecycleSource() {
+    val lifecycle = koinInject<AppLifecycle>()
+    val policy = koinInject<LifecycleConnectionPolicy>()
+    val activity = LocalActivity.current
+    DisposableEffect(lifecycle, policy) {
+        policy.start()
+        val observer =
+            LifecycleEventObserver { _, event ->
+                when (event) {
+                    Lifecycle.Event.ON_START -> lifecycle.onForeground()
+                    Lifecycle.Event.ON_STOP -> lifecycle.onBackground()
+                    else -> Unit
+                }
+            }
+        // Delivers the current state at once: ON_START when the process is already visible.
+        val processLifecycle = ProcessLifecycleOwner.get().lifecycle
+        processLifecycle.addObserver(observer)
+        onDispose {
+            processLifecycle.removeObserver(observer)
+            // A rotation keeps the connection; leaving the app (back, finish) ends it now rather
+            // than when the process eventually stops.
+            if (activity?.isChangingConfigurations != true) lifecycle.onBackground()
+        }
     }
 }

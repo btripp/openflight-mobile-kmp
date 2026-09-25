@@ -3,8 +3,10 @@ package dev.openflight.companion.core.data
 
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
+import app.cash.turbine.test
 import assertk.assertThat
 import assertk.assertions.isEqualTo
+import assertk.assertions.isNull
 import dev.openflight.companion.core.insights.UnitSystem
 import dev.openflight.companion.core.model.GolfClub
 import kotlinx.coroutines.CoroutineScope
@@ -101,6 +103,47 @@ class DataStoreSettingsRepositoryTest {
             assertThat(stored[stringPreferencesKey("shotTransport")]).isEqualTo("wifi")
             assertThat(stored[stringPreferencesKey("selectedClub")]).isEqualTo("7-iron")
             assertThat(stored[stringPreferencesKey("unitSystem")]).isEqualTo("metric")
+        }
+
+    @Test
+    fun aSubmittedHostIsUsedThisLaunchButNotPersisted() =
+        runTest {
+            val dataStore = backgroundScope.dataStore()
+            val settings = DataStoreSettingsRepository(dataStore)
+
+            settings.setHost("192.168.4.1:8080")
+
+            assertThat(settings.host.first()).isEqualTo("192.168.4.1:8080")
+            assertThat(dataStore.data.first()[stringPreferencesKey("piHost")]).isNull()
+            // The next launch (a fresh repository over the same file) falls back to the default.
+            assertThat(DataStoreSettingsRepository(dataStore).host.first()).isEqualTo(SettingsRepository.DEFAULT_HOST)
+        }
+
+    @Test
+    fun onlyAConnectedHostSurvivesARelaunch() =
+        runTest {
+            val dataStore = backgroundScope.dataStore()
+            val settings = DataStoreSettingsRepository(dataStore)
+            settings.setHost("192.168.1.100:8080")
+            settings.rememberConnectedHost("192.168.1.100:8080")
+            settings.setHost("typo.local:8080") // Submitted, never connects.
+
+            assertThat(settings.host.first()).isEqualTo("typo.local:8080")
+            assertThat(DataStoreSettingsRepository(dataStore).host.first()).isEqualTo("192.168.1.100:8080")
+            assertThat(dataStore.data.first()[stringPreferencesKey("piHost")]).isEqualTo("192.168.1.100:8080")
+        }
+
+    @Test
+    fun theSubmittedHostKeepsWinningOverALaterRememberedOne() =
+        runTest {
+            val settings = DataStoreSettingsRepository(backgroundScope.dataStore())
+            settings.host.test {
+                assertThat(awaitItem()).isEqualTo(SettingsRepository.DEFAULT_HOST)
+                settings.setHost("192.168.4.1:8080")
+                assertThat(awaitItem()).isEqualTo("192.168.4.1:8080")
+                settings.rememberConnectedHost("192.168.4.1:8080")
+                expectNoEvents()
+            }
         }
 
     @Test

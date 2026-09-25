@@ -2,6 +2,8 @@
 package dev.openflight.companion
 
 import com.rickclephas.kmp.nativecoroutines.NativeCoroutinesIgnore
+import dev.openflight.companion.core.data.AppLifecycle
+import dev.openflight.companion.core.data.LifecycleConnectionPolicy
 import dev.openflight.companion.core.data.SettingsRepository
 import dev.openflight.companion.core.data.ShotRepository
 import dev.openflight.companion.core.data.dataModule
@@ -72,6 +74,16 @@ private fun previewModule(showPreviewShot: Boolean): Module =
     module {
         single<ShotRepository> { PreviewShotRepository(settings = get(), showPreviewShot = showPreviewShot) }
     }
+
+/**
+ * The app-wide [AppLifecycle] the platform shell reports foreground/background to (plan R8d),
+ * with its [LifecycleConnectionPolicy] started. Call after [applyLaunchOptions]: the policy binds
+ * to whichever [ShotRepository] the graph holds at that point (the preview one in UI tests).
+ */
+fun Koin.appLifecycle(): AppLifecycle {
+    get<LifecycleConnectionPolicy>().start()
+    return get()
+}
 
 /** The debug [LaunchOptions] applied at launch, or the defaults (release builds, no hooks). */
 fun Koin.launchOptions(): LaunchOptions = getOrNull<LaunchOptions>() ?: LaunchOptions()

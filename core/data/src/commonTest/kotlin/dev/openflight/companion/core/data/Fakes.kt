@@ -105,6 +105,13 @@ internal class FakeSettingsRepository(
         hostState.value = host
     }
 
+    /** Every [rememberConnectedHost] call, in order. */
+    val connectedHosts = mutableListOf<String>()
+
+    override suspend fun rememberConnectedHost(host: String) {
+        connectedHosts += host
+    }
+
     override suspend fun setSelectedClub(club: GolfClub) {
         clubWrites += club
         clubState.value = club
