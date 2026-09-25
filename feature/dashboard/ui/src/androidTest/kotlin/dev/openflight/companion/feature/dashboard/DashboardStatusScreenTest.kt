@@ -8,6 +8,7 @@ import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performScrollTo
@@ -98,6 +99,21 @@ class DashboardStatusScreenTest {
 
         composeRule.onNodeWithTag(DashboardTestTags.CONNECTION_PROBLEM).performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText(ConnectionProblem.ADDRESS_REJECTED_TITLE, useUnmergedTree = true).assertIsDisplayed()
+    }
+
+    @Test
+    fun givenAPitchingWedgeShot_whenShown_thenTheCardAndHistoryNameTheClub() {
+        show(
+            DashboardUiState.Live(
+                connected,
+                latest = PREVIEW_SHOT.copy(club = "pw"),
+                previous = listOf(PREVIEW_SHOT.copy(eventId = "B0D91F0A-7950-4D7E-9DD5-AF9777C190E2", club = "sw")),
+            ),
+        )
+
+        composeRule.onNodeWithText("Pitching Wedge", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onAllNodesWithText("Pw", useUnmergedTree = true).assertCountEquals(0)
+        composeRule.onNodeWithText("Sand Wedge", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
     }
 
     @Test

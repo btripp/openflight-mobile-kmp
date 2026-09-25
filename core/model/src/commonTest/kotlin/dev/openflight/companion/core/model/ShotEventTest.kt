@@ -76,4 +76,21 @@ class ShotEventTest {
         assertThat(makeShotEvent(club = "3-wood").displayClub).isEqualTo("3-Wood")
         assertThat(makeShotEvent(club = "driver").displayClub).isEqualTo("Driver")
     }
+
+    @Test
+    fun displayClubUsesTheWedgeNamesNotTheWireAbbreviation() {
+        // Manual testing showed "Pw" on the latest-shot card (plan R8f).
+        assertThat(makeShotEvent(club = "pw").displayClub).isEqualTo("Pitching Wedge")
+        assertThat(makeShotEvent(club = "gw").displayClub).isEqualTo("Gap Wedge")
+        assertThat(makeShotEvent(club = "sw").displayClub).isEqualTo("Sand Wedge")
+        assertThat(makeShotEvent(club = "lw").displayClub).isEqualTo("Lob Wedge")
+    }
+
+    @Test
+    fun everyKnownClubShowsItsDisplayName() {
+        GolfClub.entries.forEach { club ->
+            assertThat(makeShotEvent(club = club.wireValue).displayClub).isEqualTo(club.displayName)
+        }
+        assertThat(GolfClub.displayNameFor("mystery_club")).isEqualTo("Mystery Club")
+    }
 }

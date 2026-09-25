@@ -93,6 +93,14 @@ enum class GolfClub(
         fun fromWireValue(value: String): GolfClub? = entries.firstOrNull { it.wireValue == value }
 
         /**
+         * The name to show for a raw wire `club` value: a known club's [displayName] ("pw" →
+         * "Pitching Wedge", "7-iron" → "7-Iron"); anything else with underscores turned into
+         * spaces and Swift-`.capitalized`-style casing ("iron_7" → "Iron 7"), as the reference does.
+         */
+        fun displayNameFor(wireValue: String): String =
+            fromWireValue(wireValue)?.displayName ?: capitalizedWords(wireValue.replace('_', ' '))
+
+        /**
          * [shortLabel] for a raw wire `club` value; unknown values (the Pi may send clubs this app
          * doesn't know yet) fall back to their first two characters.
          */

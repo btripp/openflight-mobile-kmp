@@ -4,6 +4,7 @@ package dev.openflight.companion.feature.camera
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dev.openflight.companion.core.data.PiSessionRepository
+import dev.openflight.companion.core.model.GolfClub
 import dev.openflight.companion.core.model.pi.CameraCaptureSettings
 import dev.openflight.companion.core.model.pi.CameraPreview
 import dev.openflight.companion.core.model.pi.PiFeatureAvailability
@@ -235,7 +236,8 @@ class CameraViewModel(
                             replayId = replay.id,
                             shotNumber = shot.shotNumber,
                             timestamp = shot.timestamp,
-                            club = shot.club,
+                            // The display name ("Pitching Wedge"), never the wire value ("pw").
+                            club = shot.club?.let(GolfClub::displayNameFor),
                             ballSpeedMph = shot.ballSpeedMph,
                             mirrorHorizontal = replay.displayMirrorHorizontal ?: false,
                         )

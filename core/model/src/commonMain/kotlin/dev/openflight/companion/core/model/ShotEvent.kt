@@ -58,9 +58,13 @@ data class ShotEvent(
     val isProvisional: Boolean
         get() = final == false
 
-    /** `club` with underscores turned into spaces, then Swift-`.capitalized`-style casing. */
+    /**
+     * The club to show: a known club's display name ("pw" → "Pitching Wedge"), otherwise `club`
+     * with underscores turned into spaces and Swift-`.capitalized`-style casing
+     * ([GolfClub.displayNameFor]).
+     */
     val displayClub: String
-        get() = capitalizedWords(club.replace('_', ' '))
+        get() = GolfClub.displayNameFor(club)
 }
 
 /**

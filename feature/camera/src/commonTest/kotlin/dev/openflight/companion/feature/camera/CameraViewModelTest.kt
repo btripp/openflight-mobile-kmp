@@ -225,6 +225,19 @@ class CameraViewModelTest {
             }
         }
 
+    @Test
+    fun replayRowsShowTheClubsDisplayNameNotItsWireValue() {
+        val rows =
+            CameraViewModel.replayRows(
+                listOf(
+                    shot(2, CameraReplay(id = "r2")).copy(club = "pw"),
+                    shot(1, CameraReplay(id = "r1")).copy(club = null),
+                ),
+            )
+
+        assertThat(rows.map { it.club }).isEqualTo(listOf("Pitching Wedge", null))
+    }
+
     private fun answer(preview: CameraPreview) = CameraViewModel.PreviewOutcome.Answer(preview)
 
     private fun shot(
