@@ -103,7 +103,7 @@ data class ConnectionPanelState(
      * ([localNetworkDenied]), so it isn't repeated here.
      */
     val visibleProblem: ConnectionProblem?
-        get() = problem?.takeIf { it.kind != ConnectionProblem.Kind.LOCAL_NETWORK_DENIED }
+        get() = problem?.takeIf { it.kind != ConnectionProblem.Kind.LOCAL_NETWORK_DENIED && !localNetworkDenied }
 
     /** Tap-to-fill suggestions under the host field (Wi-Fi only). */
     val hostHints: List<HostHint>

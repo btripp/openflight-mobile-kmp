@@ -88,9 +88,9 @@ fun AppNavHost(navController: NavHostController = rememberNavController()) {
                     ),
                 transportPermissionRequest = {
                     transport,
-                    onGranted,
+                    onResult,
                     ->
-                    TransportPermissionRequest(transport, onGranted)
+                    TransportPermissionRequest(transport, onResult)
                 },
             )
         }

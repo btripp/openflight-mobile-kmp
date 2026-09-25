@@ -35,4 +35,14 @@ sealed interface DashboardEvent {
 
     /** "Looks right" on the once-per-launch club confirmation; it won't show again this launch. */
     data object ClubConfirmed : DashboardEvent
+
+    /**
+     * Plan R8f: the platform's answer about its local-network permission (Android 17's
+     * `ACCESS_LOCAL_NETWORK`, which the shell asks for on Wi-Fi). A denial can't show up as an
+     * error of its own (connections just time out), so the shell reports it and the card offers
+     * the app's settings, like iOS's Local Network denial.
+     */
+    data class LocalNetworkPermissionChanged(
+        val granted: Boolean,
+    ) : DashboardEvent
 }

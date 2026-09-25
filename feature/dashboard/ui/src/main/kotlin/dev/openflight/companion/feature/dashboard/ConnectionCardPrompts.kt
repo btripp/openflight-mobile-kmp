@@ -1,17 +1,23 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 package dev.openflight.companion.feature.dashboard
 
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.dp
 import dev.openflight.companion.core.designsystem.OfButton
 import dev.openflight.companion.core.designsystem.OfChip
 import dev.openflight.companion.core.designsystem.OfColorTokens
@@ -82,15 +88,36 @@ internal fun HostHints(
     }
 }
 
-/** iOS-only in practice (the flag comes from Darwin's Local Network denial); kept for shared state. */
+/**
+ * Plan R8f: Android 17 blocks LAN sockets until `ACCESS_LOCAL_NETWORK` (the Nearby devices
+ * permission group) is granted, and a denial only shows up as a timeout. Retry can't fix it, so
+ * the card says what's off and opens the app's settings page, like iOS's Local Network block.
+ */
 @Composable
 internal fun LocalNetworkDenied() {
-    OfText(
-        text = "Local network access is off for OpenFlight, so it can't reach your Pi.",
-        role = OfTextRole.BodySmall,
-        color = OfColorTokens.Danger,
+    val context = LocalContext.current
+    OfNotice(
+        title = "Nearby devices permission is off",
+        detail =
+            "OpenFlight needs it to reach your Pi on the local network. " +
+                "Allow Nearby devices in the app's settings, then come back.",
+        tone = StatusTone.Negative,
         modifier = Modifier.testTag(DashboardTestTags.LOCAL_NETWORK_DENIED),
-    )
+    ) {
+        OfButton(
+            text = "Open app settings",
+            onClick = {
+                val intent =
+                    Intent(
+                        Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        Uri.fromParts("package", context.packageName, null),
+                    ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                // Never let a device without the settings page break the dashboard.
+                runCatching { context.startActivity(intent) }
+            },
+            modifier = Modifier.heightIn(min = 48.dp).testTag(DashboardTestTags.OPEN_SETTINGS),
+        )
+    }
 }
 
 /** Plan R8d: once per launch, after the first connection, confirm the club shots are filed under. */

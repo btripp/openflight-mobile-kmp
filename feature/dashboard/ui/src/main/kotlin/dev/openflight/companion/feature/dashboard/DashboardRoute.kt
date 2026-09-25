@@ -18,20 +18,28 @@ import org.koin.androidx.compose.koinViewModel
  *
  * @param transportPermissionRequest composed with the selected transport once settings load. The
  *   app shell supplies the platform's permission prompt (Android runtime permissions; nothing on
- *   iOS, which prompts by itself) and calls `onGranted` after a grant, which retries.
+ *   iOS, which prompts by itself) and calls `onResult` with whether they're granted: after the
+ *   prompt, and again when the answer changes (for example after a trip to the app's settings).
+ *   A grant retries; on Wi-Fi the answer also drives the local-network denial state (plan R8f).
  */
 @Composable
 fun DashboardRoute(
     onOpenCalibration: () -> Unit,
     onOpenRange: () -> Unit,
     navigation: DashboardNavigation = DashboardNavigation(),
-    transportPermissionRequest: @Composable (transport: TransportType, onGranted: () -> Unit) -> Unit = { _, _ -> },
+    transportPermissionRequest: @Composable (transport: TransportType, onResult: (granted: Boolean) -> Unit) -> Unit =
+        { _, _ -> },
     viewModel: DashboardViewModel = koinViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val transport by viewModel.selectedTransport.collectAsStateWithLifecycle()
     transport?.let { selected ->
-        transportPermissionRequest(selected) { viewModel.onEvent(DashboardEvent.Retry) }
+        transportPermissionRequest(selected) { granted ->
+            if (selected == TransportType.WIFI) {
+                viewModel.onEvent(DashboardEvent.LocalNetworkPermissionChanged(granted))
+            }
+            if (granted) viewModel.onEvent(DashboardEvent.Retry)
+        }
     }
     // Plan R5b: a haptic tick and the gold shot-flash for every new shot (never for a replay).
     val haptics = LocalHapticFeedback.current

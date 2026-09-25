@@ -50,6 +50,9 @@ class DashboardViewModel(
     private val hostDraft = MutableStateFlow<String?>(null)
     private val clubRequest = MutableStateFlow(ClubRequest())
 
+    /** Plan R8f: the platform said its local-network permission is denied (Android 17). */
+    private val permissionDenied = MutableStateFlow(false)
+
     /** Plan R8f: the profile picker beside the club. */
     private val profilePicker = ProfilePicker(piSession, viewModelScope)
 
@@ -58,11 +61,11 @@ class DashboardViewModel(
 
     /** The Socket.IO link as the card needs it: up, or refused for a denied Local Network. */
     private val piLink =
-        piSession.linkState.map { link ->
+        combine(piSession.linkState, permissionDenied) { link, denied ->
             PiLinkFlags(
                 link = link,
                 connected = link == PiLinkState.Connected,
-                localNetworkDenied = link is PiLinkState.Reconnecting && link.localNetworkDenied,
+                localNetworkDenied = denied || (link is PiLinkState.Reconnecting && link.localNetworkDenied),
             )
         }
 
@@ -84,9 +87,13 @@ class DashboardViewModel(
                 isChangingClub = request.inFlight,
                 clubError = request.error,
                 piLinkConnected = link.connected,
+                // Only Wi-Fi needs the local network; Bluetooth never shows the block.
                 localNetworkDenied =
-                    link.localNetworkDenied ||
-                        (state as? ConnectionState.Error)?.kind == ConnectionErrorKind.LOCAL_NETWORK_DENIED,
+                    saved.transport == TransportType.WIFI &&
+                        (
+                            link.localNetworkDenied ||
+                                (state as? ConnectionState.Error)?.kind == ConnectionErrorKind.LOCAL_NETWORK_DENIED
+                        ),
                 showClubConfirmation = confirmation == ClubConfirmation.Phase.SHOWING,
                 problem = ConnectionProblem.of(state, link.link),
                 profile = profile,
@@ -207,6 +214,10 @@ class DashboardViewModel(
 
             DashboardEvent.ClubConfirmed -> {
                 clubConfirmation.dismiss()
+            }
+
+            is DashboardEvent.LocalNetworkPermissionChanged -> {
+                permissionDenied.value = !event.granted
             }
 
             is ProfilePickerEvent -> {

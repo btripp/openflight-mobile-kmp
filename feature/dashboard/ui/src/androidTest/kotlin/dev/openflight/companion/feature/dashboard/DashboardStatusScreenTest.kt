@@ -100,6 +100,26 @@ class DashboardStatusScreenTest {
         composeRule.onNodeWithText(ConnectionProblem.ADDRESS_REJECTED_TITLE, useUnmergedTree = true).assertIsDisplayed()
     }
 
+    @Test
+    fun givenADeniedLocalNetworkPermission_whenShown_thenOpenAppSettingsIsOffered() {
+        show(
+            DashboardUiState.Waiting(
+                ConnectionPanelState(
+                    transport = TransportType.WIFI,
+                    state = ConnectionState.Error("timeout"),
+                    localNetworkDenied = true,
+                    problem = ConnectionProblem.of(ConnectionState.Error("timeout"), PiLinkState.Idle),
+                ),
+            ),
+        )
+
+        composeRule.onNodeWithTag(DashboardTestTags.LOCAL_NETWORK_DENIED).performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Nearby devices permission is off", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithTag(DashboardTestTags.OPEN_SETTINGS).assertIsDisplayed()
+        // The timeout the denial causes isn't shown as a second problem.
+        composeRule.onAllNodes(hasTestTag(DashboardTestTags.CONNECTION_PROBLEM)).assertCountEquals(0)
+    }
+
     private companion object {
         val PREVIEW_SHOT =
             ShotEvent(
