@@ -14,4 +14,10 @@ object RangeTestTags {
     const val STATUS = "range.status"
     const val SCENE = "range.scene"
     const val CAMERA_MODE = "range.cameraMode"
+
+    /** The full detail-metrics panel (club selector and the seven detail metrics). */
+    const val METRICS_DETAIL = "range.metricsDetail"
+
+    /** The one-line strip the detail metrics fold into while a ball flies and lands (plan R7b). */
+    const val METRICS_COMPACT = "range.metricsCompact"
 }

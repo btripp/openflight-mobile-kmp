@@ -4,7 +4,9 @@ import SwiftUI
 
 /// The range's metrics (reference `RangeMetricsOverlay.swift`): ball speed and carry on top; at the
 /// bottom the club error, the estimated-flight badge and the detail metrics with the "NEXT CLUB"
-/// selector, in one row in landscape or a two-column grid in portrait.
+/// selector, in one row in landscape or a two-column grid in portrait. While a ball flies and
+/// through the landing dwell (the shared `compactMetrics`, plan R7b) the detail metrics fold into
+/// one strip so the lower half of the scene, where the ball lands, stays visible.
 struct RangeMetricsOverlay: View {
     let state: DrivingRangeUiState
     let isLandscape: Bool
@@ -64,7 +66,34 @@ struct RangeMetricsOverlay: View {
                     .accessibilityIdentifier(RangeTestTags.shared.ESTIMATED)
             }
 
-            let metrics = detailMetrics
+            if DrivingRangeUiStateKt.compactMetrics(state) {
+                compactStrip
+            } else {
+                detailPanel
+            }
+        }
+        .animation(.easeInOut(duration: 0.25), value: DrivingRangeUiStateKt.compactMetrics(state))
+    }
+
+    private var compactStrip: some View {
+        Text(DrivingRangeUiStateKt.compactMetricsSummary(state))
+            .font(.caption.weight(.semibold).monospacedDigit())
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
+            .background(.black.opacity(0.55), in: Capsule())
+            .overlay {
+                Capsule().stroke(.white.opacity(0.14), lineWidth: 0.8)
+            }
+            .transition(.opacity)
+            .accessibilityIdentifier(RangeTestTags.shared.METRICS_COMPACT)
+    }
+
+    @ViewBuilder
+    private var detailPanel: some View {
+        let metrics = detailMetrics
+        Group {
             if isLandscape {
                 HStack(spacing: 8) {
                     clubMetric
@@ -84,6 +113,9 @@ struct RangeMetricsOverlay: View {
                 }
             }
         }
+        .transition(.opacity)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier(RangeTestTags.shared.METRICS_DETAIL)
     }
 
     private var detailMetrics: [RangeMetricValue] {

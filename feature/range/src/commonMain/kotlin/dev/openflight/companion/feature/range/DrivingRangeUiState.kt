@@ -6,6 +6,7 @@ import dev.openflight.companion.core.data.SettingsRepository
 import dev.openflight.companion.core.flight.FlightTrajectory
 import dev.openflight.companion.core.model.GolfClub
 import dev.openflight.companion.core.model.ShotEvent
+import dev.openflight.companion.core.model.ShotMetricFormatter
 
 /**
  * The range's flight phase, ported from `DrivingRangeViewModel.Phase`
@@ -119,3 +120,30 @@ val DrivingRangeUiState.canReplay: Boolean
 /** The "Estimated flight uses club defaults" badge (RangeMetricsOverlay.swift). */
 val DrivingRangeUiState.usesEstimatedFlight: Boolean
     get() = activeFlight?.trajectory?.provenance?.usesEstimatedFlight == true
+
+/**
+ * Plan R7b: while the ball is in the air and through the landing dwell, the overlay folds its
+ * detail metrics (the club selector, club speed, smash, launch, direction, spin, path and spin
+ * axis) into one strip, [compactMetricsSummary], so the lower half of the scene, where the ball
+ * lands, stays visible. The full panel comes back once the range is waiting (or preparing) again.
+ */
+val DrivingRangeUiState.compactMetrics: Boolean
+    get() = phase == RangePhase.Flying || phase == RangePhase.Landed
+
+/** The compact strip's one line: "Club 103.2 mph · Launch 12.6° · Spin 2,380 rpm" ("—" when missing). */
+val DrivingRangeUiState.compactMetricsSummary: String
+    get() {
+        val shot = displayedShot
+        val launch = ShotMetricFormatter.number(shot?.launchAngleVertical, decimals = 1)
+        val launchText = if (launch == ShotMetricFormatter.MISSING) launch else "$launch°"
+        return listOf(
+            "Club ${withUnit(ShotMetricFormatter.number(shot?.clubSpeedMph, decimals = 1), "mph")}",
+            "Launch $launchText",
+            "Spin ${withUnit(ShotMetricFormatter.number(shot?.spinRpm, decimals = 0), "rpm")}",
+        ).joinToString(separator = " · ")
+    }
+
+private fun withUnit(
+    value: String,
+    unit: String,
+): String = if (value == ShotMetricFormatter.MISSING) value else "$value $unit"

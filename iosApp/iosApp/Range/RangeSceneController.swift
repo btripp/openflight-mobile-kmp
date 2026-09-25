@@ -8,9 +8,15 @@ import UIKit
 /// fairway stripes, tee box, yardage targets, trees, lighting, a fixed tee-box camera, the ball
 /// and its shadow, the landing marker and **one** continuous tracer.
 ///
+/// **Camera (plan R7b).** Every frame of a flight, and for `RangeCameraRig.settleSeconds` after
+/// the landing, the camera entity takes its pose and vertical field of view from the shared
+/// `RangeCameraRig` for the state's camera mode: the tee camera for FIXED, the follow-ball camera
+/// for FOLLOW (the same poses Android's Canvas renders). Between flights the camera holds the last
+/// pose, and a mode switch re-poses it at once.
+///
 /// The scene layout and the flight come from the shared `core:flight` module (the reference's
 /// Swift copies of it are gone): `RangeSceneDescription.standard`, `RangeCameraPlanner`,
-/// `RangeTracerStyle.highVisibility` and the `FlightTrajectory` in the shared ViewModel's
+/// `RangeTracerStyle.highVisibility`, `RangeCameraRig` and the `FlightTrajectory` in the shared ViewModel's
 /// `ActiveFlight`.
 ///
 /// **Axes.** `core:flight` uses x = lateral (right), y = up, z = downrange (+z). RealityKit's
@@ -31,7 +37,13 @@ final class RangeSceneController: NSObject {
     private let arView: ARView
     private let root = AnchorEntity(world: .zero)
     private let camera = PerspectiveCamera()
-    private let cameraPose = RangeCameraPlanner().pose
+    private let rig = RangeCameraRig()
+    private var cameraMode: RangeCameraMode = SettingsRepositoryCompanion.shared.DEFAULT_RANGE_CAMERA_MODE
+    /// Playback progress of the flight on screen, 0 at launch to 1 at landing.
+    private var progress: Double = 0
+    /// When the ball landed (display-link time), while the camera settles; `nil` in the air.
+    private var landedAt: CFTimeInterval?
+    private var landedElapsed: Double = 0
     private let ball: ModelEntity
     private let ballShadow: ModelEntity
     private let landingMarker = Entity()
@@ -71,6 +83,9 @@ final class RangeSceneController: NSObject {
         let trajectory = flight.trajectory
         self.trajectory = trajectory
         self.completion = completion
+        progress = 0
+        landedAt = nil
+        landedElapsed = 0
         // 0.9 s under reduced motion, else clamp(flightTime * 0.68, 3.5, 6) (shared).
         playbackDuration = RangeProjectionKt.playbackSeconds(trajectory: trajectory, reduceMotion: reduceMotion)
         playbackStartedAt = CACurrentMediaTime()
@@ -79,6 +94,7 @@ final class RangeSceneController: NSObject {
         ball.isEnabled = true
         ballShadow.isEnabled = true
         updateScene(at: 0)
+        updateCamera()
 
         let link = CADisplayLink(target: self, selector: #selector(displayLinkDidFire(_:)))
         link.preferredFrameRateRange = CAFrameRateRange(minimum: 30, maximum: 60, preferred: 60)
@@ -86,13 +102,25 @@ final class RangeSceneController: NSObject {
         displayLink = link
     }
 
+    /// Switches between the follow and the fixed camera; the camera re-poses at once.
+    func setCameraMode(_ mode: RangeCameraMode) {
+        guard mode != cameraMode else { return }
+        cameraMode = mode
+        updateCamera()
+    }
+
+    /// Freezes a flight in the air where it is. A landed flight's camera still finishes settling
+    /// (the landing dwell outlasts the settle, so this only matters when frames fall behind).
     func suspend() {
-        stopDisplayLink()
         completion = nil
+        if landedAt == nil {
+            stopDisplayLink()
+        }
     }
 
     func tearDown() {
-        suspend()
+        stopDisplayLink()
+        completion = nil
         tracerSegments.removeAll()
         tracerSamples.removeAll()
         tracerFullyRevealed.removeAll()
@@ -100,16 +128,40 @@ final class RangeSceneController: NSObject {
     }
 
     @objc private func displayLinkDidFire(_ link: CADisplayLink) {
+        if let landedAt {
+            // Landed: keep drawing until the follow camera has settled over the landing spot.
+            landedElapsed = min(link.timestamp - landedAt, rig.settleSeconds)
+            updateCamera()
+            if landedElapsed >= rig.settleSeconds {
+                stopDisplayLink()
+            }
+            return
+        }
         let elapsed = link.timestamp - playbackStartedAt
-        let progress = min(max(elapsed / playbackDuration, 0), 1)
+        progress = min(max(elapsed / playbackDuration, 0), 1)
         updateScene(at: progress)
+        updateCamera()
         if progress >= 1 {
-            stopDisplayLink()
+            landedAt = link.timestamp
+            landedElapsed = 0
             landingMarker.isEnabled = true
             let callback = completion
             completion = nil
             callback?()
         }
+    }
+
+    /// Poses the camera entity for this instant: `RangeCameraRig` gives the position, the target and
+    /// the vertical field of view (RealityKit's `PerspectiveCameraComponent` default orientation).
+    private func updateCamera() {
+        let pose = rig.pose(
+            mode: cameraMode,
+            trajectory: trajectory,
+            playbackProgress: progress,
+            landedElapsedSeconds: landedElapsed
+        )
+        camera.look(at: SIMD3(pose.target), from: SIMD3(pose.position), relativeTo: nil)
+        camera.camera.fieldOfViewInDegrees = Float(pose.verticalFovDegrees)
     }
 
     private func buildScene(quality: RangeQualityProfile) {
@@ -124,13 +176,8 @@ final class RangeSceneController: NSObject {
         addTrees(description.trees)
         addLighting()
 
-        camera.camera.fieldOfViewInDegrees = 58
         root.addChild(camera)
-        camera.look(
-            at: SIMD3(cameraPose.target),
-            from: SIMD3(cameraPose.position),
-            relativeTo: nil
-        )
+        updateCamera()
 
         ball.position = SIMD3(0, 0.18, 0)
         ballShadow.position = SIMD3(0, 0.015, 0)

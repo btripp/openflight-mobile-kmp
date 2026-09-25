@@ -8,9 +8,11 @@ import SwiftUI
 /// `flight` is the shared `DrivingRangeUiState.activeFlight`: a new `playbackId` starts a new
 /// playback (a replay of the same shot included), `nil` suspends the animation. The scene reports
 /// the end of a flight through `onFlightCompleted`, which the screen forwards to the ViewModel as
-/// `FlightCompleted`.
+/// `FlightCompleted`. `cameraMode` is the state's camera (plan R7b): the scene poses its camera
+/// from the shared `RangeCameraRig` for it.
 struct RangeSceneView: UIViewRepresentable {
     let flight: ActiveFlight?
+    let cameraMode: RangeCameraMode
     let reduceMotion: Bool
     let onFlightCompleted: @MainActor () -> Void
 
@@ -27,6 +29,7 @@ struct RangeSceneView: UIViewRepresentable {
 
     func updateUIView(_ uiView: ARView, context: Context) {
         context.coordinator.onFlightCompleted = onFlightCompleted
+        context.coordinator.controller?.setCameraMode(cameraMode)
         guard let flight else {
             context.coordinator.controller?.suspend()
             return
