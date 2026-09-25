@@ -31,7 +31,6 @@ object SettingsTestTags {
     const val DONE = "settings.done"
     const val UNITS = "settings.units"
     const val CONNECTION = "settings.connection"
-    const val PROFILE = "settings.profile"
     const val SIMULATORS = "settings.simulators"
     const val RADAR = "settings.radar"
     const val RADAR_REFRESH = "settings.radar.refresh"

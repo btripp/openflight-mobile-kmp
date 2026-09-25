@@ -185,6 +185,8 @@ struct DashboardContent: View {
 
             clubSelector
 
+            ProfileSelector(profile: connection.profile, send: send)
+
             NavigationLink(value: AppRoute.calibration) {
                 Label("Calibrate TI Radar", systemImage: "level.fill")
                     .font(.of(.callout, weight: .bold))

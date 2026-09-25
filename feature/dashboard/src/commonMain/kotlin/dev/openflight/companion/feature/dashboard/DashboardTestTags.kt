@@ -20,6 +20,24 @@ object DashboardTestTags {
     const val OPEN_SETTINGS = "dashboard.openSettings"
     const val PROCESSING = "dashboard.processing"
     const val CONNECTION_PROBLEM = "dashboard.connectionProblem"
+    const val PROFILE_BUTTON = "dashboard.profile"
+    const val PROFILE_SHEET = "dashboard.profile.sheet"
+    const val PROFILE_ADD = "dashboard.profile.add"
+    const val PROFILE_DONE = "dashboard.profile.done"
+    const val PROFILE_NAME_FIELD = "dashboard.profile.name"
+    const val PROFILE_SAVE = "dashboard.profile.save"
+    const val PROFILE_CANCEL = "dashboard.profile.cancel"
+    const val PROFILE_FORM_ERROR = "dashboard.profile.formError"
+    const val PROFILE_NOTICE = "dashboard.profile.notice"
+    const val PROFILE_REMOVE_CONFIRM = "dashboard.profile.removeConfirm"
+    const val PROFILE_LOADING = "dashboard.profile.loading"
+
+    /** A profile row in the sheet, by profile id. */
+    fun profileRow(id: String): String = "dashboard.profile.row.$id"
+
+    fun profileRename(id: String): String = "dashboard.profile.rename.$id"
+
+    fun profileRemove(id: String): String = "dashboard.profile.remove.$id"
 
     /** A tap-to-fill host hint, by its host (for example "192.168.4.1:8080"). */
     fun hostHint(host: String): String = "dashboard.hostHint.$host"

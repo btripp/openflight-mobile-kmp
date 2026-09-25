@@ -19,8 +19,6 @@ import dev.openflight.companion.core.model.pi.DebugState
 import dev.openflight.companion.core.model.pi.PiFeatureAvailability
 import dev.openflight.companion.core.model.pi.PiLinkState
 import dev.openflight.companion.core.model.pi.PiNotice
-import dev.openflight.companion.core.model.pi.Profile
-import dev.openflight.companion.core.model.pi.ProfilesState
 import dev.openflight.companion.core.model.pi.RadarConfig
 import dev.openflight.companion.core.model.pi.RadarConfigUpdate
 import dev.openflight.companion.core.model.pi.SimState
@@ -84,7 +82,7 @@ class SettingsViewModelTest {
             viewModel.uiState.testIgnoringRest {
                 val ble = awaitUntil { it.linkState == PiLinkState.WifiOnly && it.radar.sliders.isNotEmpty() }
                 val requiresWifi = PiFeatureAvailability.Unavailable("Requires Wi-Fi")
-                assertThat(ble.profile.availability).isEqualTo(requiresWifi)
+                assertThat(ble.link).isEqualTo(requiresWifi)
                 assertThat(ble.debug.toggle).isEqualTo(requiresWifi)
                 assertThat(ble.cloud.upload).isEqualTo(requiresWifi)
                 assertThat(ble.shutdown.shutdown).isEqualTo(requiresWifi)
@@ -97,23 +95,8 @@ class SettingsViewModelTest {
 
                 piSession.linkState.value = PiLinkState.Reconnecting(2, 2_000, "closed")
                 val down = awaitUntil { it.linkState is PiLinkState.Reconnecting }
-                assertThat(down.profile.availability.disabledReason).isEqualTo("Not connected")
+                assertThat(down.link.disabledReason).isEqualTo("Not connected")
                 assertThat(down.linkDescription).isEqualTo("Reconnecting: closed")
-            }
-        }
-
-    @Test
-    fun theActiveProfileIsShownOnceTheRosterArrives() =
-        runTest {
-            piSession.profiles.value =
-                ProfilesState(
-                    profiles = listOf(Profile(id = "p1", name = "Ann"), Profile(id = "p2", name = "Bob")),
-                    activeProfileId = "p2",
-                    loaded = true,
-                )
-            viewModel.uiState.testIgnoringRest {
-                val state = awaitUntil { it.profile.activeName == "Bob" }
-                assertThat(state.profile.availability).isEqualTo(PiFeatureAvailability.Available)
             }
         }
 

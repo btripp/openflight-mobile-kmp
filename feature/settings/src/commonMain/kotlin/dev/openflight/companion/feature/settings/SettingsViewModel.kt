@@ -42,7 +42,7 @@ import kotlinx.coroutines.withTimeout
 
 /**
  * The settings screen's state holder (plan R6b): units, the transport and link status, and the
- * Pi's Wi-Fi-only controls (profile, simulators, radar/debug, cloud upload, shutdown), each
+ * Pi's Wi-Fi-only controls (simulators, radar/debug, cloud upload, shutdown), each
  * disabled with a reason unless the Pi's Socket.IO link is connected.
  *
  * Plan R8f adds the device cards (power, launch monitor, debug hidden until loaded), the
@@ -186,7 +186,7 @@ class SettingsViewModel(
             }
 
             else -> {
-                Unit
+                // Nothing to change in the other phases.
             }
         }
     }
@@ -272,7 +272,7 @@ class SettingsViewModel(
             }
 
             else -> {
-                Unit
+                // Nothing to change in the other phases.
             }
         }
     }
@@ -333,7 +333,7 @@ class SettingsViewModel(
                 linkState = link,
                 linkDescription = link.description,
                 units = phone.units,
-                profile = ProfileSettings(device.profiles.activeProfile?.name, available),
+                link = available,
                 simulators = SettingsPanels.simulators(device.sim.connectors),
                 radar = SettingsPanels.radar(radar.config, radar.trigger, radar.debug, mock, available),
                 debug =

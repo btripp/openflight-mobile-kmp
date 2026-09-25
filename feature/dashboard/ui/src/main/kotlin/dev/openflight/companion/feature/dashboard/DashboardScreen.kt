@@ -194,6 +194,7 @@ private fun ConnectionCard(
         if (panel.localNetworkDenied) LocalNetworkDenied()
         if (panel.showClubConfirmation) ClubConfirmationPrompt(panel.club, onEvent)
         ClubSelector(panel, onEvent)
+        ProfileSelector(panel.profile, onEvent)
         OfOutlinedButton(
             text = "Calibrate TI Radar",
             onClick = onOpenCalibration,

@@ -40,7 +40,6 @@ final class PiScreensUITests: XCTestCase {
         let liveSession = app.descendants(matching: .any)["settings.liveSession"]
         XCTAssertTrue(liveSession.waitForExistence(timeout: 5))
         XCTAssertTrue(liveSession.label.contains("Not connected"), "live session: \(liveSession.label)")
-        XCTAssertTrue(app.descendants(matching: .any)["settings.profile"].exists)
 
         let shutdown = app.buttons["settings.shutdown"]
         let reason = app.staticTexts["settings.shutdown.reason"]

@@ -50,6 +50,9 @@ class DashboardViewModel(
     private val hostDraft = MutableStateFlow<String?>(null)
     private val clubRequest = MutableStateFlow(ClubRequest())
 
+    /** Plan R8f: the profile picker beside the club. */
+    private val profilePicker = ProfilePicker(piSession, viewModelScope)
+
     private val savedSettings =
         combine(settings.transport, settings.host, settings.selectedClub, ::SavedSettings)
 
@@ -63,7 +66,7 @@ class DashboardViewModel(
             )
         }
 
-    private val prompts = combine(piLink, clubConfirmation.phase, ::Pair)
+    private val prompts = combine(piLink, clubConfirmation.phase, profilePicker.state, ::Triple)
 
     private val panel =
         combine(savedSettings, shots.connectionState, hostDraft, clubRequest, prompts) {
@@ -71,7 +74,7 @@ class DashboardViewModel(
             state,
             draft,
             request,
-            (link, confirmation),
+            (link, confirmation, profile),
             ->
             ConnectionPanelState(
                 transport = saved.transport,
@@ -86,6 +89,7 @@ class DashboardViewModel(
                         (state as? ConnectionState.Error)?.kind == ConnectionErrorKind.LOCAL_NETWORK_DENIED,
                 showClubConfirmation = confirmation == ClubConfirmation.Phase.SHOWING,
                 problem = ConnectionProblem.of(state, link.link),
+                profile = profile,
             )
         }
 
@@ -203,6 +207,10 @@ class DashboardViewModel(
 
             DashboardEvent.ClubConfirmed -> {
                 clubConfirmation.dismiss()
+            }
+
+            is ProfilePickerEvent -> {
+                profilePicker.onEvent(event)
             }
         }
     }

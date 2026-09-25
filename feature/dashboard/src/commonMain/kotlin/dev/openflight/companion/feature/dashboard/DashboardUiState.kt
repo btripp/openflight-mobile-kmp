@@ -83,6 +83,7 @@ sealed interface DashboardEffect {
  *   (plan R8d): the card offers to open Settings instead of only Retry.
  * @property showClubConfirmation the once-per-launch "is this the right club?" prompt (plan R8d).
  * @property problem why the phone can't reach the Pi, in words (plan R8f), or `null`.
+ * @property profile the profile picker beside the club (plan R8f).
  */
 data class ConnectionPanelState(
     val transport: TransportType = SettingsRepository.DEFAULT_TRANSPORT,
@@ -95,6 +96,7 @@ data class ConnectionPanelState(
     val localNetworkDenied: Boolean = false,
     val showClubConfirmation: Boolean = false,
     val problem: ConnectionProblem? = null,
+    val profile: ProfilePickerState = ProfilePickerState(),
 ) {
     /**
      * The problem the card spells out. A Local Network denial has its own block with the way out

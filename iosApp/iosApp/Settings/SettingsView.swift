@@ -2,7 +2,7 @@
 import Shared
 import SwiftUI
 
-/// Settings (plans R5b/R6c), over the shared `SettingsViewModel`: units, connection info, profile,
+/// Settings (plans R5b/R6c), over the shared `SettingsViewModel`: units, connection info,
 /// simulator status, the radar/debug panel, cloud upload and Pi shutdown. Wi-Fi-only controls stay
 /// visible and are disabled with the VM's reason. Android's `SettingsScreen.kt` renders the same
 /// state.
@@ -32,7 +32,6 @@ struct SettingsContent: View {
         Form {
             unitsSection
             connectionSection
-            profileSection
             launchMonitorSection
             if let power = state.power { powerStatusSection(power) }
             simulatorsSection
@@ -116,20 +115,6 @@ struct SettingsContent: View {
             }
         } header: {
             header("CONNECTION")
-        }
-        .listRowBackground(Theme.bgCard)
-    }
-
-    // MARK: Profile
-
-    /// The Pi's active profile, read-only until the profile picker (plan R8f).
-    private var profileSection: some View {
-        Section {
-            row("Active profile", state.profile.activeName ?? "—")
-                .accessibilityIdentifier("settings.profile")
-            if let reason = state.profile.availability.disabledReason { DisabledReason(reason: reason) }
-        } header: {
-            header("PROFILE")
         }
         .listRowBackground(Theme.bgCard)
     }

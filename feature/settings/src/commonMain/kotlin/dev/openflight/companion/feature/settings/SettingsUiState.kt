@@ -20,6 +20,8 @@ import dev.openflight.companion.core.model.pi.TriggerStatus
  *
  * @property connectionState the shot stream's state (SSE or BLE).
  * @property linkState the Wi-Fi-only Socket.IO link; [linkDescription] is its display text.
+ * @property link whether the Pi's Wi-Fi-only controls can run now, and why not. The active
+ *   profile is picked on the dashboard (plan R8f).
  * @property mockMode the Pi runs `--mock` (from the on-connect `session_state`).
  * @property connectionProblem why the phone can't reach the Pi, in words (plan R8f), or `null`.
  * @property power the Pi's power card, or `null` until a `power_status` arrived (plan R8f).
@@ -32,7 +34,7 @@ data class SettingsUiState(
     val linkState: PiLinkState,
     val linkDescription: String,
     val units: UnitSystem,
-    val profile: ProfileSettings,
+    val link: PiFeatureAvailability,
     val simulators: List<SimulatorRow>,
     val radar: RadarPanel,
     val debug: DebugSettings,
@@ -42,18 +44,6 @@ data class SettingsUiState(
     val connectionProblem: ConnectionProblem? = null,
     val power: PowerCard? = null,
     val trigger: TriggerCard = TriggerCard.Waiting,
-)
-
-/**
- * The Pi's active profile, read-only here (the server replaced the player name with profiles; the
- * picker is plan R8f).
- *
- * @property activeName the active profile's name, or `null` before the roster arrives.
- * @property availability whether the Pi's profile commands could run (the live link).
- */
-data class ProfileSettings(
-    val activeName: String?,
-    val availability: PiFeatureAvailability,
 )
 
 /** A simulator connector's severity bucket (`SimStatus.tsx`'s `severity`). */

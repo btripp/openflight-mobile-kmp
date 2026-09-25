@@ -77,10 +77,9 @@ fun SettingsScreen(
         ) {
             UnitsCard(uiState.units, onEvent)
             ConnectionCard(uiState)
-            ProfileCard(uiState.profile)
             LaunchMonitorCard(uiState.trigger)
             uiState.power?.let { PowerStatusCard(it) }
-            SimulatorsCard(uiState.simulators, uiState.profile.availability.disabledReason)
+            SimulatorsCard(uiState.simulators, uiState.link.disabledReason)
             RadarCard(uiState.radar, onEvent)
             // Hidden until the Pi reports its debug mode: never offer "Start" before that is known.
             if (uiState.debug.loaded) DebugCard(uiState.debug, onEvent)
@@ -184,13 +183,3 @@ private fun PiLinkState.tone(): StatusTone =
         PiLinkState.Idle, PiLinkState.WifiOnly -> StatusTone.Neutral
         is PiLinkState.Rejected -> StatusTone.Negative
     }
-
-/** The Pi's active profile (read-only until the profile picker, plan R8f). */
-@Composable
-private fun ProfileCard(profile: ProfileSettings) {
-    OfCard(modifier = Modifier.fillMaxWidth(), contentSpacing = OfSpacing.Md) {
-        SectionTitle("PROFILE")
-        InfoRow("Active profile", profile.activeName ?: "—", Modifier.testTag(SettingsTestTags.PROFILE))
-        profile.availability.disabledReason?.let { OfDisabledReason(it) }
-    }
-}

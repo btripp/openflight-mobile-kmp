@@ -50,26 +50,18 @@ class SettingsScreenTest {
     fun givenBluetooth_whenShown_thenEveryWifiOnlyControlIsDisabledWithTheReason() {
         show(previewSettingsState(link = PiLinkState.WifiOnly, transport = TransportType.BLUETOOTH))
 
-        composeRule.onNodeWithTag(SettingsTestTags.PROFILE).performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithTag(SettingsTestTags.RADAR_REFRESH).performScrollTo().assertIsNotEnabled()
         // Debug mode is unknown over Bluetooth, so its card isn't offered at all.
         composeRule.onAllNodes(hasTestTag(SettingsTestTags.DEBUG_TOGGLE)).assertCountEquals(0)
         composeRule.onNodeWithTag(SettingsTestTags.CLOUD_UPLOAD).performScrollTo().assertIsNotEnabled()
         composeRule.onNodeWithTag(SettingsTestTags.SHUTDOWN).performScrollTo().assertIsNotEnabled()
-        // Profile, launch monitor, simulators, radar, cloud and shutdown each explain why.
+        // Launch monitor, simulators, radar, cloud and shutdown each explain why.
         composeRule
             .onAllNodes(hasText(PiFeatureAvailability.REQUIRES_WIFI), useUnmergedTree = true)
             .assertCountEquals(WIFI_ONLY_SECTIONS)
         // Units still work on any transport.
         composeRule.onNodeWithText("Metric (km/h, m)").performScrollTo().performClick()
         assertEquals(listOf<SettingsEvent>(SettingsEvent.SetUnits(UnitSystem.METRIC)), events)
-    }
-
-    @Test
-    fun givenTheLink_whenShown_thenTheActiveProfileShows() {
-        show(previewSettingsState())
-
-        composeRule.onNodeWithText("Alex").performScrollTo().assertIsDisplayed()
     }
 
     @Test
@@ -208,7 +200,7 @@ class SettingsScreenTest {
     }
 
     private companion object {
-        /** Profile, launch monitor, simulators, radar, cloud upload and shutdown. */
-        const val WIFI_ONLY_SECTIONS = 6
+        /** Launch monitor, simulators, radar, cloud upload and shutdown. */
+        const val WIFI_ONLY_SECTIONS = 5
     }
 }
