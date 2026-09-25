@@ -51,6 +51,7 @@ import dev.openflight.companion.core.insights.convertSpeedFromMph
 import dev.openflight.companion.core.insights.distanceUnitLabel
 import dev.openflight.companion.core.insights.speedUnitLabel
 import dev.openflight.companion.core.model.ShotMetricFormatter
+import dev.openflight.companion.core.model.pi.PiFeatureAvailability
 
 /**
  * The session/stats screen (plans R5b/R6c), ported from the web UI's `StatsView.tsx` (club tabs and
@@ -105,10 +106,18 @@ fun SessionScreen(
                 item(key = "tabs") { ClubTabs(uiState) { onEvent(SessionEvent.SelectClub(it)) } }
                 item(key = "stats") { StatsCard(uiState) }
                 item(key = "actions") {
-                    ActionsRow(onExport = { onEvent(SessionEvent.ExportCsv) }, onClear = { confirmingClear = true })
+                    ActionsRow(
+                        editAvailability = uiState.editAvailability,
+                        onExport = { onEvent(SessionEvent.ExportCsv) },
+                        onClear = { confirmingClear = true },
+                    )
                 }
                 item(key = "shotsHeader") {
-                    OfText(text = "SHOTS · swipe left to delete", role = OfTextRole.Eyebrow, color = OfColorTokens.Gold)
+                    OfText(
+                        text = if (uiState.editAvailability.isAvailable) "SHOTS · swipe left to delete" else "SHOTS",
+                        role = OfTextRole.Eyebrow,
+                        color = OfColorTokens.Gold,
+                    )
                 }
                 items(uiState.shots, key = { it.id }) { shot ->
                     SessionShotRowItem(
@@ -116,6 +125,7 @@ fun SessionScreen(
                         units = uiState.units,
                         onDelete = { onEvent(SessionEvent.DeleteShot(shot.id)) },
                         modifier = Modifier.animateItem(),
+                        deletable = uiState.editAvailability.isAvailable,
                     )
                 }
             }
@@ -225,19 +235,27 @@ internal fun ClubTabs(
 
 @Composable
 private fun ActionsRow(
+    editAvailability: PiFeatureAvailability,
     onExport: () -> Unit,
     onClear: () -> Unit,
 ) {
-    Row(horizontalArrangement = Arrangement.spacedBy(OfSpacing.Sm)) {
-        OfOutlinedButton(
-            text = "Export CSV",
-            onClick = onExport,
-            modifier = Modifier.weight(1f).testTag(SessionTestTags.EXPORT),
-        )
-        OfOutlinedButton(
-            text = "Clear",
-            onClick = onClear,
-            modifier = Modifier.weight(1f).testTag(SessionTestTags.CLEAR),
-        )
+    Column(verticalArrangement = Arrangement.spacedBy(OfSpacing.Xs)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(OfSpacing.Sm)) {
+            OfOutlinedButton(
+                text = "Export CSV",
+                onClick = onExport,
+                modifier = Modifier.weight(1f).testTag(SessionTestTags.EXPORT),
+            )
+            OfOutlinedButton(
+                text = "Clear",
+                onClick = onClear,
+                enabled = editAvailability.isAvailable,
+                modifier = Modifier.weight(1f).testTag(SessionTestTags.CLEAR),
+            )
+        }
+        // Plan R8e: over Bluetooth, delete and clear are disabled and say why, not hidden.
+        editAvailability.disabledReason?.let { reason ->
+            OfDisabledReason(reason = reason, modifier = Modifier.testTag(SessionTestTags.EDIT_DISABLED_REASON))
+        }
     }
 }

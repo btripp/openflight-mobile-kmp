@@ -61,9 +61,26 @@ final class SessionUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["No shots recorded yet"].waitForExistence(timeout: 5))
     }
 
-    static func openSession() -> XCUIApplication {
+    /// Plan R8e: over Bluetooth (a read-and-select link) delete and clear are disabled with a reason.
+    func testOverBluetoothClearIsDisabledWithAWifiOnlyReason() {
+        let app = Self.openSession(transport: "bluetooth")
+
+        let clear = app.buttons["session.clear"]
+        XCTAssertTrue(clear.waitForExistence(timeout: 5))
+        XCTAssertFalse(clear.isEnabled)
+        XCTAssertTrue(app.descendants(matching: .any)["session.edit.disabledReason"].exists)
+
+        let row = app.descendants(matching: .any)[Self.previewShotRow]
+        row.swipeLeft()
+        XCTAssertFalse(app.buttons["Delete"].waitForExistence(timeout: 2))
+        XCTAssertTrue(row.exists)
+    }
+
+    /// Delete and clear need Wi-Fi (plan R8e), so these tests pin the transport rather than
+    /// inheriting whatever an earlier run saved.
+    static func openSession(transport: String = "wifi") -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments = ["--ui-testing", "--preview-shot"]
+        app.launchArguments = ["--ui-testing", "--preview-shot", "--transport", transport]
         app.launch()
         let tab = app.tabBars.buttons["Session"]
         XCTAssertTrue(tab.waitForExistence(timeout: 10))

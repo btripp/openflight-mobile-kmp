@@ -32,7 +32,7 @@ data class ControlResponseEnvelope(
     val error: String? = null,
 )
 
-/** `{"schema_version":1,"type":"club_changed","club":"7-iron"}` (plan §0.1). */
+/** `{"schema_version":1,"type":"club_changed","club":"7-iron"}` (plan §0.1); `2` on the v2 pair and SSE `?schema=2`. */
 @Serializable
 data class ClubChangedEvent(
     @SerialName("schema_version") val schemaVersion: Int = 1,
@@ -47,6 +47,11 @@ private data class ClubPayload(
 
 @Serializable
 private class EmptyPayload
+
+@Serializable
+private data class HelloPayload(
+    @SerialName("client_schema_max") val clientSchemaMax: Int = SchemaV2Codec.SCHEMA_VERSION,
+)
 
 /** Errors from decoding a control-channel response or event. */
 sealed class ControlDecodeError(
@@ -71,11 +76,19 @@ sealed class ControlDecodeError(
  * `ios/OpenFlight/PhoneControl.swift`. Both BLE (framed) and Wi-Fi transports share this so
  * their wire representations of the control channel cannot drift apart.
  */
+@Suppress("TooManyFunctions") // One encoder per command, one decoder per result or event.
 object ControlCodec {
     const val TYPE_SET_CLUB = "set_club"
     const val TYPE_GET_CLUB = "get_club"
     const val TYPE_CALIBRATION = "iwr6843_orientation_calibration"
     const val TYPE_CLUB_CHANGED = "club_changed"
+    const val TYPE_HELLO = "hello"
+
+    /** Version one only: the v1 control characteristic and the default SSE stream. */
+    val V1_SCHEMAS: IntRange = 1..1
+
+    /** The v2 control characteristic and SSE `?schema=2` (plan R8e). */
+    val V1_AND_V2_SCHEMAS: IntRange = 1..2
 
     fun encodeSetClub(
         club: GolfClub,
@@ -105,30 +118,56 @@ object ControlCodec {
             .encodeToByteArray()
     }
 
+    /**
+     * `hello {client_schema_max: 2}` in a **version-one** envelope, for the v1 control
+     * characteristic (backend "Negotiation"). The v2 characteristic gets [SchemaV2Codec.encodeHello].
+     */
+    fun encodeHello(requestId: String): ByteArray {
+        val envelope = ControlEnvelope(type = TYPE_HELLO, requestId = requestId, payload = HelloPayload())
+        return OpenFlightJson
+            .encodeToString(ControlEnvelope.serializer(HelloPayload.serializer()), envelope)
+            .encodeToByteArray()
+    }
+
     fun decodeResponse(payload: ByteArray): ControlResponseEnvelope =
         OpenFlightJson.decodeFromString(ControlResponseEnvelope.serializer(), payload.decodeToString())
 
-    fun decodeClubResult(response: ControlResponseEnvelope): ClubSelection =
-        OpenFlightJson.decodeFromJsonElement(ClubSelection.serializer(), resultOf(response))
+    fun decodeClubResult(
+        response: ControlResponseEnvelope,
+        schemas: IntRange = V1_SCHEMAS,
+    ): ClubSelection = OpenFlightJson.decodeFromJsonElement(ClubSelection.serializer(), resultOf(response, schemas))
 
-    fun decodeCalibrationResult(response: ControlResponseEnvelope): CalibrationResult =
-        OpenFlightJson.decodeFromJsonElement(CalibrationResult.serializer(), resultOf(response))
+    fun decodeCalibrationResult(
+        response: ControlResponseEnvelope,
+        schemas: IntRange = V1_SCHEMAS,
+    ): CalibrationResult =
+        OpenFlightJson.decodeFromJsonElement(CalibrationResult.serializer(), resultOf(response, schemas))
 
-    fun decodeClubChangedEvent(payload: ByteArray): GolfClub {
+    /** Decodes `club_changed`; [schemas] is [V1_SCHEMAS] unless the link negotiated v2. */
+    fun decodeClubChangedEvent(
+        payload: ByteArray,
+        schemas: IntRange = V1_SCHEMAS,
+    ): GolfClub {
         val event = OpenFlightJson.decodeFromString(ClubChangedEvent.serializer(), payload.decodeToString())
-        requireSupportedSchema(event.schemaVersion)
+        requireSupportedSchema(event.schemaVersion, schemas)
         if (event.type != TYPE_CLUB_CHANGED) throw ControlDecodeError.NotClubChanged
         return event.club
     }
 
-    private fun resultOf(response: ControlResponseEnvelope): JsonElement {
-        requireSupportedSchema(response.schemaVersion)
+    private fun resultOf(
+        response: ControlResponseEnvelope,
+        schemas: IntRange,
+    ): JsonElement {
+        requireSupportedSchema(response.schemaVersion, schemas)
         requireOk(response)
         return response.result ?: throw ControlDecodeError.MissingResult
     }
 
-    private fun requireSupportedSchema(schemaVersion: Int) {
-        if (schemaVersion != 1) throw ControlDecodeError.UnsupportedSchema(schemaVersion)
+    private fun requireSupportedSchema(
+        schemaVersion: Int,
+        schemas: IntRange,
+    ) {
+        if (schemaVersion !in schemas) throw ControlDecodeError.UnsupportedSchema(schemaVersion)
     }
 
     private fun requireOk(response: ControlResponseEnvelope) {

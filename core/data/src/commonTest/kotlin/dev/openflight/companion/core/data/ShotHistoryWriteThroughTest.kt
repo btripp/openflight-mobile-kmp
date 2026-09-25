@@ -12,6 +12,7 @@ import dev.openflight.companion.core.database.buildShotHistoryDatabase
 import dev.openflight.companion.core.database.inMemoryShotHistoryDatabaseBuilder
 import dev.openflight.companion.core.model.ConnectionState
 import dev.openflight.companion.core.model.ShotEvent
+import dev.openflight.companion.core.protocol.SchemaV2Event
 import dev.openflight.companion.core.socketio.SocketConnectionState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.first
@@ -260,6 +261,38 @@ class ShotHistoryWriteThroughTest {
 
             assertThat(h.repository.history.value).isEmpty()
             assertThat(h.storedTimestamps()).containsExactlyInAnyOrder("2026-09-25T10:01:00", "2026-09-25T10:02:00")
+        }
+
+    @Test
+    fun aSchemaV2ShotDeletedIsMirrored() =
+        runWriteThroughTest(transport = TransportType.BLUETOOTH) { h ->
+            h.ble.state.value = ConnectionState.Connected
+            h.ble.shots.emit(timedShot(1, "2026-09-25T10:00:00"))
+            h.ble.shots.emit(timedShot(2, "2026-09-25T10:01:00"))
+
+            h.ble.schemaEvents.emit(SchemaV2Event.ShotDeleted("2026-09-25T10:00:00"))
+
+            assertThat(
+                h.repository.history.value
+                    .map { it.timestamp },
+            ).containsExactly("2026-09-25T10:01:00")
+            assertThat(h.storedTimestamps()).containsExactly("2026-09-25T10:01:00")
+        }
+
+    @Test
+    fun aSchemaV2SessionClearedDropsThatProfilesStoredShotsOnly() =
+        runWriteThroughTest(transport = TransportType.BLUETOOTH) { h ->
+            h.ble.state.value = ConnectionState.Connected
+            h.ble.shots.emit(timedShot(1, "2026-09-25T10:00:00").copy(profileId = "sam"))
+            h.ble.shots.emit(timedShot(2, "2026-09-25T10:01:00").copy(profileId = "alex"))
+
+            h.ble.schemaEvents.emit(SchemaV2Event.SessionCleared("sam"))
+
+            assertThat(
+                h.repository.history.value
+                    .map { it.timestamp },
+            ).containsExactly("2026-09-25T10:01:00")
+            assertThat(h.storedTimestamps()).containsExactly("2026-09-25T10:01:00")
         }
 
     private companion object {

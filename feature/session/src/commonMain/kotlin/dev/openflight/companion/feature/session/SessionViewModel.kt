@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import dev.openflight.companion.core.data.PiSessionRepository
 import dev.openflight.companion.core.data.SettingsRepository
 import dev.openflight.companion.core.data.ShotRepository
+import dev.openflight.companion.core.data.TransportType
 import dev.openflight.companion.core.insights.ExportShot
 import dev.openflight.companion.core.insights.buildExportCsv
 import dev.openflight.companion.core.insights.buildShotsCsvFilename
@@ -57,7 +58,7 @@ class SessionViewModel(
     private val piView =
         combine(piSession.linkState, piSession.sessionShots, piSession.profiles, piSession.shotDetails, ::PiView)
 
-    private val piFlags = combine(piSession.mockMode, piSession.triggerStatus, ::PiFlags)
+    private val piFlags = combine(piSession.mockMode, piSession.triggerStatus, settings.transport, ::PiFlags)
 
     val uiState: StateFlow<SessionUiState> =
         combine(shots.history, settings.units, selectedClub, piView, piFlags) { history, units, selected, pi, flags ->
@@ -77,6 +78,8 @@ class SessionViewModel(
                         SessionUiState.SIMULATE_SHOT
                     },
                 simulateAvailability = PiFeatureAvailability.of(pi.link),
+                editAvailability =
+                    PiFeatureAvailability.forDeleteAndClear(overBluetooth = flags.transport == TransportType.BLUETOOTH),
             )
         }.stateIn(
             scope = viewModelScope,
@@ -111,10 +114,20 @@ class SessionViewModel(
     fun onEvent(event: SessionEvent) {
         when (event) {
             is SessionEvent.SelectClub -> selectedClub.value = event.club
-            is SessionEvent.DeleteShot -> deleteShot(event.id)
-            SessionEvent.ClearHistory -> shots.clearHistory()
+            is SessionEvent.DeleteShot -> ifEditable { deleteShot(event.id) }
+            SessionEvent.ClearHistory -> ifEditable { shots.clearHistory() }
             SessionEvent.ExportCsv -> exportCsv()
             SessionEvent.SimulateShot -> simulateShot()
+        }
+    }
+
+    /** Plan R8e: over Bluetooth delete and clear are off; a stray request explains why instead. */
+    private inline fun ifEditable(action: () -> Unit) {
+        val reason = uiState.value.editAvailability.disabledReason
+        if (reason == null) {
+            action()
+        } else {
+            sessionEffects.trySend(SessionEffect.Message(reason))
         }
     }
 
@@ -220,6 +233,7 @@ class SessionViewModel(
     private data class PiFlags(
         val mockMode: Boolean?,
         val triggerStatus: TriggerStatus?,
+        val transport: TransportType,
     )
 
     companion object {

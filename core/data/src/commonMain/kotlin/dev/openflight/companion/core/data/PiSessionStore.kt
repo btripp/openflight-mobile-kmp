@@ -67,6 +67,8 @@ internal class PiSessionStore(
             is PiEvent.DeleteShotFailed, is PiEvent.Processing,
             -> applySessionEvent(event)
 
+            is PiEvent.BluetoothShot, is PiEvent.ShotDeleted -> applySchemaV2Event(event)
+
             is PiEvent.Profiles, is PiEvent.ClubChanged, is PiEvent.Power, is PiEvent.TrainingImplementChanged,
             -> applyContextEvent(event)
 
@@ -164,6 +166,25 @@ internal class PiSessionStore(
             is PiEvent.DeleteShotFailed -> {
                 // Broadcast to every client: with nothing of ours pending it's another client's.
                 deletion.update { it.fail(event.error ?: DeletionState.SERVER_REFUSED) }
+            }
+
+            else -> {
+                Unit
+            }
+        }
+    }
+
+    /** Plan R8e: what BLE v2 adds on top of the Socket.IO events. */
+    private fun applySchemaV2Event(event: PiEvent) {
+        when (event) {
+            is PiEvent.BluetoothShot -> {
+                // Like a Socket.IO `shot`: it ends any processing indicator and indexes its detail.
+                shotProcessing.value = null
+                remember(listOf(event.detail))
+            }
+
+            is PiEvent.ShotDeleted -> {
+                sessionShots.update { shots -> shots.filterNot { it.timestamp == event.timestamp } }
             }
 
             else -> {

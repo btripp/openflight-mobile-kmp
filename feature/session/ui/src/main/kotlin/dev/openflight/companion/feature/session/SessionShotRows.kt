@@ -32,48 +32,63 @@ import dev.openflight.companion.core.model.pi.PiFeatureAvailability
 
 private const val CLOCK_LENGTH = 8
 
-/** One `ShotList.tsx` row, deleted by an end-to-start swipe (or TalkBack's "Delete" action). */
+/**
+ * One `ShotList.tsx` row, deleted by an end-to-start swipe (or TalkBack's "Delete" action). Without
+ * [deletable] (over Bluetooth, plan R8e) it is a plain row with no delete gesture.
+ */
 @Composable
 internal fun SessionShotRowItem(
     shot: SessionShotRow,
     units: UnitSystem,
     onDelete: () -> Unit,
     modifier: Modifier = Modifier,
+    deletable: Boolean = true,
 ) {
-    OfSwipeToDelete(onDelete = onDelete, modifier = modifier.testTag(SessionTestTags.shot(shot.id))) {
-        Row(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .background(OfColorTokens.BgCard, RoundedCornerShape(12.dp))
-                    .padding(horizontal = OfSpacing.Lg, vertical = OfSpacing.Md),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(OfSpacing.Md),
-        ) {
-            OfText(text = "#${shot.shotNumber}", role = OfTextRole.Label, color = OfColorTokens.Gold)
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                OfText(text = shot.implementLabel ?: clubLabel(shot.club), role = OfTextRole.TitleSmall, maxLines = 1)
-                OfText(
-                    text = listOfNotNull(clockTime(shot.timestamp), shot.profileName).joinToString(" · "),
-                    role = OfTextRole.BodySmall,
-                    color = OfColorTokens.CreamDim,
-                    maxLines = 1,
-                )
-            }
-            if (shot.isSwingSpeed) {
-                RowMetric(shot.swingSpeedMph?.let { speedValue(it, units) } ?: ShotMetricFormatter.MISSING, "SWING")
-            } else {
-                RowMetric(
-                    shot.ballSpeedMph?.let {
-                        speedValue(it, units)
-                    } ?: ShotMetricFormatter.MISSING,
-                    speedUnitLabel(units).uppercase(),
-                )
-                RowMetric(
-                    ShotMetricFormatter.number(shot.carryYards?.let { convertDistanceFromYards(it, units) }, 0),
-                    distanceUnitLabel(units).uppercase(),
-                )
-            }
+    val tagged = modifier.testTag(SessionTestTags.shot(shot.id))
+    if (deletable) {
+        OfSwipeToDelete(onDelete = onDelete, modifier = tagged) { ShotRowContent(shot, units) }
+    } else {
+        Row(modifier = tagged) { ShotRowContent(shot, units) }
+    }
+}
+
+@Composable
+private fun ShotRowContent(
+    shot: SessionShotRow,
+    units: UnitSystem,
+) {
+    Row(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .background(OfColorTokens.BgCard, RoundedCornerShape(12.dp))
+                .padding(horizontal = OfSpacing.Lg, vertical = OfSpacing.Md),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(OfSpacing.Md),
+    ) {
+        OfText(text = "#${shot.shotNumber}", role = OfTextRole.Label, color = OfColorTokens.Gold)
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            OfText(text = shot.implementLabel ?: clubLabel(shot.club), role = OfTextRole.TitleSmall, maxLines = 1)
+            OfText(
+                text = listOfNotNull(clockTime(shot.timestamp), shot.profileName).joinToString(" · "),
+                role = OfTextRole.BodySmall,
+                color = OfColorTokens.CreamDim,
+                maxLines = 1,
+            )
+        }
+        if (shot.isSwingSpeed) {
+            RowMetric(shot.swingSpeedMph?.let { speedValue(it, units) } ?: ShotMetricFormatter.MISSING, "SWING")
+        } else {
+            RowMetric(
+                shot.ballSpeedMph?.let {
+                    speedValue(it, units)
+                } ?: ShotMetricFormatter.MISSING,
+                speedUnitLabel(units).uppercase(),
+            )
+            RowMetric(
+                ShotMetricFormatter.number(shot.carryYards?.let { convertDistanceFromYards(it, units) }, 0),
+                distanceUnitLabel(units).uppercase(),
+            )
         }
     }
 }

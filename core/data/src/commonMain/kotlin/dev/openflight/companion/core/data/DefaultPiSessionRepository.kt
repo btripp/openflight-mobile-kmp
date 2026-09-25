@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 package dev.openflight.companion.core.data
 
+import dev.openflight.companion.core.ble.BleControlException
 import dev.openflight.companion.core.data.WifiOnlyFeatureException.Reason
 import dev.openflight.companion.core.model.pi.CameraCaptureSettings
 import dev.openflight.companion.core.model.pi.CameraPreview
@@ -25,6 +26,8 @@ import dev.openflight.companion.core.model.pi.SwingSpeedReading
 import dev.openflight.companion.core.model.pi.TrainingImplement
 import dev.openflight.companion.core.model.pi.TriggerStatus
 import dev.openflight.companion.core.network.EndpointPolicy
+import dev.openflight.companion.core.protocol.SchemaV2Commands
+import dev.openflight.companion.core.protocol.ShotTransport
 import dev.openflight.companion.core.socketio.SocketConnectionState
 import dev.openflight.companion.core.socketio.SocketEvent
 import dev.openflight.companion.core.socketio.SocketNotConnectedException
@@ -62,6 +65,9 @@ import kotlinx.serialization.json.put
  *
  * Event handling lives in [PiSessionStore] and mirrors the Expo app's `socket.ts` and stores
  * (plan §9.2).
+ *
+ * Plan R8e: on Bluetooth it mirrors [bluetooth]'s schema v2 events (and v2 shots, for [detailFor])
+ * into the same store, and sends `set_active_profile` over it.
  */
 @Suppress("TooManyFunctions") // The PiSessionRepository surface plus the connection loop.
 internal class DefaultPiSessionRepository(
@@ -70,11 +76,14 @@ internal class DefaultPiSessionRepository(
     private val cameraSource: PiCameraSource,
     private val scope: CoroutineScope,
     private val log: (String) -> Unit = {},
+    private val bluetooth: ShotTransport? = null,
 ) : PiSessionRepository {
     private val mutableLinkState = MutableStateFlow<PiLinkState>(PiLinkState.Idle)
+    private val mutableBluetoothSchemaV2 = MutableStateFlow(false)
     private val store = PiSessionStore(resync = ::resync)
 
     override val linkState: StateFlow<PiLinkState> = mutableLinkState.asStateFlow()
+    override val bluetoothSchemaV2: StateFlow<Boolean> = mutableBluetoothSchemaV2.asStateFlow()
     override val sessionShots: StateFlow<List<ShotDetail>> = store.sessionShots.asStateFlow()
     override val shotDetails: StateFlow<Map<String, ShotDetail>> = store.shotDetails.asStateFlow()
     override val stats: StateFlow<SessionStats?> = store.stats.asStateFlow()
@@ -161,8 +170,32 @@ internal class DefaultPiSessionRepository(
         store.clear.value = ClearState.Idle
     }
 
-    override suspend fun setActiveProfile(profileId: String) =
-        command("set_active_profile", buildJsonObject { put("profile_id", profileId) })
+    override suspend fun setActiveProfile(profileId: String) {
+        if (currentKey?.type == TransportType.BLUETOOTH) {
+            setActiveProfileOverBluetooth(profileId)
+        } else {
+            command("set_active_profile", buildJsonObject { put("profile_id", profileId) })
+        }
+    }
+
+    /**
+     * BLE allows one command in flight; the club/profile/power sync that runs on connect may hold
+     * it briefly, so a `busy` answer is retried a few times before it reaches the caller.
+     */
+    private suspend fun setActiveProfileOverBluetooth(profileId: String) {
+        val v2 = (bluetooth as? SchemaV2Commands)?.takeIf { it.schemaV2Active.value }
+        if (v2 == null) throw WifiOnlyFeatureException(Reason.BLUETOOTH)
+        var attempt = 0
+        while (true) {
+            try {
+                v2.setActiveProfile(profileId)
+                return
+            } catch (busy: BleControlException.Busy) {
+                if (++attempt >= BUSY_RETRIES) throw busy
+                delay(BUSY_RETRY_DELAY_MILLIS)
+            }
+        }
+    }
 
     override suspend fun addProfile(name: String) {
         val valid = validName(name)
@@ -281,7 +314,7 @@ internal class DefaultPiSessionRepository(
         if (previous != null && previous != key) store.reset()
         if (key.type == TransportType.BLUETOOTH) {
             mutableLinkState.value = PiLinkState.WifiOnly
-            awaitCancellation()
+            followBluetooth()
         }
         coroutineScope {
             val socket = socketFactory.create(key.host.orEmpty(), this)
@@ -303,6 +336,33 @@ internal class DefaultPiSessionRepository(
                 store.linkLost()
                 mutableLinkState.value = PiLinkState.Idle
             }
+        }
+    }
+
+    /** Plan R8e: mirrors a schema v2 BLE link into the store until cancelled. */
+    private suspend fun followBluetooth(): Nothing {
+        val link = bluetooth ?: awaitCancellation()
+        try {
+            coroutineScope {
+                launch(start = CoroutineStart.UNDISPATCHED) {
+                    link.schemaEvents.collect { store.apply(it.toPiEvent()) }
+                }
+                launch(start = CoroutineStart.UNDISPATCHED) {
+                    link.shots.collect { shot -> shot.toShotDetail()?.let { store.apply(PiEvent.BluetoothShot(it)) } }
+                }
+                launch(start = CoroutineStart.UNDISPATCHED) {
+                    // The Pi's club, as the Socket.IO path reports it (a wire value).
+                    link.activeClub.collect { club -> club?.let { store.club.value = it.wireValue } }
+                }
+                (link as? SchemaV2Commands)?.let { v2 ->
+                    launch(start = CoroutineStart.UNDISPATCHED) {
+                        v2.schemaV2Active.collect { mutableBluetoothSchemaV2.value = it }
+                    }
+                }
+                awaitCancellation()
+            }
+        } finally {
+            mutableBluetoothSchemaV2.value = false
         }
     }
 
@@ -372,6 +432,8 @@ internal class DefaultPiSessionRepository(
 
     private companion object {
         const val UNUSABLE_HOST = "This address can't be used."
+        const val BUSY_RETRIES = 5
+        const val BUSY_RETRY_DELAY_MILLIS = 300L
 
         /**
          * Requested on every (re)connect. The server pushes `profiles`, `session_state` and

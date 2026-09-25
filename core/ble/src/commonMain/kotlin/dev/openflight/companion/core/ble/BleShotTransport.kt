@@ -2,26 +2,34 @@
 package dev.openflight.companion.core.ble
 
 import dev.openflight.companion.core.ble.OpenFlightBleProfile.CONTROL_CHARACTERISTIC_UUID
+import dev.openflight.companion.core.ble.OpenFlightBleProfile.CONTROL_V2_CHARACTERISTIC_UUID
 import dev.openflight.companion.core.ble.OpenFlightBleProfile.SERVICE_UUID
 import dev.openflight.companion.core.ble.OpenFlightBleProfile.SHOT_CHARACTERISTIC_UUID
+import dev.openflight.companion.core.ble.OpenFlightBleProfile.SHOT_V2_CHARACTERISTIC_UUID
 import dev.openflight.companion.core.model.CalibrationResult
 import dev.openflight.companion.core.model.ClubSelection
 import dev.openflight.companion.core.model.ConnectionState
 import dev.openflight.companion.core.model.GolfClub
 import dev.openflight.companion.core.model.PhoneOrientationMeasurement
 import dev.openflight.companion.core.model.ShotEvent
+import dev.openflight.companion.core.model.pi.PowerStatus
 import dev.openflight.companion.core.protocol.BleFrameError
 import dev.openflight.companion.core.protocol.BleFrameReassembler
 import dev.openflight.companion.core.protocol.ControlCodec
 import dev.openflight.companion.core.protocol.ControlDecodeError
 import dev.openflight.companion.core.protocol.ControlResponseEnvelope
+import dev.openflight.companion.core.protocol.SchemaV2Codec
+import dev.openflight.companion.core.protocol.SchemaV2Commands
+import dev.openflight.companion.core.protocol.SchemaV2Event
 import dev.openflight.companion.core.protocol.ShotDecodeError
 import dev.openflight.companion.core.protocol.ShotEventDecoder
 import dev.openflight.companion.core.protocol.ShotTransport
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.coroutineScope
@@ -37,6 +45,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import kotlin.coroutines.ContinuationInterceptor
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.EmptyCoroutineContext
@@ -77,6 +86,15 @@ private fun lowercaseUuid(): String = Uuid.random().toString().lowercase()
  *   so no larger MTU is requested.
  * - The transport never requests runtime permissions; it reports
  *   [ConnectionState.Unavailable] with [PERMISSION_REQUIRED] and leaves the prompt to the UI.
+ *
+ * Schema v2 (plan R8e, backend `docs/ios-ble.md` "Negotiation"): when discovery finds the v2
+ * shot/control pair, the transport subscribes to the v2 control characteristic and sends `hello`
+ * (with the usual 10 s control timeout) before anything else. On success it subscribes to the v2
+ * shot characteristic only (→ [ConnectionState.Connected]); the v1 pair is never subscribed, so
+ * the Pi sends this phone no v1 traffic. On `ok:false`, a timeout, a failed subscription or a Pi
+ * without the v2 pair, it unsubscribes from v2 control and continues exactly as version one.
+ * Over v2, control commands go to the v2 control characteristic in v2 envelopes, v2 events arrive
+ * on [schemaEvents], and [SchemaV2Commands] adds the read-and-select commands.
  */
 @Suppress("TooManyFunctions") // One state machine, split by lifecycle phase for readability.
 class BleShotTransport internal constructor(
@@ -84,8 +102,10 @@ class BleShotTransport internal constructor(
     private val permissions: BlePermissionChecker,
     private val scope: CoroutineScope,
     config: BleTransportConfig = BleTransportConfig(),
-) : ShotTransport {
+) : ShotTransport,
+    SchemaV2Commands {
     private val reconnectDelay = config.reconnectDelay
+    private val controlTimeout = config.controlTimeout
     private val confined: CoroutineContext =
         scope.coroutineContext[ContinuationInterceptor] ?: EmptyCoroutineContext
 
@@ -100,10 +120,23 @@ class BleShotTransport internal constructor(
     override val activeClub: StateFlow<GolfClub?> = mutableActiveClub.asStateFlow()
     override val supportsControls: StateFlow<Boolean> = mutableSupportsControls.asStateFlow()
 
+    private val mutableSchemaV2Active = MutableStateFlow(false)
+    private val mutableSchemaEvents =
+        MutableSharedFlow<SchemaV2Event>(
+            extraBufferCapacity = EVENT_BUFFER,
+            onBufferOverflow = BufferOverflow.DROP_OLDEST,
+        )
+    override val schemaV2Active: StateFlow<Boolean> = mutableSchemaV2Active.asStateFlow()
+    override val schemaEvents: Flow<SchemaV2Event> = mutableSchemaEvents.asSharedFlow()
+
     private val shotReassembler = BleFrameReassembler()
     private val decoder = ShotEventDecoder()
     private val control =
         ControlChannel(config.requestIds, config.controlTimeout, config.initialControlSequence)
+
+    /** The v2 control characteristic's own channel: its own sequence, reassembler and pending request. */
+    private val controlV2 =
+        ControlChannel(config.requestIds, config.controlTimeout, config.initialControlSequence, schemaV2 = true)
 
     private var adapterWatcher: Job? = null
     private var sessionJob: Job? = null
@@ -143,6 +176,24 @@ class BleShotTransport internal constructor(
     override suspend fun submitCalibration(measurement: PhoneOrientationMeasurement): CalibrationResult {
         val response = sendControl { requestId -> ControlCodec.encodeCalibration(measurement, requestId) }
         return decodeResult { ControlCodec.decodeCalibrationResult(response) }
+    }
+
+    override suspend fun requestProfiles() {
+        sendSchemaV2 { requestId -> SchemaV2Codec.encodeGetProfiles(requestId) }
+    }
+
+    override suspend fun requestPowerStatus(): PowerStatus {
+        val response = sendSchemaV2 { requestId -> SchemaV2Codec.encodeGetPowerStatus(requestId) }
+        val status =
+            decodeResult {
+                SchemaV2Codec.decodePowerStatus(response.result ?: throw ControlDecodeError.MissingResult)
+            }
+        mutableSchemaEvents.tryEmit(SchemaV2Event.Power(status))
+        return status
+    }
+
+    override suspend fun setActiveProfile(profileId: String) {
+        sendSchemaV2 { requestId -> SchemaV2Codec.encodeSetActiveProfile(profileId, requestId) }
     }
 
     // region Lifecycle
@@ -217,14 +268,17 @@ class BleShotTransport internal constructor(
 
     private fun clearConnection() {
         control.fail(BleControlException.Disconnected())
+        controlV2.fail(BleControlException.Disconnected())
         link = null
         controlCharacteristicPresent = false
         mutableSupportsControls.value = false
+        mutableSchemaV2Active.value = false
         mutableActiveClub.value = null
         shotReassembler.reset()
         // The control reassembler is reset by fail() when a request was pending; reset it
         // unconditionally too so a half-received event can't leak into the next connection.
         control.resetFrames()
+        controlV2.resetFrames()
         // The shot decoder is deliberately NOT reset (plan §0.3): its last event id suppresses
         // the replay the Pi sends when the next connection subscribes.
     }
@@ -297,18 +351,99 @@ class BleShotTransport internal constructor(
             return
         }
         link = peripheral
+        // Plan R8e: discovering the v2 pair is itself the capability signal (backend "Negotiation").
+        if (SHOT_V2_CHARACTERISTIC_UUID in characteristics && CONTROL_V2_CHARACTERISTIC_UUID in characteristics) {
+            connectionScope.launch { negotiateSchemaV2(peripheral, connectionScope, characteristics) }
+        } else {
+            observeVersionOne(peripheral, connectionScope, characteristics)
+        }
+    }
+
+    /** The version-one subscriptions, unchanged from the reference. */
+    private fun observeVersionOne(
+        peripheral: BlePeripheralLink,
+        connectionScope: CoroutineScope,
+        characteristics: Set<String>,
+    ) {
         // Checked before observing: Kable's observe() on an absent characteristic fails the flow
         // with NoSuchElementException, and an older Pi has no control characteristic at all.
         controlCharacteristicPresent = CONTROL_CHARACTERISTIC_UUID in characteristics
-        connectionScope.launch { observeShots(peripheral) }
+        connectionScope.launch { observeShots(peripheral, SHOT_CHARACTERISTIC_UUID) }
         if (controlCharacteristicPresent) connectionScope.launch { observeControl(peripheral) }
     }
 
-    private suspend fun observeShots(peripheral: BlePeripheralLink) {
+    /**
+     * Subscribes to the v2 control characteristic and sends `hello`. Schema 2 → subscribe to the v2
+     * shot characteristic only; anything else → drop the v2 subscription and fall back to v1.
+     */
+    private suspend fun negotiateSchemaV2(
+        peripheral: BlePeripheralLink,
+        connectionScope: CoroutineScope,
+        characteristics: Set<String>,
+    ) {
+        val subscribed = CompletableDeferred<Unit>()
+        val controlJob = connectionScope.launch { observeControlV2(peripheral, subscribed) }
+        if (helloNegotiatesV2(peripheral, subscribed)) {
+            controlCharacteristicPresent = true
+            mutableSchemaV2Active.value = true
+            mutableSupportsControls.value = true
+            connectionScope.launch { observeShots(peripheral, SHOT_V2_CHARACTERISTIC_UUID) }
+        } else {
+            // Unsubscribing tells the Pi to stop v2 traffic to this phone (per-characteristic gating).
+            controlJob.cancel()
+            controlV2.resetFrames()
+            observeVersionOne(peripheral, connectionScope, characteristics)
+        }
+    }
+
+    /** `true` only when the Pi answered `hello` with schema 2 in time. */
+    @Suppress("TooGenericExceptionCaught") // Any failure means "treat this Pi as version one".
+    private suspend fun helloNegotiatesV2(
+        peripheral: BlePeripheralLink,
+        subscribed: CompletableDeferred<Unit>,
+    ): Boolean =
+        try {
+            withTimeout(controlTimeout) { subscribed.await() }
+            val response =
+                controlV2.send({ requestId -> SchemaV2Codec.encodeHello(requestId) }) { frame ->
+                    peripheral.writeWithResponse(SERVICE_UUID, CONTROL_V2_CHARACTERISTIC_UUID, frame)
+                }
+            SchemaV2Codec.decodeHelloResult(response).schemaVersion >= SchemaV2Codec.SCHEMA_VERSION
+        } catch (_: TimeoutCancellationException) {
+            // The subscription never completed (ControlChannel's own timeout is BleControlException).
+            false
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (_: Exception) {
+            // ok:false (an older Pi: "Unsupported phone command: hello"), a hello timeout, a failed
+            // write or subscription, or an unreadable result.
+            false
+        }
+
+    private suspend fun observeShots(
+        peripheral: BlePeripheralLink,
+        characteristicUuid: String,
+    ) {
         peripheral
-            .observe(SERVICE_UUID, SHOT_CHARACTERISTIC_UUID) { mutableState.value = ConnectionState.Connected }
+            .observe(SERVICE_UUID, characteristicUuid) { mutableState.value = ConnectionState.Connected }
             .catch { error -> mutableState.value = ConnectionState.Error(error.message ?: SUBSCRIBE_FAILED) }
             .collect { frame -> receiveShotFrame(frame) }
+    }
+
+    private suspend fun observeControlV2(
+        peripheral: BlePeripheralLink,
+        subscribed: CompletableDeferred<Unit>,
+    ) {
+        peripheral
+            .observe(SERVICE_UUID, CONTROL_V2_CHARACTERISTIC_UUID) { subscribed.complete(Unit) }
+            .catch { error ->
+                subscribed.completeExceptionally(error)
+                if (mutableSchemaV2Active.value) {
+                    controlCharacteristicPresent = false
+                    mutableSupportsControls.value = false
+                }
+                controlV2.fail(BleControlException.Failed(error))
+            }.collect { frame -> receiveV2ControlFrame(frame) }
     }
 
     private suspend fun observeControl(peripheral: BlePeripheralLink) {
@@ -352,26 +487,62 @@ class BleShotTransport internal constructor(
 
     /** The reference's `receiveControl(_:)`. */
     internal fun receiveControlFrame(frame: ByteArray) {
-        when (val inbound = control.receive(frame)) {
+        route(control.receive(frame))
+    }
+
+    /** The v2 control characteristic: responses, `club_changed` and the other v2 events. */
+    internal fun receiveV2ControlFrame(frame: ByteArray) {
+        route(controlV2.receive(frame))
+    }
+
+    private fun route(inbound: ControlInbound) {
+        when (inbound) {
             is ControlInbound.ClubChanged -> mutableActiveClub.value = inbound.club
             is ControlInbound.ClubChangedInvalid -> mutableState.value = ConnectionState.Error(inbound.message)
+            is ControlInbound.Event -> mutableSchemaEvents.tryEmit(inbound.event)
             ControlInbound.Consumed -> Unit
         }
     }
 
     // endregion
 
+    /**
+     * Sends a version-one command ([encode] builds its v1 envelope). Over schema v2 it goes to the
+     * v2 control characteristic, re-enveloped as v2.
+     */
     private suspend fun sendControl(encode: (requestId: String) -> ByteArray): ControlResponseEnvelope =
         withContext(confined) {
-            val peripheral = link
-            if (mutableState.value != ConnectionState.Connected || peripheral == null) {
-                throw BleControlException.Unavailable()
-            }
-            if (!controlCharacteristicPresent) throw BleControlException.Unsupported()
-            control.send(encode) { frame ->
-                peripheral.writeWithResponse(SERVICE_UUID, CONTROL_CHARACTERISTIC_UUID, frame)
+            if (mutableSchemaV2Active.value) {
+                sendOn(
+                    controlV2,
+                    CONTROL_V2_CHARACTERISTIC_UUID,
+                ) { requestId -> SchemaV2Codec.toV2Command(encode(requestId)) }
+            } else {
+                sendOn(control, CONTROL_CHARACTERISTIC_UUID, encode)
             }
         }
+
+    /** A v2-only command ([encode] builds its v2 envelope). */
+    private suspend fun sendSchemaV2(encode: (requestId: String) -> ByteArray): ControlResponseEnvelope =
+        withContext(confined) {
+            if (!mutableSchemaV2Active.value && mutableState.value == ConnectionState.Connected) {
+                throw BleControlException.Unsupported()
+            }
+            sendOn(controlV2, CONTROL_V2_CHARACTERISTIC_UUID, encode)
+        }
+
+    private suspend fun sendOn(
+        channel: ControlChannel,
+        characteristicUuid: String,
+        encode: (requestId: String) -> ByteArray,
+    ): ControlResponseEnvelope {
+        val peripheral = link
+        if (mutableState.value != ConnectionState.Connected || peripheral == null) {
+            throw BleControlException.Unavailable()
+        }
+        if (!controlCharacteristicPresent) throw BleControlException.Unsupported()
+        return channel.send(encode) { frame -> peripheral.writeWithResponse(SERVICE_UUID, characteristicUuid, frame) }
+    }
 
     private inline fun <T> decodeResult(decode: () -> T): T =
         try {
@@ -392,6 +563,7 @@ class BleShotTransport internal constructor(
         private const val SUBSCRIBE_FAILED = "Could not subscribe to OpenFlight shots"
         private const val DECODE_FAILED = "Could not read the shot from OpenFlight"
         private const val SHOT_BUFFER = 64
+        private const val EVENT_BUFFER = 64
     }
 }
 

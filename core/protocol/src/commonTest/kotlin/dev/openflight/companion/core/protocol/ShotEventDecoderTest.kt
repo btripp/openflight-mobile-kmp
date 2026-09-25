@@ -18,14 +18,71 @@ class ShotEventDecoderTest {
         assertThat(shot?.eventId).isEqualTo("B0D91F0A-7950-4D7E-9DD5-AF9777C190E1")
     }
 
+    // Plan R8e: schema 2 is accepted now; anything past it is still rejected.
     @Test
-    fun rejectsSchemaVersionTwo() {
+    fun rejectsSchemaVersionThree() {
         val decoder = ShotEventDecoder()
 
         assertFailure {
-            decoder.decode(shotJson(eventId = "11111111-1111-1111-1111-111111111111", schemaVersion = 2))
+            decoder.decode(shotJson(eventId = "11111111-1111-1111-1111-111111111111", schemaVersion = 3))
         }.isInstanceOf<ShotDecodeError.UnsupportedSchema>()
     }
+
+    @Test
+    fun rejectsSchemaVersionZero() {
+        assertFailure {
+            ShotEventDecoder().decode(shotJson(eventId = "11111111-1111-1111-1111-111111111111", schemaVersion = 0))
+        }.isInstanceOf<ShotDecodeError.UnsupportedSchema>()
+    }
+
+    @Test
+    fun acceptsSchemaVersionTwo() {
+        val shot =
+            ShotEventDecoder().decode(
+                shotJson(eventId = "11111111-1111-1111-1111-111111111111", schemaVersion = 2),
+            )
+
+        assertThat(shot?.schemaVersion).isEqualTo(2)
+    }
+
+    @Test
+    fun aV2PayloadThatIsNotAShotIsRejected() {
+        assertFailure {
+            ShotEventDecoder().decode(v2Shot(final = true, type = "profiles"))
+        }.isInstanceOf<ShotDecodeError.NotAShot>()
+    }
+
+    @Test
+    fun aV2FinalShotPassesAfterItsProvisionalButEachReplayIsSuppressed() {
+        val decoder = ShotEventDecoder()
+
+        val provisional = decoder.decode(v2Shot(final = false))
+        val provisionalReplay = decoder.decode(v2Shot(final = false))
+        val final = decoder.decode(v2Shot(final = true))
+        val finalReplay = decoder.decode(v2Shot(final = true))
+
+        assertThat(provisional?.isProvisional).isEqualTo(true)
+        assertThat(provisionalReplay).isNull()
+        assertThat(final?.final).isEqualTo(true)
+        assertThat(finalReplay).isNull()
+    }
+
+    @Test
+    fun aV1ShotKeepsTheEventIdAloneAsItsReplayKey() {
+        val decoder = ShotEventDecoder()
+        decoder.decode(shotJson(eventId = "11111111-1111-1111-1111-111111111111"))
+
+        // A v1 payload never carries `final`; the same id is a replay whatever else it says.
+        assertThat(decoder.decode(shotJson(eventId = "11111111-1111-1111-1111-111111111111"))).isNull()
+    }
+
+    private fun v2Shot(
+        final: Boolean,
+        type: String = "shot",
+    ): String =
+        """{"schema_version":2,"type":"$type","final":$final,"event_id":"05dd37ec-49ed-596b-b1a4-953d54e4f239",""" +
+            """"timestamp":"2026-09-25T14:03:07.412345","club":"7-iron","ball_speed_mph":106.1,""" +
+            """"estimated_carry_yards":152,"enrichment":{"status":"${if (final) "complete" else "pending"}"}}"""
 
     @Test
     fun suppressesAReplayedEventId() {

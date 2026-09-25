@@ -9,6 +9,7 @@ import dev.openflight.companion.core.model.PhoneOrientationMeasurement
 import dev.openflight.companion.core.model.ShotEvent
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.emptyFlow
 
 /**
  * The transport-agnostic contract both the BLE (step 5) and Wi-Fi (step 4) transports implement,
@@ -28,6 +29,12 @@ interface ShotTransport {
     val activeClub: StateFlow<GolfClub?>
 
     val supportsControls: StateFlow<Boolean>
+
+    /**
+     * Schema v2 events other than shots and `club_changed` (plan R8e): BLE v2 control
+     * notifications and SSE `?schema=2` events. Empty for a v1 link. Not replayed.
+     */
+    val schemaEvents: Flow<SchemaV2Event> get() = emptyFlow()
 
     fun start()
 

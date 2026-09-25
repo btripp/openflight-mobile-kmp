@@ -35,6 +35,8 @@ enum class SessionSource {
  * @property showSimulateShot the "Simulate Shot" button: visible only when the Pi runs `--mock`.
  * @property simulateLabel "Simulate Swing" in swing-speed mode, otherwise "Simulate Shot".
  * @property simulateAvailability why [SessionEvent.SimulateShot] can't run, if it can't.
+ * @property editAvailability whether [SessionEvent.DeleteShot] and [SessionEvent.ClearHistory]
+ *   can run: not over Bluetooth, a read-and-select link (plan R8e).
  */
 data class SessionUiState(
     val units: UnitSystem = UnitSystem.IMPERIAL,
@@ -51,6 +53,7 @@ data class SessionUiState(
         PiFeatureAvailability.Unavailable(
             PiFeatureAvailability.NOT_CONNECTED,
         ),
+    val editAvailability: PiFeatureAvailability = PiFeatureAvailability.Available,
 ) {
     val hasShots: Boolean get() = allCount > 0
 

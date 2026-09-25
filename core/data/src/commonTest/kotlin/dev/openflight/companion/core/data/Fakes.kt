@@ -9,6 +9,7 @@ import dev.openflight.companion.core.model.GolfClub
 import dev.openflight.companion.core.model.PhoneOrientationMeasurement
 import dev.openflight.companion.core.model.ShotEvent
 import dev.openflight.companion.core.network.PiControlClient
+import dev.openflight.companion.core.protocol.SchemaV2Event
 import dev.openflight.companion.core.protocol.ShotTransport
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
@@ -31,6 +32,7 @@ internal class FakeShotTransport(
     override val shots = MutableSharedFlow<ShotEvent>(extraBufferCapacity = 256)
     override val activeClub = MutableStateFlow<GolfClub?>(null)
     override val supportsControls = MutableStateFlow(false)
+    override val schemaEvents = MutableSharedFlow<SchemaV2Event>(extraBufferCapacity = 64)
 
     var startCount = 0
         private set

@@ -33,4 +33,35 @@ class PiFeatureAvailabilityTest {
             assertThat(PiFeatureAvailability.of(state).disabledReason).isEqualTo("Not connected")
         }
     }
+
+    // Plan R8e: BLE is read-and-select; destructive actions say "Wi-Fi only" instead of hiding.
+
+    private val wifiOnly = PiFeatureAvailability.Unavailable(PiFeatureAvailability.WIFI_ONLY_ON_BLUETOOTH)
+
+    @Test
+    fun deleteAndClearAreWifiOnlyOverBluetoothAndAvailableOtherwise() {
+        assertThat(PiFeatureAvailability.forDeleteAndClear(overBluetooth = true)).isEqualTo(wifiOnly)
+        assertThat(PiFeatureAvailability.forDeleteAndClear(overBluetooth = false))
+            .isEqualTo(PiFeatureAvailability.Available)
+    }
+
+    @Test
+    fun profileEditsNeedTheSocketIoLink() {
+        assertThat(PiFeatureAvailability.forProfileEdits(PiLinkState.WifiOnly)).isEqualTo(wifiOnly)
+        assertThat(
+            PiFeatureAvailability.forProfileEdits(PiLinkState.Connected),
+        ).isEqualTo(PiFeatureAvailability.Available)
+        assertThat(PiFeatureAvailability.forProfileEdits(PiLinkState.Connecting))
+            .isEqualTo(PiFeatureAvailability.Unavailable(PiFeatureAvailability.NOT_CONNECTED))
+    }
+
+    @Test
+    fun profileSelectionWorksOverSocketIoOrBluetoothSchemaV2() {
+        assertThat(PiFeatureAvailability.forProfileSelection(PiLinkState.WifiOnly, bluetoothSchemaV2 = true))
+            .isEqualTo(PiFeatureAvailability.Available)
+        assertThat(PiFeatureAvailability.forProfileSelection(PiLinkState.WifiOnly, bluetoothSchemaV2 = false))
+            .isEqualTo(PiFeatureAvailability.Unavailable(PiFeatureAvailability.REQUIRES_WIFI))
+        assertThat(PiFeatureAvailability.forProfileSelection(PiLinkState.Connected, bluetoothSchemaV2 = false))
+            .isEqualTo(PiFeatureAvailability.Available)
+    }
 }

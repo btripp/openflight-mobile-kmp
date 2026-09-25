@@ -2,8 +2,10 @@
 package dev.openflight.companion.core.ble
 
 import dev.openflight.companion.core.ble.OpenFlightBleProfile.CONTROL_CHARACTERISTIC_UUID
+import dev.openflight.companion.core.ble.OpenFlightBleProfile.CONTROL_V2_CHARACTERISTIC_UUID
 import dev.openflight.companion.core.ble.OpenFlightBleProfile.SERVICE_UUID
 import dev.openflight.companion.core.ble.OpenFlightBleProfile.SHOT_CHARACTERISTIC_UUID
+import dev.openflight.companion.core.ble.OpenFlightBleProfile.SHOT_V2_CHARACTERISTIC_UUID
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
@@ -67,8 +69,22 @@ internal class FakePeripheralLink(
     var writeError: Throwable? = null
     val writes = mutableListOf<ByteArray>()
 
+    /** The characteristic each entry of [writes] went to, in order. */
+    val writeTargets = mutableListOf<String>()
+
+    /** Called after each accepted write: the scripted Pi's hook to answer a command. */
+    var onWrite: ((characteristicUuid: String, frame: ByteArray) -> Unit)? = null
+
+    /** Every characteristic notifications were enabled on, in order. */
+    val subscriptions = mutableListOf<String>()
+
+    /** Characteristics with notifications enabled right now (removed when the observer is cancelled). */
+    val activeSubscriptions = mutableSetOf<String>()
+
     val shotNotifications = MutableSharedFlow<ByteArray>(extraBufferCapacity = 512)
     val controlNotifications = MutableSharedFlow<ByteArray>(extraBufferCapacity = 512)
+    val shotV2Notifications = MutableSharedFlow<ByteArray>(extraBufferCapacity = 512)
+    val controlV2Notifications = MutableSharedFlow<ByteArray>(extraBufferCapacity = 512)
 
     var releaseCount = 0
         private set
@@ -102,8 +118,24 @@ internal class FakePeripheralLink(
             check(characteristics?.contains(characteristicUuid) == true) { "observed an absent characteristic" }
             subscribeGate?.await()
             if (characteristicUuid == CONTROL_CHARACTERISTIC_UUID) controlSubscribeError?.let { throw it }
-            val source = if (characteristicUuid == SHOT_CHARACTERISTIC_UUID) shotNotifications else controlNotifications
-            emitAll(source.onSubscription { onSubscription() })
+            val source =
+                when (characteristicUuid) {
+                    SHOT_CHARACTERISTIC_UUID -> shotNotifications
+                    SHOT_V2_CHARACTERISTIC_UUID -> shotV2Notifications
+                    CONTROL_V2_CHARACTERISTIC_UUID -> controlV2Notifications
+                    else -> controlNotifications
+                }
+            try {
+                emitAll(
+                    source.onSubscription {
+                        subscriptions += characteristicUuid
+                        activeSubscriptions += characteristicUuid
+                        onSubscription()
+                    },
+                )
+            } finally {
+                activeSubscriptions -= characteristicUuid
+            }
         }
 
     override suspend fun writeWithResponse(
@@ -111,10 +143,12 @@ internal class FakePeripheralLink(
         characteristicUuid: String,
         data: ByteArray,
     ) {
-        check(characteristicUuid == CONTROL_CHARACTERISTIC_UUID)
+        check(characteristicUuid == CONTROL_CHARACTERISTIC_UUID || characteristicUuid == CONTROL_V2_CHARACTERISTIC_UUID)
         writePermits?.receive()
         writeError?.let { throw it }
         writes += data
+        writeTargets += characteristicUuid
+        onWrite?.invoke(characteristicUuid, data)
     }
 
     override suspend fun release() {
@@ -128,5 +162,13 @@ internal class FakePeripheralLink(
 
     fun notifyControl(frames: List<ByteArray>) {
         frames.forEach { check(controlNotifications.tryEmit(it)) }
+    }
+
+    fun notifyShotV2(frames: List<ByteArray>) {
+        frames.forEach { check(shotV2Notifications.tryEmit(it)) }
+    }
+
+    fun notifyControlV2(frames: List<ByteArray>) {
+        frames.forEach { check(controlV2Notifications.tryEmit(it)) }
     }
 }

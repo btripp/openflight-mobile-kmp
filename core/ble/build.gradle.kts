@@ -1,3 +1,5 @@
+import dev.openflight.buildlogic.commonTestJsonFixtures
+
 plugins {
     alias(libs.plugins.openflight.kmp.library)
 }
@@ -15,3 +17,10 @@ kotlin {
         }
     }
 }
+
+// Plan R8e: the backend's BLE goldens, shared with core:protocol (see its fixture README).
+commonTestJsonFixtures(
+    fixtureDir = "../protocol/src/commonTest/fixtures/openflight-ble",
+    packageName = "dev.openflight.companion.core.ble",
+    objectName = "BleContractFixtures",
+)

@@ -9,6 +9,9 @@ import dev.openflight.companion.core.model.GolfClub
 import dev.openflight.companion.core.model.PhoneOrientationMeasurement
 import dev.openflight.companion.core.model.ShotEvent
 import dev.openflight.companion.core.protocol.ControlCodec
+import dev.openflight.companion.core.protocol.ControlDecodeError
+import dev.openflight.companion.core.protocol.SchemaV2Codec
+import dev.openflight.companion.core.protocol.SchemaV2Event
 import dev.openflight.companion.core.protocol.ShotEventDecoder
 import dev.openflight.companion.core.protocol.ShotTransport
 import dev.openflight.companion.core.protocol.SseByteStreamParser
@@ -75,7 +78,14 @@ private data class ServerErrorBody(
  * transport's own backoff and `lastEventId`-preserving reconnect semantics (plan §0.3): this
  * transport needs to decide for itself when to reset the decoder, and the plugin does not expose
  * that distinction between an automatic retry and an explicit [retry].
+ *
+ * Schema v2 (plan R8e): the stream is opened with `?schema=2`. A Pi that knows the parameter sends
+ * v2 shots (provisional and final, upserted by `event_id` downstream) plus the v2 events, which go
+ * to [schemaEvents]. A Pi that rejects it with `400` is asked for the plain v1 stream from then on
+ * (for this host); jfish's Pi ignores the query and simply keeps sending v1, which the decoder
+ * tells apart by each payload's `schema_version`.
  */
+@Suppress("TooManyFunctions") // The ShotTransport surface plus the stream loop and its event handlers.
 class WifiShotTransport(
     private val host: String,
     private val httpClient: HttpClient,
@@ -86,6 +96,12 @@ class WifiShotTransport(
 
     private val _shots = MutableSharedFlow<ShotEvent>(extraBufferCapacity = SHOT_REPLAY_BUFFER)
     override val shots: Flow<ShotEvent> = _shots.asSharedFlow()
+
+    private val _schemaEvents = MutableSharedFlow<SchemaV2Event>(extraBufferCapacity = SHOT_REPLAY_BUFFER)
+    override val schemaEvents: Flow<SchemaV2Event> = _schemaEvents.asSharedFlow()
+
+    /** `false` once this host answered `?schema=2` with `400`: it only serves the v1 stream. */
+    private var requestSchemaV2 = true
 
     private val _activeClub = MutableStateFlow<GolfClub?>(null)
     override val activeClub: StateFlow<GolfClub?> = _activeClub.asStateFlow()
@@ -103,10 +119,10 @@ class WifiShotTransport(
 
     override fun start() {
         if (streamJob?.isActive == true) return
-        val url =
+        val endpoint =
             when (val decision = EndpointPolicy.evaluate(host)) {
                 is EndpointDecision.Allowed -> {
-                    decision.endpoint.url(STREAM_PATH)
+                    decision.endpoint
                 }
 
                 is EndpointDecision.Rejected -> {
@@ -115,7 +131,7 @@ class WifiShotTransport(
                     return
                 }
             }
-        streamJob = scope.launch { run(url) }
+        streamJob = scope.launch { run(endpoint) }
     }
 
     override fun retry() {
@@ -133,16 +149,19 @@ class WifiShotTransport(
     }
 
     @Suppress("TooGenericExceptionCaught")
-    private suspend fun run(url: String) {
+    private suspend fun run(endpoint: Endpoint) {
         var reconnectDelay = INITIAL_RECONNECT_DELAY
         while (coroutineContext.isActive) {
             try {
-                connect(url)
+                connect(endpoint.url(if (requestSchemaV2) STREAM_PATH_V2 else STREAM_PATH))
                 // connect() only returns when the byte channel ends cleanly.
                 reconnectDelay = INITIAL_RECONNECT_DELAY
                 throw OpenFlightHttpError.StreamEnded
             } catch (cancellation: CancellationException) {
                 throw cancellation
+            } catch (_: SchemaV2Rejected) {
+                // An older Pi refused `?schema=2`: ask for the v1 stream straight away.
+                requestSchemaV2 = false
             } catch (error: Exception) {
                 // Any failure -- a bad status, a decode error surfaced as an exception, or the
                 // stream ending cleanly -- is retryable, so it is reported the same way here.
@@ -169,6 +188,7 @@ class WifiShotTransport(
                     socketTimeoutMillis = IDLE_TIMEOUT_MILLIS
                 }
             }.execute { response ->
+                if (response.status == HttpStatusCode.BadRequest && requestSchemaV2) throw SchemaV2Rejected()
                 if (response.status != HttpStatusCode.OK) {
                     throw OpenFlightHttpError.UnexpectedStatus(response.status.value)
                 }
@@ -190,7 +210,11 @@ class WifiShotTransport(
         when {
             event.name == ControlCodec.TYPE_CLUB_CHANGED -> {
                 try {
-                    _activeClub.value = ControlCodec.decodeClubChangedEvent(event.data.encodeToByteArray())
+                    _activeClub.value =
+                        ControlCodec.decodeClubChangedEvent(
+                            event.data.encodeToByteArray(),
+                            ControlCodec.V1_AND_V2_SCHEMAS,
+                        )
                 } catch (cancellation: CancellationException) {
                     throw cancellation
                 } catch (error: Exception) {
@@ -208,7 +232,24 @@ class WifiShotTransport(
                     _state.value = ConnectionState.Error(error.message ?: error.toString())
                 }
             }
+
+            event.name in SchemaV2Codec.EVENT_TYPES -> {
+                receiveSchemaEvent(event.data)
+            }
         }
+    }
+
+    /** A malformed or unknown v2 event is dropped, like a malformed Socket.IO event. */
+    private suspend fun receiveSchemaEvent(data: String) {
+        val decoded =
+            try {
+                SchemaV2Codec.decodeEvent(data)
+            } catch (_: IllegalArgumentException) {
+                null
+            } catch (_: ControlDecodeError) {
+                null
+            }
+        decoded?.let { _schemaEvents.emit(it) }
     }
 
     override suspend fun setClub(club: GolfClub): ClubSelection =
@@ -248,6 +289,9 @@ class WifiShotTransport(
 
     companion object {
         const val STREAM_PATH = "/api/shots/stream"
+
+        /** Backend `docs/ios-ble.md` "Wi-Fi: `?schema=2`"; any value but 1 or 2 is a `400`. */
+        const val STREAM_PATH_V2 = "/api/shots/stream?schema=2"
         const val CLUB_PATH = "/api/club"
         const val CALIBRATION_PATH = "/api/calibration/iwr6843/orientation"
 
@@ -260,6 +304,9 @@ class WifiShotTransport(
         private val MAXIMUM_RECONNECT_DELAY = 15.seconds
     }
 }
+
+/** The Pi answered `?schema=2` with `400`: it predates schema v2. */
+private class SchemaV2Rejected : Exception("The Pi doesn't serve schema v2")
 
 /** A stream failure as a state; a denied iOS Local Network permission gets its own, actionable kind. */
 private fun Throwable.toConnectionError(): ConnectionState.Error =
