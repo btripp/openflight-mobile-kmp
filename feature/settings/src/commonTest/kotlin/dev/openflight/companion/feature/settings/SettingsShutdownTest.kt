@@ -10,8 +10,10 @@ import dev.openflight.companion.core.data.AppLifecycle
 import dev.openflight.companion.core.data.TransportType
 import dev.openflight.companion.core.model.pi.PiLinkState
 import dev.openflight.companion.core.testing.FakePiSessionRepository
+import dev.openflight.companion.core.testing.FakeScreenReaderMonitor
 import dev.openflight.companion.core.testing.FakeSettingsRepository
 import dev.openflight.companion.core.testing.FakeShotRepository
+import dev.openflight.companion.core.testing.FakeSpeechEngine
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -43,7 +45,8 @@ class SettingsShutdownTest {
     @BeforeTest
     fun setUp() {
         Dispatchers.setMain(dispatcher)
-        viewModel = SettingsViewModel(shots, settings, piSession, lifecycle)
+        viewModel =
+            SettingsViewModel(shots, settings, piSession, lifecycle, FakeSpeechEngine(), FakeScreenReaderMonitor())
     }
 
     @AfterTest

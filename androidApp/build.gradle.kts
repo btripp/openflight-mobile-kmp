@@ -49,4 +49,6 @@ dependencies {
     implementation(platform(libs.koin.bom))
     implementation(libs.koin.android)
     implementation(libs.koin.androidx.compose)
+    // Plan F7: FakeSpeechEngine for the call-out coordinator device test.
+    androidTestImplementation(projects.core.testing)
 }

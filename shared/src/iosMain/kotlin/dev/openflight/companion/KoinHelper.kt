@@ -89,4 +89,12 @@ class KoinHelper : KoinComponent {
 
     /** Plan F5: one club's detail, by its wire value (e.g. "7-iron"). */
     fun clubDetailViewModel(wireValue: String): ClubDetailViewModel = get { parametersOf(wireValue) }
+
+    /**
+     * Starts (idempotent) the app-wide shot call-out coordinator (plan F7). Call once, from
+     * `iOSApp.init()`, after [appLifecycle] so both share the same [AppLifecycle] instance.
+     */
+    fun shotCallouts() {
+        getKoin().shotCallouts()
+    }
 }

@@ -12,6 +12,7 @@ import assertk.assertions.isNull
 import assertk.assertions.isTrue
 import dev.openflight.companion.core.data.AppLifecycle
 import dev.openflight.companion.core.data.TransportType
+import dev.openflight.companion.core.insights.CalloutField
 import dev.openflight.companion.core.insights.UnitSystem
 import dev.openflight.companion.core.model.pi.CloudUploadState
 import dev.openflight.companion.core.model.pi.CloudUploadStatus
@@ -26,8 +27,10 @@ import dev.openflight.companion.core.model.pi.SimStatus
 import dev.openflight.companion.core.model.pi.TriggerDiagnostic
 import dev.openflight.companion.core.model.pi.TriggerStatus
 import dev.openflight.companion.core.testing.FakePiSessionRepository
+import dev.openflight.companion.core.testing.FakeScreenReaderMonitor
 import dev.openflight.companion.core.testing.FakeSettingsRepository
 import dev.openflight.companion.core.testing.FakeShotRepository
+import dev.openflight.companion.core.testing.FakeSpeechEngine
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -44,12 +47,22 @@ class SettingsViewModelTest {
     private val settings = FakeSettingsRepository(transport = TransportType.WIFI, host = "pi.local:8080")
     private val shots = FakeShotRepository()
     private val piSession = FakePiSessionRepository()
+    private val speech = FakeSpeechEngine()
+    private val screenReader = FakeScreenReaderMonitor()
     private lateinit var viewModel: SettingsViewModel
 
     @BeforeTest
     fun setUp() {
         Dispatchers.setMain(UnconfinedTestDispatcher())
-        viewModel = SettingsViewModel(shots, settings, piSession, AppLifecycle().apply { onForeground() })
+        viewModel =
+            SettingsViewModel(
+                shots,
+                settings,
+                piSession,
+                AppLifecycle().apply { onForeground() },
+                speech,
+                screenReader,
+            )
     }
 
     @AfterTest
@@ -284,6 +297,74 @@ class SettingsViewModelTest {
                 assertThat(state.radar.config).isNull()
                 assertThat(state.radar.sliders).isEmpty()
             }
+        }
+
+    // Plan F7: audio call-outs, added at the end to keep this file's diff mergeable (§4a A7).
+
+    @Test
+    fun theCalloutSectionDefaultsMatchSettingsRepositoryDefaults() =
+        runTest {
+            viewModel.uiState.testIgnoringRest {
+                val state = awaitUntil { it.linkState == PiLinkState.Connected }
+                assertThat(state.callouts.enabled).isFalse()
+                assertThat(
+                    state.callouts.fields
+                        .filter { it.selected }
+                        .map { it.field },
+                ).containsExactly(CalloutField.CARRY, CalloutField.BALL_SPEED)
+                assertThat(state.callouts.previewText).isEqualTo("Carry 152 yards, Ball speed 118 miles per hour")
+            }
+        }
+
+    @Test
+    fun enablingCalloutsPersistsThroughTheRepository() =
+        runTest {
+            viewModel.onEvent(SettingsEvent.SetCalloutsEnabled(true))
+
+            assertThat(settings.calloutsEnabled.value).isTrue()
+        }
+
+    @Test
+    fun togglingAFieldOnAppendsItToTheSelectedList() =
+        runTest {
+            viewModel.onEvent(SettingsEvent.ToggleCalloutField(CalloutField.SMASH))
+
+            assertThat(settings.calloutFields.value)
+                .containsExactly(CalloutField.CARRY, CalloutField.BALL_SPEED, CalloutField.SMASH)
+        }
+
+    @Test
+    fun togglingASelectedFieldOffRemovesIt() =
+        runTest {
+            viewModel.onEvent(SettingsEvent.ToggleCalloutField(CalloutField.CARRY))
+
+            assertThat(settings.calloutFields.value).containsExactly(CalloutField.BALL_SPEED)
+        }
+
+    @Test
+    fun movingTheSecondFieldUpSwapsItWithTheFirst() =
+        runTest {
+            viewModel.onEvent(SettingsEvent.MoveCalloutField(CalloutField.BALL_SPEED, up = true))
+
+            assertThat(settings.calloutFields.value).containsExactly(CalloutField.BALL_SPEED, CalloutField.CARRY)
+        }
+
+    @Test
+    fun previewSpeaksTheCurrentLivePreviewSentence() =
+        runTest {
+            viewModel.onEvent(SettingsEvent.PreviewCallout)
+
+            assertThat(speech.spoken.map { it.text }).containsExactly("Carry 152 yards, Ball speed 118 miles per hour")
+        }
+
+    @Test
+    fun previewStaysSilentWhileAScreenReaderIsActive() =
+        runTest {
+            screenReader.isActive.value = true
+
+            viewModel.onEvent(SettingsEvent.PreviewCallout)
+
+            assertThat(speech.spoken).isEmpty()
         }
 
     /** Like `test`, but tolerates the extra intermediate states `combine` may emit after the assertions. */

@@ -5,13 +5,19 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dev.openflight.companion.core.data.AppLifecycle
 import dev.openflight.companion.core.data.AppLifecycleState
+import dev.openflight.companion.core.data.CalloutTrigger
 import dev.openflight.companion.core.data.PiSessionRepository
 import dev.openflight.companion.core.data.SettingsRepository
 import dev.openflight.companion.core.data.ShotRepository
 import dev.openflight.companion.core.data.TransportType
+import dev.openflight.companion.core.insights.CalloutComposer
+import dev.openflight.companion.core.insights.CalloutField
+import dev.openflight.companion.core.insights.CalloutInput
+import dev.openflight.companion.core.insights.CalloutVerbosity
 import dev.openflight.companion.core.insights.UnitSystem
 import dev.openflight.companion.core.model.ConnectionProblem
 import dev.openflight.companion.core.model.ConnectionState
+import dev.openflight.companion.core.model.GolfClub
 import dev.openflight.companion.core.model.pi.CloudUploadState
 import dev.openflight.companion.core.model.pi.CloudUploadStatus
 import dev.openflight.companion.core.model.pi.DebugState
@@ -24,6 +30,9 @@ import dev.openflight.companion.core.model.pi.RadarConfig
 import dev.openflight.companion.core.model.pi.RadarConfigUpdate
 import dev.openflight.companion.core.model.pi.SimState
 import dev.openflight.companion.core.model.pi.TriggerStatus
+import dev.openflight.companion.core.speech.ScreenReaderMonitor
+import dev.openflight.companion.core.speech.SpeechEngine
+import dev.openflight.companion.core.speech.Voice
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.TimeoutCancellationException
@@ -57,6 +66,9 @@ class SettingsViewModel(
     private val settings: SettingsRepository,
     private val piSession: PiSessionRepository,
     private val lifecycle: AppLifecycle,
+    // Plan F7: audio call-outs, added at the end to keep this constructor's diff mergeable (§4a A7).
+    private val speechEngine: SpeechEngine,
+    private val screenReader: ScreenReaderMonitor,
 ) : ViewModel() {
     private val shutdownPhase = MutableStateFlow<ShutdownPhase>(ShutdownPhase.Idle)
     private var shutdownJob: Job? = null
@@ -82,15 +94,34 @@ class SettingsViewModel(
             ::RadarState,
         )
 
-    val uiState: StateFlow<SettingsUiState> =
+    // Plan F7: audio call-outs. A 6th combine source doesn't fit the 5-argument `combine` overload,
+    // so the callout settings combine on their own first, then join the rest through a 2-way outer
+    // combine below (keeps every existing combine untouched, per §4a A7's mergeable-diff intent).
+    private val calloutPrefs =
+        combine(
+            settings.calloutsEnabled,
+            settings.calloutTrigger,
+            settings.calloutVoiceId,
+            settings.calloutRate,
+            settings.calloutFields,
+            ::CalloutPrefs,
+        )
+
+    private val callout = combine(calloutPrefs, speechEngine.voices, ::CalloutState)
+
+    private val baseState =
         combine(
             phone,
             piSession.linkState,
             device,
             radar,
             shutdownPhase,
-        ) { phone, link, device, radar, phase ->
-            buildState(phone, link, device, radar, phase)
+            ::BaseState,
+        )
+
+    val uiState: StateFlow<SettingsUiState> =
+        combine(baseState, callout) { base, calloutState ->
+            buildState(base.phone, base.link, base.device, base.radar, base.phase, calloutState)
         }.stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
@@ -106,6 +137,16 @@ class SettingsViewModel(
                     DeviceState(ProfilesState(), SimState(), CloudUploadStatus(), null),
                     RadarState(null, null, DebugState(), null),
                     ShutdownPhase.Idle,
+                    CalloutState(
+                        CalloutPrefs(
+                            SettingsRepository.DEFAULT_CALLOUTS_ENABLED,
+                            SettingsRepository.DEFAULT_CALLOUT_TRIGGER,
+                            null,
+                            SettingsRepository.DEFAULT_CALLOUT_RATE,
+                            SettingsRepository.DEFAULT_CALLOUT_FIELDS,
+                        ),
+                        emptyList(),
+                    ),
                 ),
         )
 
@@ -157,6 +198,83 @@ class SettingsViewModel(
             -> {
                 onShutdownEvent(event)
             }
+
+            is SettingsEvent.SetCalloutsEnabled,
+            is SettingsEvent.SetCalloutTrigger,
+            is SettingsEvent.SetCalloutVoice,
+            is SettingsEvent.SetCalloutRate,
+            is SettingsEvent.ToggleCalloutField,
+            is SettingsEvent.MoveCalloutField,
+            SettingsEvent.PreviewCallout,
+            -> {
+                onCalloutEvent(event)
+            }
+        }
+    }
+
+    // Plan F7: audio call-outs, added at the end to keep this file's diff mergeable (§4a A7).
+    private fun onCalloutEvent(event: SettingsEvent) {
+        when (event) {
+            is SettingsEvent.SetCalloutsEnabled -> {
+                viewModelScope.launch { settings.setCalloutsEnabled(event.enabled) }
+            }
+
+            is SettingsEvent.SetCalloutTrigger -> {
+                viewModelScope.launch { settings.setCalloutTrigger(event.trigger) }
+            }
+
+            is SettingsEvent.SetCalloutVoice -> {
+                viewModelScope.launch { settings.setCalloutVoiceId(event.voiceId) }
+            }
+
+            is SettingsEvent.SetCalloutRate -> {
+                viewModelScope.launch { settings.setCalloutRate(event.rate) }
+            }
+
+            is SettingsEvent.ToggleCalloutField -> {
+                viewModelScope.launch {
+                    val current = settings.calloutFields.first()
+                    val updated = if (event.field in current) current - event.field else current + event.field
+                    settings.setCalloutFields(updated)
+                }
+            }
+
+            is SettingsEvent.MoveCalloutField -> {
+                viewModelScope.launch {
+                    val current = settings.calloutFields.first()
+                    val index = current.indexOf(event.field)
+                    val target = if (event.up) index - 1 else index + 1
+                    if (index < 0 || target !in current.indices) return@launch
+                    settings.setCalloutFields(
+                        current.toMutableList().apply {
+                            val moved = removeAt(index)
+                            add(target, moved)
+                        },
+                    )
+                }
+            }
+
+            SettingsEvent.PreviewCallout -> {
+                previewCallout()
+            }
+
+            else -> {
+                // Every other SettingsEvent is dispatched by onEvent's own when, never reaches here.
+            }
+        }
+    }
+
+    /**
+     * Speaks [CalloutSettingsUiState.previewText] as-is (what's on screen is what's heard), unless
+     * a screen reader is talking (plan A11y).
+     */
+    private fun previewCallout() {
+        if (screenReader.isActive.value) return
+        val text = uiState.value.callouts.previewText
+        if (text.isEmpty()) return
+        viewModelScope.launch {
+            val prefs = calloutPrefs.first()
+            speechEngine.speak(text = text, voiceId = prefs.voiceId, rate = prefs.rate)
         }
     }
 
@@ -312,17 +430,44 @@ class SettingsViewModel(
         val power: PowerStatus?,
     )
 
+    private data class BaseState(
+        val phone: PhoneState,
+        val link: PiLinkState,
+        val device: DeviceState,
+        val radar: RadarState,
+        val phase: ShutdownPhase,
+    )
+
+    // Plan F7: audio call-outs, added at the end to keep this file's diff mergeable (§4a A7).
+
+    private data class CalloutPrefs(
+        val enabled: Boolean,
+        val trigger: CalloutTrigger,
+        val voiceId: String?,
+        val rate: Float,
+        val fields: List<CalloutField>,
+    )
+
+    private data class CalloutState(
+        val prefs: CalloutPrefs,
+        val voices: List<Voice>,
+    )
+
     companion object {
         const val COMMAND_FAILED = "The Pi didn't accept that."
         const val UPLOADING = "Uploading"
         private const val STOP_TIMEOUT_MILLIS = 5_000L
 
+        // Plan F7 tipped this over the LongParameterList threshold; each param is one combine
+        // source (see BaseState/CalloutState above), not a bundle a caller would misorder.
+        @Suppress("LongParameterList")
         private fun buildState(
             phone: PhoneState,
             link: PiLinkState,
             device: DeviceState,
             radar: RadarState,
             phase: ShutdownPhase,
+            callout: CalloutState,
         ): SettingsUiState {
             val available = PiFeatureAvailability.of(link)
             val mock = device.mockMode == true
@@ -371,6 +516,7 @@ class SettingsViewModel(
                 connectionProblem = ConnectionProblem.of(phone.connection, link),
                 power = DevicePanels.power(radar.power),
                 trigger = DevicePanels.trigger(radar.trigger, available),
+                callouts = buildCalloutState(callout, phone.units),
             )
         }
 
@@ -383,6 +529,85 @@ class SettingsViewModel(
                 // Shown by the training and camera screens.
                 is PiNotice.TrainingImplementFailed, is PiNotice.CameraSettingsFailed -> null
             }
+
+        // Plan F7: audio call-outs, added at the end to keep this file's diff mergeable (§4a A7).
+
+        private fun buildCalloutState(
+            callout: CalloutState,
+            units: UnitSystem,
+        ): CalloutSettingsUiState {
+            val prefs = callout.prefs
+            // DETAILED (labelled), unlike the coordinator's real call-outs (F7's own CONCISE
+            // default): the on-screen preview is meant to be read, so it spells out which number
+            // is which; the "Preview" button speaks this same, already-labelled text verbatim.
+            val previewText =
+                CalloutComposer.compose(SAMPLE_CALLOUT_INPUT, prefs.fields, units, CalloutVerbosity.DETAILED)
+            return CalloutSettingsUiState(
+                enabled = prefs.enabled,
+                trigger = prefs.trigger,
+                rate = prefs.rate,
+                voiceGroups = groupVoices(callout.voices),
+                selectedVoiceId = prefs.voiceId,
+                fields = fieldRows(prefs.fields),
+                previewText = previewText,
+            )
+        }
+
+        /**
+         * Grouped by locale, each group sorted by quality (best first) then name.
+         * `Map.toSortedMap()` is JVM-only (backed by `java.util.TreeMap`), so this sorts the
+         * grouped entries by key itself to stay `commonMain`-safe (iOS builds too).
+         */
+        private fun groupVoices(voices: List<Voice>): List<VoiceGroup> {
+            val byQualityThenName = compareByDescending<Voice> { it.quality.ordinal }.thenBy { it.displayName }
+            return voices
+                .groupBy { it.locale }
+                .toList()
+                .sortedBy { (locale, _) -> locale }
+                .map { (locale, group) -> VoiceGroup(locale = locale, voices = group.sortedWith(byQualityThenName)) }
+        }
+
+        /** Every [CalloutField], selected ones first in speaking order, then the rest. */
+        private fun fieldRows(selected: List<CalloutField>): List<CalloutFieldRow> {
+            val rest = CalloutField.entries.filterNot { it in selected }
+            return (selected + rest).map { field ->
+                val index = selected.indexOf(field)
+                CalloutFieldRow(
+                    field = field,
+                    label = CalloutComposer.label(field),
+                    selected = index >= 0,
+                    canMoveUp = index > 0,
+                    canMoveDown = index in 0 until selected.lastIndex,
+                )
+            }
+        }
+
+        /**
+         * A fixed sample shot for [CalloutSettingsUiState.previewText] (plan F7's "live preview
+         * line"): representative numbers, not a real shot, so the preview never depends on one
+         * having arrived.
+         */
+        private val SAMPLE_CALLOUT_INPUT =
+            CalloutInput(
+                carryYards = SAMPLE_CARRY_YARDS,
+                totalYards = SAMPLE_TOTAL_YARDS,
+                ballSpeedMph = SAMPLE_BALL_SPEED_MPH,
+                clubSpeedMph = SAMPLE_CLUB_SPEED_MPH,
+                smash = SAMPLE_SMASH,
+                launchAngleDegrees = SAMPLE_LAUNCH_DEGREES,
+                spinRpm = SAMPLE_SPIN_RPM,
+                club = GolfClub.DRIVER,
+                targetDeltaYards = SAMPLE_TARGET_DELTA_YARDS,
+            )
+
+        private const val SAMPLE_CARRY_YARDS = 152.0
+        private const val SAMPLE_TOTAL_YARDS = 165.0
+        private const val SAMPLE_BALL_SPEED_MPH = 118.0
+        private const val SAMPLE_CLUB_SPEED_MPH = 98.0
+        private const val SAMPLE_SMASH = 1.48
+        private const val SAMPLE_LAUNCH_DEGREES = 13.5
+        private const val SAMPLE_SPIN_RPM = 2_600.0
+        private const val SAMPLE_TARGET_DELTA_YARDS = -12.0
     }
 }
 

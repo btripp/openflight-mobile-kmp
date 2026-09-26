@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 package dev.openflight.companion.feature.settings
 
+import dev.openflight.companion.core.data.CalloutTrigger
+import dev.openflight.companion.core.insights.CalloutField
 import dev.openflight.companion.core.insights.UnitSystem
 
 /** User intents from the settings screen, sent up to [SettingsViewModel.onEvent]. */
@@ -39,6 +41,42 @@ sealed interface SettingsEvent {
 
     /** Clears a [ShutdownPhase.Done] or [ShutdownPhase.Failed] outcome. */
     data object DismissShutdown : SettingsEvent
+
+    // Plan F7: audio call-outs, added at the end to keep this file's diff mergeable (§4a A7).
+
+    /** The "Audio call-outs" enable switch. */
+    data class SetCalloutsEnabled(
+        val enabled: Boolean,
+    ) : SettingsEvent
+
+    /** Every final shot, or only shots inside a game. */
+    data class SetCalloutTrigger(
+        val trigger: CalloutTrigger,
+    ) : SettingsEvent
+
+    /** A voice picked from the grouped list; `null` restores the platform default. */
+    data class SetCalloutVoice(
+        val voiceId: String?,
+    ) : SettingsEvent
+
+    /** The rate slider, released. */
+    data class SetCalloutRate(
+        val rate: Float,
+    ) : SettingsEvent
+
+    /** A field checklist checkbox: selects it (appended to the end) or deselects it. */
+    data class ToggleCalloutField(
+        val field: CalloutField,
+    ) : SettingsEvent
+
+    /** Moves a selected field one slot up (`up = true`) or down in the speaking order. */
+    data class MoveCalloutField(
+        val field: CalloutField,
+        val up: Boolean,
+    ) : SettingsEvent
+
+    /** The voice picker's "Preview" button: speaks [CalloutSettingsUiState.previewText]. */
+    data object PreviewCallout : SettingsEvent
 }
 
 /** One-shot signals from [SettingsViewModel]. */
