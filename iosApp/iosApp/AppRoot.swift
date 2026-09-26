@@ -10,7 +10,7 @@ enum AppRoute: Hashable {
 
 /// The app's top-level sections (plan R5b/R6c): a native tab bar, where Android has its bottom bar.
 enum AppTab: Hashable {
-    case dashboard, session, training, camera, settings
+    case dashboard, session, training, camera, settings, bag
 }
 
 /// The app shell: a `TabView` of Dashboard, Session, Training, Camera and Settings. The dashboard
@@ -60,6 +60,11 @@ struct AppRoot: View {
             NavigationStack { SettingsView() }
                 .tabItem { Label("Settings", systemImage: "gearshape") }
                 .tag(AppTab.settings)
+
+            // Plan F5: My Bag (appended, §4a A7).
+            NavigationStack { BagView() }
+                .tabItem { Label("Bag", systemImage: "bag") }
+                .tag(AppTab.bag)
         }
         .tint(Theme.gold)
         .font(.of(.body))
