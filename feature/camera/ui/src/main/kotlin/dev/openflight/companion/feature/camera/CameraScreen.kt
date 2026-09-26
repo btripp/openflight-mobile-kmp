@@ -45,13 +45,11 @@ private const val FEED_ASPECT = 4f / 3f
  * The camera screen (plan R8c): the polled preview of the Pi's high-speed camera ([frame], the
  * newest decoded still), the capture settings, and the shots whose captures can be replayed. A
  * prepared replay opens in the system's video player. Stateless: everything comes from
- * [uiState]/[frame] and goes out through [onEvent]. Polish is plan R8f.
+ * [uiState]/[frame] and goes out through [onEvent]/[onBack]. Polish is plan R8f.
  *
- * Plan F1b: Camera is a top-level destination reached through the app shell's bottom bar or rail,
- * which stays on screen here too, so a "Done" button would just duplicate its Home entry. [onBack]
- * is kept for the caller's navigation wiring, even though nothing in this screen calls it today.
+ * Plan F1d: Camera is a pushed route again (from Settings' Device group), with no app bar or rail,
+ * so its "Done" button is back.
  */
-@Suppress("UnusedParameter") // onBack: kept for the caller's navigation wiring, see the KDoc above.
 @Composable
 fun CameraScreen(
     uiState: CameraUiState,
@@ -64,7 +62,19 @@ fun CameraScreen(
     OfScaffold(
         modifier = modifier,
         messages = messages,
-        topBar = { OfTopBar(title = "Camera", eyebrow = "OPENFLIGHT") },
+        topBar = {
+            OfTopBar(
+                title = "Camera",
+                eyebrow = "OPENFLIGHT",
+                actions = {
+                    OfOutlinedButton(
+                        text = "Done",
+                        onClick = onBack,
+                        modifier = Modifier.padding(end = OfSpacing.Sm).testTag(CameraTestTags.DONE),
+                    )
+                },
+            )
+        },
     ) { padding ->
         // Plan F1b: a max readable width, centered, so the cards don't stretch edge to edge on a
         // tablet.

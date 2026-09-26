@@ -190,6 +190,41 @@ object OfIcons {
         }
     }
 
+    /** A dial with its needle: the Practice (live launch monitor) entry of the app navigation (F1d). */
+    val Gauge: ImageVector by lazy {
+        icon("OfGauge") {
+            // The dial: an upper half-ring (outer radius 9, inner 6.5) around (12, 15).
+            moveTo(3f, 15f)
+            arcTo(9f, 9f, 0f, isMoreThanHalf = false, isPositiveArc = true, x1 = 21f, y1 = 15f)
+            lineTo(18.5f, 15f)
+            arcTo(6.5f, 6.5f, 0f, isMoreThanHalf = false, isPositiveArc = false, x1 = 5.5f, y1 = 15f)
+            close()
+            // The needle, from the hub up and to the right.
+            moveTo(11f, 14f)
+            lineTo(15.8f, 8.8f)
+            lineTo(17.2f, 10.2f)
+            lineTo(13f, 16f)
+            close()
+            // The hub.
+            moveTo(10f, 15f)
+            arcTo(2f, 2f, 0f, isMoreThanHalf = true, isPositiveArc = true, x1 = 14f, y1 = 15f)
+            arcTo(2f, 2f, 0f, isMoreThanHalf = true, isPositiveArc = true, x1 = 10f, y1 = 15f)
+            close()
+        }
+    }
+
+    /** Three vertical dots: a top bar's overflow ("more actions") menu (F1d). */
+    val More: ImageVector by lazy {
+        icon("OfMore") {
+            for (y in listOf(5f, 12f, 19f)) {
+                moveTo(10f, y)
+                arcTo(2f, 2f, 0f, isMoreThanHalf = true, isPositiveArc = true, x1 = 14f, y1 = y)
+                arcTo(2f, 2f, 0f, isMoreThanHalf = true, isPositiveArc = true, x1 = 10f, y1 = y)
+                close()
+            }
+        }
+    }
+
     private fun icon(
         name: String,
         pathBuilder: androidx.compose.ui.graphics.vector.PathBuilder.() -> Unit,

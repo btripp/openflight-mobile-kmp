@@ -54,7 +54,6 @@ class BagScreenTest {
         composeRule.setContent {
             OfTheme {
                 BagRoute(
-                    onBack = {},
                     onOpenAnalysis = {},
                     windowClass = OfWindowClass.COMPACT,
                     viewModel = viewModel,
@@ -123,7 +122,6 @@ class BagScreenTest {
                 BagScreen(
                     uiState = state(),
                     onEvent = {},
-                    onBack = {},
                     onOpenAnalysis = {},
                     selectedClub = selected,
                     onSelectClub = { selected = it },
@@ -154,7 +152,6 @@ class BagScreenTest {
                 BagScreen(
                     uiState = state(),
                     onEvent = {},
-                    onBack = {},
                     onOpenAnalysis = {},
                     selectedClub = selected,
                     onSelectClub = { selected = it },
@@ -180,7 +177,6 @@ class BagScreenTest {
         composeRule.setContent {
             OfTheme {
                 BagRoute(
-                    onBack = {},
                     onOpenAnalysis = {},
                     windowClass = OfWindowClass.COMPACT,
                     viewModel = viewModel,

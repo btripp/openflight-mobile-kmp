@@ -64,7 +64,6 @@ import org.koin.androidx.compose.koinViewModel
  */
 @Composable
 fun BagRoute(
-    onBack: () -> Unit,
     onOpenAnalysis: () -> Unit,
     windowClass: OfWindowClass = rememberOfWindowClass(),
     viewModel: BagViewModel = koinViewModel(),
@@ -81,7 +80,6 @@ fun BagRoute(
     BagScreen(
         uiState = uiState,
         onEvent = viewModel::onEvent,
-        onBack = onBack,
         onOpenAnalysis = onOpenAnalysis,
         selectedClub = selectedClub,
         onSelectClub = { selectedClub = it },
@@ -104,7 +102,6 @@ fun BagRoute(
 fun BagScreen(
     uiState: BagUiState,
     onEvent: (BagEvent) -> Unit,
-    onBack: () -> Unit,
     onOpenAnalysis: () -> Unit,
     selectedClub: String?,
     onSelectClub: (String?) -> Unit,
@@ -119,17 +116,8 @@ fun BagScreen(
     OfScaffold(
         modifier = modifier,
         topBar = {
-            OfTopBar(
-                title = "My Bag",
-                eyebrow = "OPENFLIGHT",
-                actions = {
-                    OfOutlinedButton(
-                        text = "Done",
-                        onClick = onBack,
-                        modifier = Modifier.padding(end = OfSpacing.Sm).testTag(BagTestTags.DONE),
-                    )
-                },
-            )
+            // Plan F1d: Bag is a top-level destination (the bar or rail stays on screen), so no Done.
+            OfTopBar(title = "My Bag", eyebrow = "OPENFLIGHT")
         },
     ) { padding ->
         OfListDetailPane(
@@ -460,14 +448,14 @@ private fun previewBag(): BagUiState {
 @Preview(widthDp = 400, heightDp = 800)
 @Composable
 private fun BagPreview() {
-    OfTheme { BagScreen(previewBag(), {}, {}, {}, null, {}, false, {}, windowClass = OfWindowClass.COMPACT) }
+    OfTheme { BagScreen(previewBag(), {}, {}, null, {}, false, {}, windowClass = OfWindowClass.COMPACT) }
 }
 
 @Preview(widthDp = 1280, heightDp = 800)
 @Composable
 private fun BagExpandedPreview() {
     OfTheme {
-        BagScreen(previewBag(), {}, {}, {}, "7-iron", {}, false, {}, windowClass = OfWindowClass.EXPANDED) {
+        BagScreen(previewBag(), {}, {}, "7-iron", {}, false, {}, windowClass = OfWindowClass.EXPANDED) {
             OfText(text = "7-Iron detail", role = OfTextRole.Title)
         }
     }

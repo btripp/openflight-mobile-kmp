@@ -50,4 +50,10 @@ object DashboardTestTags {
 
     /** Android only (plan F1b): the right ("club and connection") column of the expanded layout. */
     const val CONNECTION_COLUMN = "dashboard.connectionColumn"
+
+    /** Plan F1d: the top bar's overflow menu (Android) / "More" menu (iOS). */
+    const val MORE = "dashboard.more"
+
+    /** Plan F1d: the menu entry that pushes swing-speed training. */
+    const val OPEN_TRAINING = "dashboard.openTraining"
 }

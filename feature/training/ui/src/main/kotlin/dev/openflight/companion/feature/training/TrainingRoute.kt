@@ -18,6 +18,7 @@ fun TrainingRoute(
 
 /** Test tags for the Android training screen. */
 object TrainingTestTags {
+    const val DONE = "training.done"
     const val AVAILABILITY = "training.availability"
     const val MODE = "training.mode"
     const val ERROR = "training.error"

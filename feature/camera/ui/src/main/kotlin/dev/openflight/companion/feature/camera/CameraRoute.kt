@@ -69,6 +69,7 @@ internal fun decodeJpeg(jpeg: ByteArray): ImageBitmap? =
 
 /** Test tags for the Android camera screen. */
 object CameraTestTags {
+    const val DONE = "camera.done"
     const val FEED = "camera.feed"
     const val FRAME = "camera.frame"
     const val PHASE_TITLE = "camera.phaseTitle"

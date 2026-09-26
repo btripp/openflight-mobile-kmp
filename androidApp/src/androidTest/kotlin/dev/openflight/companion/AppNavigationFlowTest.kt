@@ -11,6 +11,7 @@ import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
@@ -19,6 +20,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.Density
 import androidx.core.content.IntentCompat
@@ -51,11 +53,13 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /**
- * Plans R5b/R6c: the app's bottom bar reaches Session, Training, Camera and Settings, and the CSV
- * export becomes a `text/csv` share intent. Plan F1a: the bar lives in the app shell and becomes a
- * navigation rail on tablets (the window class is forced, not the device's). Plan F1b: those four
- * screens are top-level, so tapping Home (not a per-screen "Done") returns to the dashboard. Same
- * real app graph and in-memory settings as [DrivingRangeFlowTest].
+ * Plans R5b/R6c: the app's navigation reaches every screen, and the CSV export becomes a `text/csv`
+ * share intent. Plan F1a: the bar lives in the app shell and becomes a navigation rail on tablets
+ * (the window class is forced, not the device's). Plan F1d: the top-level destinations are
+ * Practice · Sessions · Bag · Settings (tapping Practice, not a per-screen "Done", returns to the
+ * dashboard), while Training (Practice's overflow) and Camera (Settings' Device group) are pushed,
+ * hide the bar and come back with their own Done. Same real app graph and in-memory settings as
+ * [DrivingRangeFlowTest].
  */
 @RunWith(AndroidJUnit4::class)
 class AppNavigationFlowTest {
@@ -112,9 +116,8 @@ class AppNavigationFlowTest {
     }
 
     /**
-     * Plan F1b: Session, Training, Camera and Settings are top-level destinations, so the bar/rail
-     * stays on screen there too and their own "Done" button was dropped as redundant with tapping
-     * Home (which is how this returns to the dashboard).
+     * Plans F1b/F1d: Sessions, Bag and Settings are top-level destinations, so the bar/rail stays on
+     * screen there too and they have no "Done" button: tapping Practice returns to the dashboard.
      */
     private fun openAndReturn(
         entry: String,
@@ -124,7 +127,7 @@ class AppNavigationFlowTest {
         composeRule.onNodeWithTag(entry).assertIsDisplayed().performClick()
         composeRule.onNodeWithTag(arrived).assertIsDisplayed()
         check()
-        composeRule.onNodeWithTag(AppNavTags.HOME).performClick()
+        composeRule.onNodeWithTag(AppNavTags.PRACTICE).performClick()
         composeRule.onNodeWithTag(DashboardTestTags.RANGE).assertIsDisplayed()
     }
 
@@ -132,22 +135,73 @@ class AppNavigationFlowTest {
     fun givenThePreviewShot_whenEachBottomBarScreenIsOpenedAndClosed_thenTheDashboardReturns() {
         launch(LaunchOptions(uiTesting = true, previewShot = true))
 
-        openAndReturn(AppNavTags.SESSION, SessionTestTags.SOURCE) {
+        openAndReturn(AppNavTags.SESSIONS, SessionTestTags.SOURCE) {
             // The preview shot is the phone's only shot: no Pi link, so the local source.
             composeRule.onNodeWithTag(SessionTestTags.stat("Shots")).assert(hasContentDescription("Shots, 1"))
         }
-        openAndReturn(AppNavTags.TRAINING, TrainingTestTags.MODE) {
-            composeRule.onNodeWithTag(TrainingTestTags.MODE).assertIsDisplayed()
-        }
-        openAndReturn(AppNavTags.CAMERA, CameraTestTags.FEED) {
-            composeRule.onNodeWithTag(CameraTestTags.FEED).assertIsDisplayed()
-        }
-        openAndReturn(AppNavTags.SETTINGS, SettingsTestTags.UNITS) {
-            composeRule.onNodeWithTag(SettingsTestTags.UNITS).assertIsDisplayed()
-        }
-        openAndReturn(AppNavTags.BAG, BagTestTags.DONE) {
+        openAndReturn(AppNavTags.BAG, BagTestTags.CONDITIONS_CARD) {
             composeRule.onNodeWithTag(BagTestTags.CONDITIONS_CARD).assertIsDisplayed()
         }
+        openAndReturn(AppNavTags.SETTINGS, SettingsTestTags.GROUP_DEVICE) {
+            composeRule.onNodeWithTag(SettingsTestTags.CONNECTION).assertIsDisplayed()
+            composeRule.onNodeWithTag(SettingsTestTags.UNITS).performScrollTo().assertIsDisplayed()
+        }
+    }
+
+    /**
+     * Plan F1d: the same top-level entries, labels and order as iOS's `AppTab`. Today that's four;
+     * F9b/F9c insert Play at index 1 and add it here.
+     */
+    @Test
+    fun given_compact_when_launch_then_topLevelEntriesInOrder() {
+        launch(LaunchOptions(uiTesting = true), OfWindowClass.COMPACT)
+
+        assertEquals(
+            listOf("Practice", "Sessions", "Bag", "Settings"),
+            TopLevelDestination.entries.map { it.label },
+        )
+        val lefts =
+            navEntries.map { (tag, label) ->
+                composeRule
+                    .onNode(hasText(label) and hasAnyAncestor(hasTestTag(tag)), useUnmergedTree = true)
+                    .assertIsDisplayed()
+                composeRule.onNodeWithTag(tag).getUnclippedBoundsInRoot().left
+            }
+        assertEquals(lefts.sorted(), lefts)
+        assertEquals(lefts.size, lefts.distinct().size)
+        composeRule.onNodeWithTag(AppNavTags.PRACTICE).assertIsSelected()
+    }
+
+    /** Plan F1d: Speed training is pushed from Practice's overflow, hides the bar and Done returns. */
+    @Test
+    fun given_practice_when_openTraining_then_doneReturns() {
+        launch(LaunchOptions(uiTesting = true), OfWindowClass.COMPACT)
+
+        composeRule.onNodeWithTag(DashboardTestTags.MORE).performClick()
+        composeRule.onNodeWithTag(DashboardTestTags.OPEN_TRAINING).performClick()
+        composeRule.onNodeWithTag(TrainingTestTags.MODE).assertIsDisplayed()
+        composeRule.onAllNodesWithTag(OfAdaptiveScaffoldTags.BOTTOM_BAR).assertCountEquals(0)
+
+        composeRule.onNodeWithTag(TrainingTestTags.DONE).performClick()
+        composeRule.onNodeWithTag(DashboardTestTags.RANGE).assertIsDisplayed()
+        composeRule.onNodeWithTag(OfAdaptiveScaffoldTags.BOTTOM_BAR).assertIsDisplayed()
+        composeRule.onNodeWithTag(AppNavTags.PRACTICE).assertIsSelected()
+    }
+
+    /** Plan F1d: Camera is pushed from Settings' Device group, hides the bar and Done returns. */
+    @Test
+    fun given_settings_when_tapCamera_then_cameraPushedAndBarHidden() {
+        launch(LaunchOptions(uiTesting = true, previewShot = true), OfWindowClass.COMPACT)
+
+        composeRule.onNodeWithTag(AppNavTags.SETTINGS).performClick()
+        composeRule.onNodeWithTag(SettingsTestTags.OPEN_CAMERA).performScrollTo().performClick()
+        composeRule.onNodeWithTag(CameraTestTags.FEED).assertIsDisplayed()
+        composeRule.onAllNodesWithTag(OfAdaptiveScaffoldTags.BOTTOM_BAR).assertCountEquals(0)
+
+        composeRule.onNodeWithTag(CameraTestTags.DONE).performClick()
+        composeRule.onNodeWithTag(SettingsTestTags.OPEN_CAMERA).assertExists()
+        composeRule.onNodeWithTag(OfAdaptiveScaffoldTags.BOTTOM_BAR).assertIsDisplayed()
+        composeRule.onNodeWithTag(AppNavTags.SETTINGS).assertIsSelected()
     }
 
     /**
@@ -175,10 +229,9 @@ class AppNavigationFlowTest {
 
     private val navEntries =
         arrayOf(
-            AppNavTags.HOME to "Home",
-            AppNavTags.SESSION to "Session",
-            AppNavTags.TRAINING to "Training",
-            AppNavTags.CAMERA to "Camera",
+            AppNavTags.PRACTICE to "Practice",
+            AppNavTags.SESSIONS to "Sessions",
+            AppNavTags.BAG to "Bag",
             AppNavTags.SETTINGS to "Settings",
         )
 
@@ -202,7 +255,7 @@ class AppNavigationFlowTest {
 
         composeRule.onNodeWithTag(OfAdaptiveScaffoldTags.BOTTOM_BAR).assertIsDisplayed()
         composeRule.onAllNodesWithTag(OfAdaptiveScaffoldTags.RAIL).assertCountEquals(0)
-        composeRule.onNodeWithTag(AppNavTags.HOME).assertIsSelected()
+        composeRule.onNodeWithTag(AppNavTags.PRACTICE).assertIsSelected()
     }
 
     @Test
@@ -211,7 +264,7 @@ class AppNavigationFlowTest {
 
         composeRule.onNodeWithTag(OfAdaptiveScaffoldTags.RAIL).assertIsDisplayed()
         composeRule.onAllNodesWithTag(OfAdaptiveScaffoldTags.BOTTOM_BAR).assertCountEquals(0)
-        composeRule.onNodeWithTag(AppNavTags.HOME).assertIsSelected()
+        composeRule.onNodeWithTag(AppNavTags.PRACTICE).assertIsSelected()
         composeRule.onNodeWithTag(DashboardTestTags.RANGE).assertIsDisplayed()
     }
 
@@ -220,17 +273,15 @@ class AppNavigationFlowTest {
         launch(LaunchOptions(uiTesting = true, previewShot = true), OfWindowClass.EXPANDED)
 
         for ((entry, screen) in listOf(
-            AppNavTags.SESSION to SessionTestTags.SOURCE,
-            AppNavTags.TRAINING to TrainingTestTags.MODE,
-            AppNavTags.CAMERA to CameraTestTags.FEED,
-            AppNavTags.SETTINGS to SettingsTestTags.UNITS,
-            AppNavTags.BAG to BagTestTags.DONE,
+            AppNavTags.SESSIONS to SessionTestTags.SOURCE,
+            AppNavTags.BAG to BagTestTags.CONDITIONS_CARD,
+            AppNavTags.SETTINGS to SettingsTestTags.CONNECTION,
         )) {
             composeRule.onNodeWithTag(entry).performClick()
             composeRule.onNodeWithTag(screen).assertIsDisplayed()
             composeRule.onNodeWithTag(entry).assertIsSelected()
         }
-        composeRule.onNodeWithTag(AppNavTags.HOME).performClick()
+        composeRule.onNodeWithTag(AppNavTags.PRACTICE).performClick()
         composeRule.onNodeWithTag(DashboardTestTags.RANGE).assertIsDisplayed()
     }
 

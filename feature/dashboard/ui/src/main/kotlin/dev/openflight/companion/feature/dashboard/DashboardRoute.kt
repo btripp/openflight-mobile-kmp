@@ -26,6 +26,7 @@ import org.koin.androidx.compose.koinViewModel
 fun DashboardRoute(
     onOpenCalibration: () -> Unit,
     onOpenRange: () -> Unit,
+    onOpenTraining: (() -> Unit)? = null,
     transportPermissionRequest: @Composable (transport: TransportType, onResult: (granted: Boolean) -> Unit) -> Unit =
         { _, _ -> },
     viewModel: DashboardViewModel = koinViewModel(),
@@ -59,5 +60,6 @@ fun DashboardRoute(
         onEvent = viewModel::onEvent,
         onOpenCalibration = onOpenCalibration,
         onOpenRange = onOpenRange,
+        onOpenTraining = onOpenTraining,
     )
 }

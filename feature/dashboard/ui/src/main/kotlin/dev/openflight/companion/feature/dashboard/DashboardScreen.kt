@@ -31,9 +31,11 @@ import dev.openflight.companion.core.designsystem.OfCard
 import dev.openflight.companion.core.designsystem.OfColorTokens
 import dev.openflight.companion.core.designsystem.OfDropdownMenu
 import dev.openflight.companion.core.designsystem.OfListDetailPane
+import dev.openflight.companion.core.designsystem.OfMenuItem
 import dev.openflight.companion.core.designsystem.OfMetricDetail
 import dev.openflight.companion.core.designsystem.OfMetricPrimary
 import dev.openflight.companion.core.designsystem.OfOutlinedButton
+import dev.openflight.companion.core.designsystem.OfOverflowMenu
 import dev.openflight.companion.core.designsystem.OfScaffold
 import dev.openflight.companion.core.designsystem.OfSegmentedPicker
 import dev.openflight.companion.core.designsystem.OfSpacing
@@ -57,8 +59,9 @@ import dev.openflight.companion.core.model.GolfClub
  *
  * Plans R5b/R6c add the per-club chips, units, the Pi's confidence badges/carry range/player, and the gold shot-flash,
  * which replays whenever [shotFlashes] changes (the route bumps it on `DashboardEffect.NewShot`).
- * Session, Training, Camera and Settings are reached from the app shell's bottom bar or rail
- * (plan F1a), not from here.
+ * Sessions, Bag and Settings are reached from the app shell's bottom bar or rail (plans F1a/F1d).
+ * Plan F1d: this is the Practice destination, and its top-bar overflow pushes swing-speed training
+ * ([onOpenTraining]; no menu when it's null).
  *
  * @param windowClass injectable for tests and previews; defaults to [rememberOfWindowClass]. On an
  *   [OfWindowClass.EXPANDED] window the live metrics and the connection/club card sit side by side
@@ -73,6 +76,7 @@ fun DashboardScreen(
     modifier: Modifier = Modifier,
     shotFlashes: Int = 0,
     windowClass: OfWindowClass = rememberOfWindowClass(),
+    onOpenTraining: (() -> Unit)? = null,
 ) {
     OfScaffold(
         modifier = modifier,
@@ -86,6 +90,20 @@ fun DashboardScreen(
                         onClick = onOpenRange,
                         modifier = Modifier.padding(end = OfSpacing.Sm).testTag(DashboardTestTags.RANGE),
                     )
+                    // Plan F1d: Training is a pushed route now, reached from Practice's overflow.
+                    if (onOpenTraining != null) {
+                        OfOverflowMenu(
+                            items =
+                                listOf(
+                                    OfMenuItem(
+                                        label = "Speed training",
+                                        onClick = onOpenTraining,
+                                        testTag = DashboardTestTags.OPEN_TRAINING,
+                                    ),
+                                ),
+                            modifier = Modifier.testTag(DashboardTestTags.MORE),
+                        )
+                    }
                 },
             )
         },

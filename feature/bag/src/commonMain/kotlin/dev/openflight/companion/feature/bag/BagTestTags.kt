@@ -3,7 +3,6 @@ package dev.openflight.companion.feature.bag
 
 /** Test tags (Android) and accessibility identifiers (iOS) for the bag screens (plan F5). */
 object BagTestTags {
-    const val DONE = "bag.done"
     const val LIST = "bag.list"
     const val BAG_NAME = "bag.name"
     const val EDIT_TOGGLE = "bag.edit"

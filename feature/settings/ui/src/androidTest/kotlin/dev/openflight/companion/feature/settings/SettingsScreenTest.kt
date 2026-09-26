@@ -5,6 +5,7 @@ import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
@@ -41,7 +42,7 @@ class SettingsScreenTest {
     fun whenMetricIsPicked_thenTheUnitsAreSaved() {
         show(previewSettingsState())
 
-        composeRule.onNodeWithText("Metric (km/h, m)").performClick()
+        composeRule.onNodeWithText("Metric (km/h, m)").performScrollTo().performClick()
 
         assertEquals(listOf<SettingsEvent>(SettingsEvent.SetUnits(UnitSystem.METRIC)), events)
     }
@@ -197,6 +198,56 @@ class SettingsScreenTest {
         composeRule.onNodeWithTag(SettingsTestTags.SHUTDOWN_RETRY).performScrollTo().performClick()
 
         assertEquals(listOf<SettingsEvent>(SettingsEvent.RetryShutdown), events)
+    }
+
+    /** Plan F1d: Device, then Practice, then Data, top to bottom, each holding its own cards. */
+    @Test
+    fun whenShown_thenTheDevicePracticeAndDataGroupsAreInOrder() {
+        show(previewSettingsState())
+
+        val top = { tag: String -> composeRule.onNodeWithTag(tag).getUnclippedBoundsInRoot().top }
+        val order =
+            listOf(
+                SettingsTestTags.GROUP_DEVICE,
+                SettingsTestTags.CONNECTION,
+                SettingsTestTags.RADAR,
+                SettingsTestTags.SHUTDOWN,
+                SettingsTestTags.GROUP_PRACTICE,
+                SettingsTestTags.UNITS,
+                SettingsTestTags.CALLOUTS,
+                SettingsTestTags.GROUP_DATA,
+                SettingsTestTags.CLOUD_UPLOAD,
+            ).map(top)
+        assertEquals(order.sorted(), order)
+    }
+
+    @Test
+    fun givenTheDeviceEntries_whenCalibrateAndCameraAreTapped_thenEachOpens() {
+        val opened = mutableListOf<String>()
+        composeRule.setContent {
+            OfTheme {
+                SettingsScreen(
+                    uiState = previewSettingsState(),
+                    onEvent = {},
+                    onBack = {},
+                    onOpenCalibration = { opened += "calibration" },
+                    onOpenCamera = { opened += "camera" },
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag(SettingsTestTags.OPEN_CALIBRATION).performScrollTo().performClick()
+        composeRule.onNodeWithTag(SettingsTestTags.OPEN_CAMERA).performScrollTo().performClick()
+
+        assertEquals(listOf("calibration", "camera"), opened)
+    }
+
+    @Test
+    fun givenNoDeviceEntries_whenShown_thenNeitherRowShows() {
+        show(previewSettingsState())
+
+        composeRule.onAllNodes(hasTestTag(SettingsTestTags.OPEN_CALIBRATION)).assertCountEquals(0)
+        composeRule.onAllNodes(hasTestTag(SettingsTestTags.OPEN_CAMERA)).assertCountEquals(0)
     }
 
     private companion object {

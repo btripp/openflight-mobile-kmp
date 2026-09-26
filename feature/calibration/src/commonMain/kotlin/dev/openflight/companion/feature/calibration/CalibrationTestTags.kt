@@ -12,4 +12,7 @@ object CalibrationTestTags {
     const val APPLIED_RESULT = "calibration.appliedResult"
     const val SUBMIT_ERROR = "calibration.submitError"
     const val MOTION_UNAVAILABLE = "calibration.motionUnavailable"
+
+    /** Plan F1d: the pushed screen's Done (iOS already used this identifier). */
+    const val DONE = "calibration.done"
 }

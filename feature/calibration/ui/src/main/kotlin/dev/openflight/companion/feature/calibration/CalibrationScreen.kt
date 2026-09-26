@@ -56,7 +56,13 @@ fun CalibrationScreen(
             OfTopBar(
                 title = "Calibrate TI Radar",
                 eyebrow = "OPENFLIGHT",
-                actions = { OfOutlinedButton(text = "Done", onClick = onBack) },
+                actions = {
+                    OfOutlinedButton(
+                        text = "Done",
+                        onClick = onBack,
+                        modifier = Modifier.testTag(CalibrationTestTags.DONE),
+                    )
+                },
             )
         },
     ) { padding ->

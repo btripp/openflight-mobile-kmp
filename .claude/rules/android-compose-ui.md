@@ -36,5 +36,10 @@ paths:
   on compact, rail on medium/expanded). Feature screens never draw their own app navigation bar.
   A new top-level destination is a `TopLevelDestination` entry; anything else is a pushed route
   and hides the bar/rail.
+- Plan F1d: the top level is Practice · (Play, F9) · Sessions · Bag · Settings, the same labels and
+  order as iOS's `AppTab`; keep it at five at most (no Material "More"). Top-level screens have no
+  Done button; pushed ones (Range, Calibrate, Training, Camera, history) do. A secondary screen
+  gets an entry point on its parent instead (a nullable `onOpen*` lambda, e.g. Practice's overflow
+  "Speed training", Settings' Device "Calibrate radar"/"Camera").
 - Every new screen needs a tablet device test (force `OfWindowClass.EXPANDED`, don't depend on
   the emulator's size) plus a `@Preview(widthDp = 1280, heightDp = 800)` next to the phone one.
