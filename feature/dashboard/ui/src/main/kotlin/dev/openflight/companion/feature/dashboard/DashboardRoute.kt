@@ -30,6 +30,7 @@ fun DashboardRoute(
     transportPermissionRequest: @Composable (transport: TransportType, onResult: (granted: Boolean) -> Unit) -> Unit =
         { _, _ -> },
     viewModel: DashboardViewModel = koinViewModel(),
+    onViewOnRange: ((eventId: String) -> Unit)? = null,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val transport by viewModel.selectedTransport.collectAsStateWithLifecycle()
@@ -61,5 +62,6 @@ fun DashboardRoute(
         onOpenCalibration = onOpenCalibration,
         onOpenRange = onOpenRange,
         onOpenTraining = onOpenTraining,
+        onViewOnRange = onViewOnRange,
     )
 }

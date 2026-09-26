@@ -17,6 +17,7 @@ import assertk.assertions.isTrue
 import dev.openflight.companion.core.flight.FlightInput
 import dev.openflight.companion.core.flight.FlightTrajectory
 import dev.openflight.companion.core.testing.FakeConditionsRepository
+import dev.openflight.companion.core.testing.FakePiSessionRepository
 import dev.openflight.companion.core.testing.FakeShotHistoryRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -38,6 +39,7 @@ class RangeReplayViewModelTest {
     private val scheduler = TestCoroutineScheduler()
     private val settings = FakeSettingsRepository()
     private val history = FakeShotHistoryRepository()
+    private val piSession = FakePiSessionRepository()
     private val simulated = mutableListOf<String>()
 
     @BeforeTest
@@ -56,6 +58,7 @@ class RangeReplayViewModelTest {
             settings = settings,
             history = history,
             conditions = FakeConditionsRepository(),
+            piSession = piSession,
             simulation = ::countingSimulation,
             computeDispatcher = StandardTestDispatcher(scheduler),
             distanceEstimate = { _, _, _ -> null },
@@ -324,6 +327,7 @@ class RangeReplayViewModelTest {
                     settings = settings,
                     history = history,
                     conditions = FakeConditionsRepository(),
+                    piSession = piSession,
                     simulation = ::makeTestTrajectory,
                     computeDispatcher = StandardTestDispatcher(scheduler),
                 )

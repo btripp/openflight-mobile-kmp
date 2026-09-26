@@ -270,12 +270,23 @@ internal fun BrowseChips(
 ) {
     val browse = uiState.browse
     val rollOut = uiState.rollOut?.takeIf { uiState.phase == RangePhase.Landed || uiState.phase == RangePhase.Waiting }
-    if (!browse.newLiveShot && !browse.userTransformed && rollOut == null) return
+    val simulateError = uiState.simulateError
+    val hasChip = browse.newLiveShot || browse.userTransformed || rollOut != null
+    val hasSimulate = uiState.canSimulate || simulateError != null
+    if (!hasChip && !hasSimulate) return
     FlowRow(
         modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(OfSpacing.Sm, Alignment.End),
         verticalArrangement = Arrangement.spacedBy(OfSpacing.Xs),
     ) {
+        simulateError?.let { error ->
+            OfText(
+                text = "⚠ $error",
+                role = OfTextRole.BodySmall,
+                color = OfColorTokens.Danger,
+                modifier = Modifier.align(Alignment.CenterVertically).testTag(RangeTestTags.SIMULATE_ERROR),
+            )
+        }
         if (browse.newLiveShot) {
             OfChip(
                 label = "New shot · Return to live",
@@ -296,6 +307,16 @@ internal fun BrowseChips(
         if (rollOut != null) {
             OfChip(label = rollOutSummary(rollOut), modifier = Modifier.testTag(RangeTestTags.ROLL_OUT))
         }
+        // Plan F8d: a `--mock` Pi over Wi-Fi flies a new simulated shot through the live path. Last,
+        // so it stays at the row's end while the other chips come and go.
+        if (uiState.canSimulate) {
+            OfOutlinedButton(
+                text = "Simulate shot",
+                onClick = { onEvent(DrivingRangeEvent.SimulateShot) },
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                modifier = Modifier.background(ChipBackground, PillShape).testTag(RangeTestTags.SIMULATE),
+            )
+        }
     }
 }
 
@@ -307,3 +328,5 @@ internal fun rollOutSummary(rollOut: RangeRollOut): String =
 private val BarBackground = Color.Black.copy(alpha = 0.62f)
 private val BarShape = RoundedCornerShape(18.dp)
 private val RowShape = RoundedCornerShape(10.dp)
+private val ChipBackground = Color.Black.copy(alpha = 0.6f)
+private val PillShape = RoundedCornerShape(percent = 50)

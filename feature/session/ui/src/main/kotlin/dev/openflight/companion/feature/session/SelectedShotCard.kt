@@ -30,7 +30,8 @@ import dev.openflight.companion.core.model.ShotMetricFormatter
  * The card for the selected shot: its number and club, then carry, spin and club speed. Delete
  * removes the shot straight from here (like swiping its row), so a bad reading spotted on the
  * chart doesn't have to be hunted down in the list. When editing is off ([deletable] false: over
- * Bluetooth, plan R8e) Delete stays visible but disabled; the actions row says why.
+ * Bluetooth, plan R8e) Delete stays visible but disabled; the actions row says why. With
+ * [onViewOnRange] (plan F8d) a "Range" action opens the driving range on this shot.
  */
 @Composable
 internal fun SelectedShotCardView(
@@ -40,6 +41,7 @@ internal fun SelectedShotCardView(
     onDelete: () -> Unit,
     modifier: Modifier = Modifier,
     deletable: Boolean = true,
+    onViewOnRange: (() -> Unit)? = null,
 ) {
     OfCard(modifier = modifier.testTag(SessionTestTags.SELECTED), elevated = true) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -49,6 +51,14 @@ internal fun SelectedShotCardView(
                 modifier = Modifier.weight(1f),
                 maxLines = 2,
             )
+            // Plan F8d: fly this shot on the range, paused on it.
+            if (onViewOnRange != null) {
+                OfTextButton(
+                    text = "Range",
+                    onClick = onViewOnRange,
+                    modifier = Modifier.testTag(SessionTestTags.SELECTED_VIEW_ON_RANGE),
+                )
+            }
             OfTextButton(
                 text = "Delete",
                 onClick = onDelete,

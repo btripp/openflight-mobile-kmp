@@ -15,6 +15,7 @@ import org.koin.androidx.compose.koinViewModel
  *
  * @param onShareCsv hands a finished export ([SessionEffect.CsvReady]) to the platform share sheet.
  *   The app shell supplies it, since only the app owns a `FileProvider` authority.
+ * @param onViewOnRange plan F8d: opens the driving range on a shot, by its [SessionShotRow.id].
  */
 @Composable
 fun SessionRoute(
@@ -22,6 +23,7 @@ fun SessionRoute(
     onShareCsv: (csv: String, filename: String) -> Unit,
     onOpenHistory: (() -> Unit)? = null,
     viewModel: SessionViewModel = koinViewModel(),
+    onViewOnRange: ((shotId: String) -> Unit)? = null,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val messages = rememberOfMessageHostState()
@@ -40,5 +42,6 @@ fun SessionRoute(
         onBack = onBack,
         messages = messages,
         onOpenHistory = onOpenHistory,
+        onViewOnRange = onViewOnRange,
     )
 }

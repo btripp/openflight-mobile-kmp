@@ -23,6 +23,7 @@ import dev.openflight.companion.core.designsystem.OfWindowClass
 import dev.openflight.companion.core.model.ShotEvent
 import dev.openflight.companion.core.model.pi.ShotDetail
 import dev.openflight.companion.core.testing.FakeConditionsRepository
+import dev.openflight.companion.core.testing.FakePiSessionRepository
 import dev.openflight.companion.core.testing.FakeSettingsRepository
 import dev.openflight.companion.core.testing.FakeShotHistoryRepository
 import dev.openflight.companion.core.testing.FakeShotRepository
@@ -39,6 +40,7 @@ class RangeReplayTest {
     val composeRule = createAndroidComposeRule<ComponentActivity>()
 
     private val history = FakeShotHistoryRepository()
+    private val piSession = FakePiSessionRepository()
     private val shots = FakeShotRepository()
 
     private fun setRange(
@@ -50,7 +52,13 @@ class RangeReplayTest {
             OfTheme {
                 val viewModel =
                     remember {
-                        DrivingRangeViewModel(shots, FakeSettingsRepository(), history, FakeConditionsRepository())
+                        DrivingRangeViewModel(
+                            shots,
+                            FakeSettingsRepository(),
+                            history,
+                            FakeConditionsRepository(),
+                            piSession,
+                        )
                     }
                 created = viewModel
                 DrivingRangeRoute(

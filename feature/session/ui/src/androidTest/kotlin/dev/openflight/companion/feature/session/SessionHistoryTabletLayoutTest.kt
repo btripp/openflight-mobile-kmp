@@ -31,6 +31,7 @@ import org.koin.core.Koin
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
 import org.koin.dsl.module
+import kotlin.test.assertEquals
 
 /**
  * Plan F1b: on an expanded window, [SessionHistoryRoute] opens a tapped session in a docked detail
@@ -48,7 +49,11 @@ class SessionHistoryTabletLayoutTest {
     private lateinit var koin: Koin
 
     @Suppress("DEPRECATION") // KoinContext: see AppNavigationFlowTest for why it's still needed here.
-    private fun show(windowClass: OfWindowClass) {
+    private fun show(
+        windowClass: OfWindowClass,
+        onReplayOnRange: ((String) -> Unit)? = null,
+        onViewOnRange: ((String, String) -> Unit)? = null,
+    ) {
         composeRule.setContent {
             KoinContext(koin) {
                 OfTheme {
@@ -57,6 +62,8 @@ class SessionHistoryTabletLayoutTest {
                         onOpenSession = {},
                         onShareCsv = { _, _ -> },
                         windowClass = windowClass,
+                        onReplayOnRange = onReplayOnRange,
+                        onViewOnRange = onViewOnRange,
                     )
                 }
             }
@@ -107,6 +114,31 @@ class SessionHistoryTabletLayoutTest {
         // Closing the pane goes back to the placeholder, not a pushed screen.
         composeRule.onNodeWithTag(SessionHistoryTestTags.DETAIL_BACK).performClick()
         composeRule.onNodeWithTag(SessionHistoryTestTags.DETAIL_EMPTY).assertIsDisplayed()
+    }
+
+    /** Plan F8d: the docked pane's rows open the range on their shot, and it keeps "Replay on range". */
+    @Test
+    fun given_expandedPane_when_rowRangeOrReplayTapped_then_theRangeOpensOnTheSessionOrShot() {
+        val viewed = mutableListOf<Pair<String, String>>()
+        val replayed = mutableListOf<String>()
+        show(OfWindowClass.EXPANDED, onReplayOnRange = { replayed += it }, onViewOnRange = {
+            s,
+            id,
+            ->
+            viewed += s to id
+        })
+
+        composeRule.onNodeWithTag(SessionHistoryTestTags.session("s1")).performClick()
+        composeRule.onNodeWithTag(SessionHistoryTestTags.DETAIL_PANE).assertIsDisplayed()
+        val paneList = hasScrollToNodeAction() and hasAnyAncestor(hasTestTag(SessionHistoryTestTags.DETAIL_PANE))
+        composeRule.onNode(paneList).performScrollToNode(hasTestTag(SessionHistoryTestTags.DETAIL_REPLAY_ON_RANGE))
+        composeRule.onNodeWithTag(SessionHistoryTestTags.DETAIL_REPLAY_ON_RANGE).performClick()
+        val row = SessionTestTags.viewOnRange("2026-09-25T10:03:00")
+        composeRule.onNode(paneList).performScrollToNode(hasTestTag(row))
+        composeRule.onNodeWithTag(row).performClick()
+
+        assertEquals(listOf("s1"), replayed)
+        assertEquals(listOf("s1" to "2026-09-25T10:03:00"), viewed)
     }
 
     @Test

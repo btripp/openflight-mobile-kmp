@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dev.openflight.companion.core.data.ConditionsRepository
 import dev.openflight.companion.core.data.HistoryShot
+import dev.openflight.companion.core.data.PiSessionRepository
 import dev.openflight.companion.core.data.RangeCameraMode
 import dev.openflight.companion.core.data.SettingsRepository
 import dev.openflight.companion.core.data.ShotHistoryRepository
@@ -23,6 +24,7 @@ import dev.openflight.companion.core.model.ConnectionState
 import dev.openflight.companion.core.model.GolfClub
 import dev.openflight.companion.core.model.ShotEvent
 import dev.openflight.companion.core.model.TargetBearing
+import dev.openflight.companion.core.model.pi.PiFeatureAvailability
 import dev.openflight.companion.core.model.pi.ShotDetail
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
@@ -68,6 +70,7 @@ class DrivingRangeViewModel(
     private val settings: SettingsRepository,
     private val history: ShotHistoryRepository,
     private val conditions: ConditionsRepository,
+    private val piSession: PiSessionRepository,
     private val resolver: FlightInputResolver = FlightInputResolver(),
     private val simulation: (FlightInput) -> FlightTrajectory = BallFlightSimulator()::simulate,
     private val computeDispatcher: CoroutineDispatcher = Dispatchers.Default,
@@ -113,11 +116,20 @@ class DrivingRangeViewModel(
     /** Overlay trajectories by stored row id (`null`: the shot can't be simulated). Main thread only. */
     private val overlayCache = mutableMapOf<Long, FlightTrajectory?>()
 
+    /** Plan F8d: why the last simulate request failed. */
+    private val simulateError = MutableStateFlow<String?>(null)
+
+    /** Session's and Games' rule: only a `--mock` Pi over a connected Socket.IO link simulates. */
+    private val simulate =
+        combine(piSession.mockMode, piSession.linkState, simulateError) { mock, link, error ->
+            SimulateState(available = mock == true && PiFeatureAvailability.of(link).isAvailable, error = error)
+        }
+
     val uiState: StateFlow<DrivingRangeUiState> =
-        combine(flight, clubState, camera, browse) { flight, club, camera, browse ->
+        combine(flight, clubState, camera, browse, simulate) { flight, club, camera, browse, simulate ->
             val shot = flight.displayedShot
             if (shot == null) {
-                DrivingRangeUiState.Ready(club, camera, browse)
+                DrivingRangeUiState.Ready(club, camera, browse, simulate.available, simulate.error)
             } else {
                 DrivingRangeUiState.Showing(
                     shot,
@@ -127,6 +139,8 @@ class DrivingRangeViewModel(
                     camera,
                     browse,
                     flight.rollOut,
+                    simulate.available,
+                    simulate.error,
                 )
             }
         }.stateIn(
@@ -151,6 +165,8 @@ class DrivingRangeViewModel(
             is DrivingRangeEvent.ClubSelected -> changeClub(event.club)
             DrivingRangeEvent.ToggleCameraMode -> toggleCameraMode()
             is DrivingRangeEvent.ReduceMotionChanged -> reduceMotion.value = event.enabled
+            is DrivingRangeEvent.Launch -> launch(event.launch)
+            DrivingRangeEvent.SimulateShot -> simulateShot()
             else -> onBrowseEvent(event)
         }
     }
@@ -301,16 +317,21 @@ class DrivingRangeViewModel(
         }
     }
 
+    /**
+     * Replays session [sessionId] from shot [index], playing; or, with a [shotId] (plan F8d),
+     * paused on that shot, looked up in every stored session when [sessionId] doesn't hold it.
+     */
     private fun startReplay(
         sessionId: String,
         index: Int,
+        shotId: String? = null,
     ) {
         leaveLive()
         browse.update {
             it.copy(
                 mode = RangeMode.Replay(sessionId, index),
                 loading = true,
-                playing = true,
+                playing = shotId == null,
                 shots = emptyList(),
                 selectedShotId = null,
                 overlayFlights = emptyList(),
@@ -322,23 +343,73 @@ class DrivingRangeViewModel(
         flight.value = FlightState(RangePhase.Waiting, displayedShot = null)
         browseJob =
             viewModelScope.launch {
-                // Oldest first: the order the session was hit in.
-                val stored =
-                    history
-                        .shots(sessionId)
-                        .first()
-                        .filter { it.toRangeShotEvent() != null }
-                        .sortedWith(compareBy<HistoryShot>({ it.detail.timestamp }, { it.id }))
+                var session = sessionId
+                var stored = replayableShots(sessionId)
+                var start = index
+                if (shotId != null) {
+                    start = stored.indexOfLaunchShot(shotId)
+                    if (start < 0) {
+                        findStoredShot(shotId, except = sessionId)?.let { (otherSession, otherShots) ->
+                            session = otherSession
+                            stored = otherShots
+                            start = otherShots.indexOfLaunchShot(shotId)
+                        }
+                    }
+                }
                 replayShots = stored
                 browse.update {
-                    it.copy(loading = false, shots = stored.mapIndexed { i, shot -> shot.toRangeShotItem(i + 1) })
+                    it.copy(
+                        mode = RangeMode.Replay(session, index),
+                        loading = false,
+                        shots = stored.mapIndexed { i, shot -> shot.toRangeShotItem(i + 1) },
+                    )
                 }
                 if (stored.isEmpty()) {
                     browse.update { it.copy(playing = false) }
                 } else {
-                    showReplayShot(index.coerceIn(0, stored.lastIndex))
+                    showReplayShot(start.coerceIn(0, stored.lastIndex))
                 }
             }
+    }
+
+    /** Session [sessionId]'s flyable shots, oldest first: the order the session was hit in. */
+    private suspend fun replayableShots(sessionId: String): List<HistoryShot> =
+        history
+            .shots(sessionId)
+            .first()
+            .filter { it.toRangeShotEvent() != null }
+            .sortedWith(compareBy<HistoryShot>({ it.detail.timestamp }, { it.id }))
+
+    /** The newest stored session (other than [except]) holding [shotId], with its replayable shots. */
+    private suspend fun findStoredShot(
+        shotId: String,
+        except: String,
+    ): Pair<String, List<HistoryShot>>? {
+        for (candidate in history.sessions(includeImported = true).first()) {
+            if (candidate.id == except) continue
+            val shots = replayableShots(candidate.id)
+            if (shots.indexOfLaunchShot(shotId) >= 0) return candidate.id to shots
+        }
+        return null
+    }
+
+    /** Plan F8d: "View on range" opens paused on the shot; without one it replays from the start. */
+    private fun launch(launch: RangeLaunch) {
+        startReplay(launch.sessionId, index = 0, shotId = launch.shotId)
+    }
+
+    @Suppress("TooGenericExceptionCaught") // Any failure is shown on the range, like Session's message.
+    private fun simulateShot() {
+        simulateError.value = null
+        viewModelScope.launch {
+            try {
+                piSession.simulateShot()
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (failure: Exception) {
+                simulateError.value = failure.message ?: SIMULATE_FAILED
+            }
+        }
     }
 
     /** Shows and flies replay shot [index]. */
@@ -569,10 +640,16 @@ class DrivingRangeViewModel(
         val error: String? = null,
     )
 
+    private data class SimulateState(
+        val available: Boolean,
+        val error: String?,
+    )
+
     companion object {
         /** How long the landed ball stays on screen before the next shot (DrivingRangeViewModel.swift). */
         const val LANDING_DWELL_MILLIS = 1_250L
         const val CLUB_CHANGE_FAILED = "Couldn't change the club."
+        const val SIMULATE_FAILED = "Couldn't simulate a shot."
         private const val STOP_TIMEOUT_MILLIS = 5_000L
     }
 }
