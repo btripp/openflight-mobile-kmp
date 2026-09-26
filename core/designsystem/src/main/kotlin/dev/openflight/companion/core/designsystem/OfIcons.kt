@@ -168,6 +168,28 @@ object OfIcons {
         }
     }
 
+    /** A golf bag with three club heads: the bag (My Bag, club analysis) entry (plan F5). */
+    val Bag: ImageVector by lazy {
+        icon("OfBag") {
+            // Three shafts with their heads.
+            for (x in listOf(8f, 12f, 16f)) {
+                moveTo(x - 0.75f, 3.5f)
+                lineTo(x + 1.75f, 2.5f)
+                lineTo(x + 1.75f, 4.5f)
+                lineTo(x + 0.75f, 4.5f)
+                lineTo(x + 0.75f, 8f)
+                lineTo(x - 0.75f, 8f)
+                close()
+            }
+            // The bag body.
+            moveTo(6f, 8f)
+            lineTo(18f, 8f)
+            lineTo(17f, 21f)
+            lineTo(7f, 21f)
+            close()
+        }
+    }
+
     private fun icon(
         name: String,
         pathBuilder: androidx.compose.ui.graphics.vector.PathBuilder.() -> Unit,

@@ -3,6 +3,9 @@ package dev.openflight.companion
 
 import dev.openflight.companion.core.data.AppLifecycle
 import dev.openflight.companion.core.data.ShotRepository
+import dev.openflight.companion.feature.bag.BagViewModel
+import dev.openflight.companion.feature.bag.ClubAnalysisViewModel
+import dev.openflight.companion.feature.bag.ClubDetailViewModel
 import dev.openflight.companion.feature.calibration.CalibrationViewModel
 import dev.openflight.companion.feature.camera.CameraViewModel
 import dev.openflight.companion.feature.dashboard.DashboardViewModel
@@ -77,4 +80,13 @@ class KoinHelper : KoinComponent {
     fun cameraViewModel(): CameraViewModel = get()
 
     fun settingsViewModel(): SettingsViewModel = get()
+
+    /** Plan F5: My Bag. */
+    fun bagViewModel(): BagViewModel = get()
+
+    /** Plan F5: Club Analysis. */
+    fun clubAnalysisViewModel(): ClubAnalysisViewModel = get()
+
+    /** Plan F5: one club's detail, by its wire value (e.g. "7-iron"). */
+    fun clubDetailViewModel(wireValue: String): ClubDetailViewModel = get { parametersOf(wireValue) }
 }
