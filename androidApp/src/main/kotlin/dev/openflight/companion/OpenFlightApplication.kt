@@ -14,5 +14,11 @@ class OpenFlightApplication : Application() {
         initKoin {
             androidContext(this@OpenFlightApplication)
         }
+        // Plan F7: the shot call-out coordinator starts from OpenFlightApp's AppLifecycleSource,
+        // not here — same reason LifecycleConnectionPolicy does: starting it here would eagerly
+        // build its ConditionsRepository (SharingStarted.Eagerly) against the real settings
+        // DataStore before a debug launch hook or an instrumented test gets to replace it,
+        // and a later stopKoin()+initKoin() in the same process (the app flow tests' pattern)
+        // would then collide with that still-open DataStore file.
     }
 }

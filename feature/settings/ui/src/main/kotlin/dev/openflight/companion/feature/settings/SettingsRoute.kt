@@ -6,6 +6,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.openflight.companion.core.designsystem.rememberOfMessageHostState
+import dev.openflight.companion.core.insights.CalloutField
 import org.koin.androidx.compose.koinViewModel
 
 /** The settings destination: owns the [SettingsViewModel] and hands [SettingsScreen] its state. */
@@ -57,4 +58,25 @@ object SettingsTestTags {
 
     /** A simulator pill, by its target (e.g. `"gspro"`). */
     fun simulator(target: String): String = "settings.sim.$target"
+
+    // Plan F7: audio call-outs, added at the end to keep this file's diff mergeable (§4a A7).
+    const val CALLOUTS = "settings.callouts"
+    const val CALLOUTS_ENABLED = "settings.callouts.enabled"
+    const val CALLOUTS_TRIGGER = "settings.callouts.trigger"
+    const val CALLOUTS_VOICE = "settings.callouts.voice"
+    const val CALLOUTS_PREVIEW_BUTTON = "settings.callouts.previewButton"
+    const val CALLOUTS_PREVIEW_TEXT = "settings.callouts.previewText"
+    const val CALLOUTS_RATE = "settings.callouts.rate"
+
+    /** A field checklist row, by its field. */
+    fun calloutField(field: CalloutField): String = "settings.callouts.field.${field.name}"
+
+    /** A field checklist row's checkbox/toggle chip, by its field. */
+    fun calloutFieldToggle(field: CalloutField): String = "settings.callouts.field.${field.name}.toggle"
+
+    /** A field checklist row's "move up" button, by its field. */
+    fun calloutFieldMoveUp(field: CalloutField): String = "settings.callouts.field.${field.name}.up"
+
+    /** A field checklist row's "move down" button, by its field. */
+    fun calloutFieldMoveDown(field: CalloutField): String = "settings.callouts.field.${field.name}.down"
 }

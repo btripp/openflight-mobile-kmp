@@ -14,25 +14,35 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextAlign
+import dev.openflight.companion.core.data.CalloutTrigger
 import dev.openflight.companion.core.data.TransportType
 import dev.openflight.companion.core.designsystem.OfCard
+import dev.openflight.companion.core.designsystem.OfChip
 import dev.openflight.companion.core.designsystem.OfColorTokens
 import dev.openflight.companion.core.designsystem.OfConfirmDialog
 import dev.openflight.companion.core.designsystem.OfDisabledReason
+import dev.openflight.companion.core.designsystem.OfDropdownMenu
 import dev.openflight.companion.core.designsystem.OfMessageHostState
 import dev.openflight.companion.core.designsystem.OfNotice
 import dev.openflight.companion.core.designsystem.OfOutlinedButton
 import dev.openflight.companion.core.designsystem.OfPill
 import dev.openflight.companion.core.designsystem.OfScaffold
 import dev.openflight.companion.core.designsystem.OfSegmentedPicker
+import dev.openflight.companion.core.designsystem.OfSlider
 import dev.openflight.companion.core.designsystem.OfSpacing
+import dev.openflight.companion.core.designsystem.OfSwitchRow
 import dev.openflight.companion.core.designsystem.OfText
 import dev.openflight.companion.core.designsystem.OfTextButton
 import dev.openflight.companion.core.designsystem.OfTextRole
 import dev.openflight.companion.core.designsystem.OfTopBar
+import dev.openflight.companion.core.designsystem.OfWindowClass
 import dev.openflight.companion.core.designsystem.StatusTone
+import dev.openflight.companion.core.designsystem.rememberOfWindowClass
 import dev.openflight.companion.core.insights.UnitSystem
 import dev.openflight.companion.core.model.pi.PiLinkState
+import dev.openflight.companion.core.speech.Voice
+import dev.openflight.companion.core.speech.VoiceQuality
+import kotlin.math.roundToInt
 
 /**
  * The settings screen (plan R6c): the phone's unit preference and connection info, then the Pi's
@@ -48,6 +58,8 @@ fun SettingsScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     messages: OfMessageHostState? = null,
+    // Plan F7: the audio call-outs card branches compact/expanded; tests and previews force one.
+    windowClass: OfWindowClass = rememberOfWindowClass(),
 ) {
     OfScaffold(
         modifier = modifier,
@@ -84,6 +96,7 @@ fun SettingsScreen(
             // Hidden until the Pi reports its debug mode: never offer "Start" before that is known.
             if (uiState.debug.loaded) DebugCard(uiState.debug, onEvent)
             CloudCard(uiState.cloud, onEvent)
+            AudioCalloutsCard(uiState.callouts, onEvent, windowClass)
             ShutdownCard(uiState.shutdown, onEvent)
         }
     }

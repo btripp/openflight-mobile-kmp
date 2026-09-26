@@ -77,4 +77,12 @@ class KoinHelper : KoinComponent {
     fun cameraViewModel(): CameraViewModel = get()
 
     fun settingsViewModel(): SettingsViewModel = get()
+
+    /**
+     * Starts (idempotent) the app-wide shot call-out coordinator (plan F7). Call once, from
+     * `iOSApp.init()`, after [appLifecycle] so both share the same [AppLifecycle] instance.
+     */
+    fun shotCallouts() {
+        getKoin().shotCallouts()
+    }
 }

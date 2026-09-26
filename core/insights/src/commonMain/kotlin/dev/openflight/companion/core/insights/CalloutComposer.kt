@@ -104,7 +104,11 @@ object CalloutComposer {
             }
         }
 
-    private fun label(field: CalloutField): String =
+    /**
+     * The field's display/spoken name, e.g. [CalloutField.BALL_SPEED] -> `"Ball speed"`. Reused by
+     * the settings field checklist (plan F7) so the label text has one source of truth.
+     */
+    fun label(field: CalloutField): String =
         when (field) {
             CalloutField.CARRY -> "Carry"
             CalloutField.TOTAL -> "Total"

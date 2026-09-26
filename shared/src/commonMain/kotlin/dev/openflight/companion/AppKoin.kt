@@ -2,13 +2,18 @@
 package dev.openflight.companion
 
 import com.rickclephas.kmp.nativecoroutines.NativeCoroutinesIgnore
+import dev.openflight.companion.core.data.ActiveGameRepository
 import dev.openflight.companion.core.data.AppLifecycle
+import dev.openflight.companion.core.data.ConditionsRepository
+import dev.openflight.companion.core.data.FinalShotStream
 import dev.openflight.companion.core.data.LifecycleConnectionPolicy
 import dev.openflight.companion.core.data.PiSessionRepository
 import dev.openflight.companion.core.data.SettingsRepository
 import dev.openflight.companion.core.data.ShotHistoryRepository
 import dev.openflight.companion.core.data.ShotRepository
 import dev.openflight.companion.core.data.dataModule
+import dev.openflight.companion.core.speech.ScreenReaderMonitor
+import dev.openflight.companion.core.speech.SpeechEngine
 import dev.openflight.companion.core.speech.speechModule
 import dev.openflight.companion.feature.calibration.calibrationModule
 import dev.openflight.companion.feature.camera.cameraModule
@@ -38,6 +43,8 @@ val appModules: List<Module> =
         // Plan F4: core:speech's SpeechEngine binding, added at the end to keep this list's diff
         // mergeable with the other wave-1/wave-2 steps that also touch it (§4a A7).
         speechModule,
+        // Plan F7: the shot call-out coordinator, app-scoped (see Koin.shotCallouts() below).
+        calloutModule(),
     )
 
 /**
@@ -129,3 +136,41 @@ fun Koin.appLifecycle(): AppLifecycle {
 
 /** The debug [LaunchOptions] applied at launch, or the defaults (release builds, no hooks). */
 fun Koin.launchOptions(): LaunchOptions = getOrNull<LaunchOptions>() ?: LaunchOptions()
+
+// Plan F7: the shot call-out coordinator, added at the end to keep this file's diff mergeable
+// with the other wave-2 steps that also touch it (§4a A7).
+
+/**
+ * [ShotCalloutCoordinator]'s Koin binding, in its own module so a test graph can swap it out. A
+ * function, not a top-level `val`: [appModules] (declared earlier in this file) references it,
+ * and top-level `val`s initialize in file order, unlike class members — a `val` here would be
+ * "must be initialized" at [appModules]'s own initialization.
+ */
+private fun calloutModule(): Module =
+    module {
+        single {
+            ShotCalloutCoordinator(
+                finalShots = get<FinalShotStream>(),
+                settings = get<SettingsRepository>(),
+                activeGame = get<ActiveGameRepository>(),
+                // Lazy: see ShotCalloutCoordinator's class doc for why this must not resolve
+                // (and so build the real, DataStore-backed implementation) merely by being
+                // constructed.
+                conditions = lazy { get<ConditionsRepository>() },
+                speech = get<SpeechEngine>(),
+                screenReader = get<ScreenReaderMonitor>(),
+                lifecycle = get<AppLifecycle>(),
+            )
+        }
+    }
+
+/**
+ * The app-wide [ShotCalloutCoordinator], started (idempotent) the first time this is called.
+ * Call once per process, after [appLifecycle] so both share the same [AppLifecycle] instance
+ * (Android calls this from `OpenFlightApplication.onCreate`; iOS from `iOSApp.init`).
+ */
+fun Koin.shotCallouts(): ShotCalloutCoordinator {
+    val coordinator = get<ShotCalloutCoordinator>()
+    coordinator.start()
+    return coordinator
+}

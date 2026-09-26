@@ -19,8 +19,10 @@ import dev.openflight.companion.core.model.pi.PowerState
 import dev.openflight.companion.core.model.pi.PowerStatus
 import dev.openflight.companion.core.model.pi.TriggerStatus
 import dev.openflight.companion.core.testing.FakePiSessionRepository
+import dev.openflight.companion.core.testing.FakeScreenReaderMonitor
 import dev.openflight.companion.core.testing.FakeSettingsRepository
 import dev.openflight.companion.core.testing.FakeShotRepository
+import dev.openflight.companion.core.testing.FakeSpeechEngine
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -200,7 +202,14 @@ class DevicePanelsTest {
         runTest {
             val piSession = FakePiSessionRepository()
             val viewModel =
-                SettingsViewModel(FakeShotRepository(), FakeSettingsRepository(), piSession, AppLifecycle())
+                SettingsViewModel(
+                    FakeShotRepository(),
+                    FakeSettingsRepository(),
+                    piSession,
+                    AppLifecycle(),
+                    FakeSpeechEngine(),
+                    FakeScreenReaderMonitor(),
+                )
 
             viewModel.uiState.test {
                 val empty = awaitItem()
@@ -229,7 +238,15 @@ class DevicePanelsTest {
                     connectionState.value =
                         ConnectionState.Error("Public addresses need HTTPS", ConnectionErrorKind.ENDPOINT_REJECTED)
                 }
-            val viewModel = SettingsViewModel(shots, FakeSettingsRepository(), piSession, AppLifecycle())
+            val viewModel =
+                SettingsViewModel(
+                    shots,
+                    FakeSettingsRepository(),
+                    piSession,
+                    AppLifecycle(),
+                    FakeSpeechEngine(),
+                    FakeScreenReaderMonitor(),
+                )
 
             viewModel.uiState.test {
                 var state = awaitItem()

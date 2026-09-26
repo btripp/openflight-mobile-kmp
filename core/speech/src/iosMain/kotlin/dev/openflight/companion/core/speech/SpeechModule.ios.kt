@@ -7,4 +7,6 @@ import org.koin.dsl.module
 actual val platformSpeechModule: Module =
     module {
         single<SpeechEngine> { IosSpeechEngine() }
+        // Plan F7: VoiceOver detection for the call-out coordinator and the voice preview.
+        single<ScreenReaderMonitor> { IosScreenReaderMonitor() }
     }
