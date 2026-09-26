@@ -30,6 +30,8 @@ kotlin {
             export(projects.feature.camera)
             export(projects.feature.settings)
             export(projects.feature.bag)
+            // Plan F9a: the games engine and its ViewModels, for F9c's SwiftUI screens.
+            export(projects.feature.games)
         }
     }
 
@@ -55,6 +57,8 @@ kotlin {
             // Plan F4: core:speech's speechModule joins the app's Koin graph below. Plan F7 exports
             // it above too: the settings voice picker needs Voice/VoiceQuality from Swift.
             api(projects.core.speech)
+            // Plan F9a: the games engine and its ViewModels.
+            api(projects.feature.games)
             implementation(libs.kotlinx.coroutines.core)
             api(project.dependencies.platform(libs.koin.bom))
             api(libs.koin.core)

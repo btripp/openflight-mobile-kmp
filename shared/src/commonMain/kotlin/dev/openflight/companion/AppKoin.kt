@@ -19,6 +19,7 @@ import dev.openflight.companion.feature.bag.bagModule
 import dev.openflight.companion.feature.calibration.calibrationModule
 import dev.openflight.companion.feature.camera.cameraModule
 import dev.openflight.companion.feature.dashboard.dashboardModule
+import dev.openflight.companion.feature.games.gamesModule
 import dev.openflight.companion.feature.range.rangeModule
 import dev.openflight.companion.feature.session.sessionModule
 import dev.openflight.companion.feature.settings.settingsModule
@@ -48,6 +49,8 @@ val appModules: List<Module> =
         bagModule,
         // Plan F7: the shot call-out coordinator, app-scoped (see Koin.shotCallouts() below).
         calloutModule(),
+        // Plan F9a: the games and Activities ViewModels.
+        gamesModule,
     )
 
 /**

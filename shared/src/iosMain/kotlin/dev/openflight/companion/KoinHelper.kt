@@ -9,6 +9,9 @@ import dev.openflight.companion.feature.bag.ClubDetailViewModel
 import dev.openflight.companion.feature.calibration.CalibrationViewModel
 import dev.openflight.companion.feature.camera.CameraViewModel
 import dev.openflight.companion.feature.dashboard.DashboardViewModel
+import dev.openflight.companion.feature.games.ActivitiesViewModel
+import dev.openflight.companion.feature.games.GameLaunch
+import dev.openflight.companion.feature.games.GamesViewModel
 import dev.openflight.companion.feature.range.DrivingRangeViewModel
 import dev.openflight.companion.feature.session.SessionHistoryDetailViewModel
 import dev.openflight.companion.feature.session.SessionHistoryViewModel
@@ -97,4 +100,14 @@ class KoinHelper : KoinComponent {
     fun shotCallouts() {
         getKoin().shotCallouts()
     }
+
+    /**
+     * Plan F9a: a game, opened on [launch]'s mode and distance when given (A6: the iOS destination
+     * value carries it, e.g. "play a hole" → closest to the pin at the hole's distance).
+     */
+    fun gamesViewModel(launch: GameLaunch? = null): GamesViewModel =
+        if (launch == null) get() else get { parametersOf(launch) }
+
+    /** Plan F9a: the Activities hub (finished games). */
+    fun activitiesViewModel(): ActivitiesViewModel = get()
 }

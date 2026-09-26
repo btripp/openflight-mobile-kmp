@@ -18,6 +18,11 @@ import dev.openflight.companion.feature.camera.CameraViewModel
 import dev.openflight.companion.feature.dashboard.DashboardEffect
 import dev.openflight.companion.feature.dashboard.DashboardUiState
 import dev.openflight.companion.feature.dashboard.DashboardViewModel
+import dev.openflight.companion.feature.games.ActivitiesUiState
+import dev.openflight.companion.feature.games.ActivitiesViewModel
+import dev.openflight.companion.feature.games.GamesEffect
+import dev.openflight.companion.feature.games.GamesUiState
+import dev.openflight.companion.feature.games.GamesViewModel
 import dev.openflight.companion.feature.range.DrivingRangeUiState
 import dev.openflight.companion.feature.range.DrivingRangeViewModel
 import dev.openflight.companion.feature.session.SessionEffect
@@ -141,6 +146,20 @@ val ClubAnalysisViewModel.state: StateFlow<ClubAnalysisUiState>
 
 @NativeCoroutinesState
 val ClubDetailViewModel.state: StateFlow<ClubDetailUiState>
+    get() = uiState
+
+/** Plan F9a: a game in progress; `Saved` fires once the finished game is filed. */
+@NativeCoroutinesState
+val GamesViewModel.state: StateFlow<GamesUiState>
+    get() = uiState
+
+@NativeCoroutines
+val GamesViewModel.sideEffects: Flow<GamesEffect>
+    get() = effects
+
+/** Plan F9a: the Activities hub has no one-shot effects. */
+@NativeCoroutinesState
+val ActivitiesViewModel.state: StateFlow<ActivitiesUiState>
     get() = uiState
 
 @OptIn(ExperimentalForeignApi::class, BetaInteropApi::class)
