@@ -189,7 +189,15 @@ internal val PREVIEW_CALLOUTS: CalloutSettingsUiState =
 @Preview(heightDp = 1800)
 @Composable
 private fun SettingsConnectedPreview() {
-    OfTheme { SettingsScreen(uiState = previewSettingsState(), onEvent = {}, onBack = {}) }
+    OfTheme {
+        SettingsScreen(
+            uiState = previewSettingsState(),
+            onEvent = {},
+            onBack = {},
+            onOpenCalibration = {},
+            onOpenCamera = {},
+        )
+    }
 }
 
 @Preview(heightDp = 1400)

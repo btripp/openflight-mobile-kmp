@@ -6,12 +6,17 @@ import SwiftUI
 /// simulator status, the radar/debug panel, cloud upload and Pi shutdown. Wi-Fi-only controls stay
 /// visible and are disabled with the VM's reason. Android's `SettingsScreen.kt` renders the same
 /// state.
+///
+/// Plan F1d: grouped into Device (connection, calibrate, camera, launch monitor, power, simulators,
+/// radar, shutdown), Practice (units, audio call-outs) and Data (cloud upload, debug logging), like
+/// Android. The Device group's "Calibrate radar" and "Camera" rows push `AppRoute`s onto the
+/// Settings tab's own `NavigationStack`.
 struct SettingsView: View {
     @StateObject private var host = ViewModelHost(KoinHelper().settingsViewModel())
     @State private var message: String?
 
     var body: some View {
-        SettingsContent(state: host.state, send: host.send)
+        SettingsContent(state: host.state, send: host.send, showDeviceLinks: true)
             .navigationTitle("Settings")
             .messageBanner($message)
             .task {
@@ -25,22 +30,28 @@ struct SettingsView: View {
 struct SettingsContent: View {
     let state: SettingsUiState
     let send: (SettingsEvent) -> Void
+    /// Plan F1d: the Device group's Calibrate/Camera rows (they need an `AppRoute` destination).
+    var showDeviceLinks = false
 
     @State private var showingShutdown = false
 
     var body: some View {
         Form {
-            unitsSection
+            // Device
             connectionSection
+            if showDeviceLinks { deviceLinksSection }
             launchMonitorSection
             if let power = state.power { powerStatusSection(power) }
             simulatorsSection
             radarSection
+            shutdownSection
+            // Practice
+            unitsSection
+            calloutsSection
+            // Data
+            cloudSection
             // Hidden until the Pi reports its debug mode: never offer "Start" before that is known.
             if state.debug.loaded { debugSection }
-            cloudSection
-            calloutsSection
-            shutdownSection
         }
         // Plan F1c: capped and centered on a regular width (`core:designsystem`'s
         // `OfContentWidth`, 840 pt), so the form stays readable on an iPad instead of
@@ -82,7 +93,7 @@ struct SettingsContent: View {
             .pickerStyle(.segmented)
             .accessibilityIdentifier("settings.units")
         } header: {
-            header("UNITS")
+            header("UNITS", group: "Practice")
         }
         .listRowBackground(Theme.bgCard)
     }
@@ -119,7 +130,25 @@ struct SettingsContent: View {
                     .foregroundStyle(Theme.warning)
             }
         } header: {
-            header("CONNECTION")
+            header("CONNECTION", group: "Device")
+        }
+        .listRowBackground(Theme.bgCard)
+    }
+
+    // MARK: Device links (plan F1d)
+
+    private var deviceLinksSection: some View {
+        Section {
+            NavigationLink(value: AppRoute.calibration) {
+                Label("Calibrate radar", systemImage: "scope")
+            }
+            .accessibilityIdentifier("settings.openCalibration")
+            NavigationLink(value: AppRoute.camera) {
+                Label("Camera", systemImage: "camera")
+            }
+            .accessibilityIdentifier("settings.openCamera")
+        } header: {
+            header("TOOLS")
         }
         .listRowBackground(Theme.bgCard)
     }
@@ -286,7 +315,7 @@ struct SettingsContent: View {
                     .accessibilityIdentifier("settings.cloud.status")
             }
         } header: {
-            header("FLIGHTWEB CLOUD")
+            header("FLIGHTWEB CLOUD", group: "Data")
         }
         .listRowBackground(Theme.bgCard)
     }
@@ -560,6 +589,20 @@ struct SettingsContent: View {
             .font(.ofEyebrow)
             .tracking(1.7)
             .foregroundStyle(Theme.gold)
+    }
+
+    /// Plan F1d: the first section of a group carries the group's title (Device, Practice, Data)
+    /// above its own eyebrow.
+    private func header(_ text: String, group: String) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(group)
+                .font(.of(.title2, weight: .bold))
+                .foregroundStyle(Theme.cream)
+                .textCase(nil)
+                .accessibilityAddTraits(.isHeader)
+                .accessibilityIdentifier("settings.group.\(group.lowercased())")
+            header(text)
+        }
     }
 
     private func row(_ label: String, _ value: String) -> some View {

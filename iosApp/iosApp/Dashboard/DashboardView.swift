@@ -10,9 +10,11 @@ struct DashboardView: View {
     @StateObject private var host = ViewModelHost(KoinHelper().dashboardViewModel())
     /// Bumped on every `DashboardEffect.NewShot`: replays the gold flash and fires the haptic.
     @State private var newShots = 0
+    /// Plan F1d: pushes swing-speed training (the header's "More options" menu); no menu if nil.
+    var onOpenTraining: (() -> Void)?
 
     var body: some View {
-        DashboardContent(state: host.state, send: host.send, shotFlashes: newShots)
+        DashboardContent(state: host.state, send: host.send, shotFlashes: newShots, onOpenTraining: onOpenTraining)
             .toolbar(.hidden, for: .navigationBar)
             .sensoryFeedback(.impact(weight: .medium), trigger: newShots)
             .task {
@@ -30,6 +32,7 @@ struct DashboardContent: View {
     let state: DashboardUiState
     let send: (DashboardEvent) -> Void
     var shotFlashes = 0
+    var onOpenTraining: (() -> Void)?
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -155,6 +158,22 @@ struct DashboardContent: View {
             .buttonStyle(.plain)
             .foregroundStyle(Theme.gold)
             .accessibilityIdentifier(DashboardTestTags.shared.RANGE)
+            // Plan F1d: Training is pushed from here now (Android: the top bar's overflow menu).
+            if let onOpenTraining {
+                Menu {
+                    Button(action: onOpenTraining) {
+                        Label("Speed training", systemImage: "speedometer")
+                    }
+                    .accessibilityIdentifier(DashboardTestTags.shared.OPEN_TRAINING)
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                        .font(.system(size: 24))
+                        .foregroundStyle(Theme.gold)
+                        .frame(minWidth: 44, minHeight: 44)
+                }
+                .accessibilityLabel("More options")
+                .accessibilityIdentifier(DashboardTestTags.shared.MORE)
+            }
             Image(systemName: "figure.golf")
                 .font(.system(size: 34))
                 .foregroundStyle(Theme.gold)

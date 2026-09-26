@@ -163,22 +163,54 @@ final class SessionUITests: XCTestCase {
 
     /// The dispersion chart sits above the list, so on smaller phones the actions and rows start
     /// below the fold (and a `List` only creates the rows it shows): scroll until [element] exists.
+    ///
+    /// Plan F1d: layout-aware. On an iPad (plan F1c's list-detail) the list and the detail pane
+    /// are both on screen and scroll separately, and [element] may be in either, so this scrolls
+    /// them in turn; on an iPhone there's one list and it scrolls the screen.
     static func reveal(_ element: XCUIElement, in app: XCUIApplication, scrollingUp: Bool = false) -> Bool {
-        for _ in 0..<6 where !element.exists {
-            if scrollingUp { app.swipeDown() } else { app.swipeUp() }
+        if element.exists { return true }
+        let surfaces = scrollSurfaces(in: app)
+        for attempt in 0..<(6 * surfaces.count) {
+            if element.exists { return true }
+            let surface = surfaces[attempt % surfaces.count]
+            if scrollingUp { surface.swipeDown() } else { surface.swipeUp() }
         }
-        return element.waitForExistence(timeout: 5)
+        // Already there: say so now. A pending state lasts only seconds, and a wait's first
+        // (slow, full-hierarchy) poll can land after it has already moved on.
+        return element.exists || element.waitForExistence(timeout: 5)
+    }
+
+    /// Scrolls until [element] is hittable too (not just loaded), for a swipe or a tap on it.
+    /// On an iPhone a row can start under the floating tab bar, which takes horizontal swipes
+    /// itself (it switches tabs).
+    static func makeHittable(_ element: XCUIElement, in app: XCUIApplication) -> Bool {
+        let surfaces = scrollSurfaces(in: app)
+        if surfaces == [app] {
+            // iPhone: two swipes clear the floating tab bar (the row can count as hittable while
+            // under it), as before F1d; more only scroll past the end.
+            app.swipeUp()
+            app.swipeUp()
+            return element.exists && element.isHittable
+        }
+        for attempt in 0..<(3 * surfaces.count) where !(element.exists && element.isHittable) {
+            surfaces[attempt % surfaces.count].swipeUp()
+        }
+        return element.exists && element.isHittable
+    }
+
+    /// What to swipe on: the list-detail panes where they're side by side, otherwise the screen.
+    private static func scrollSurfaces(in app: XCUIApplication) -> [XCUIElement] {
+        let panes = ["app.listDetail.list", "app.listDetail.detail"]
+            .map { app.descendants(matching: .any)[$0].firstMatch }
+            .filter(\.exists)
+        return panes.count == 2 ? panes : [app]
     }
 
     /// Delete and clear need Wi-Fi (plan R8e), so these tests pin the transport rather than
     /// inheriting whatever an earlier run saved.
     static func openSession(transport: String = "wifi", extraArguments: [String] = []) -> XCUIApplication {
-        let app = XCUIApplication()
-        app.launchArguments = ["--ui-testing", "--preview-shot", "--transport", transport] + extraArguments
-        app.launch()
-        let tab = app.tabBars.buttons["Session"]
-        XCTAssertTrue(tab.waitForExistence(timeout: 10))
-        tab.tap()
+        let app = AppNav.launch(["--ui-testing", "--preview-shot", "--transport", transport] + extraArguments)
+        AppNav.open(.sessions, in: app)
         return app
     }
 

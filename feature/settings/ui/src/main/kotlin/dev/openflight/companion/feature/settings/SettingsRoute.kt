@@ -13,6 +13,8 @@ import org.koin.androidx.compose.koinViewModel
 @Composable
 fun SettingsRoute(
     onBack: () -> Unit,
+    onOpenCalibration: (() -> Unit)? = null,
+    onOpenCamera: (() -> Unit)? = null,
     viewModel: SettingsViewModel = koinViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -24,7 +26,14 @@ fun SettingsRoute(
             }
         }
     }
-    SettingsScreen(uiState = uiState, onEvent = viewModel::onEvent, onBack = onBack, messages = messages)
+    SettingsScreen(
+        uiState = uiState,
+        onEvent = viewModel::onEvent,
+        onBack = onBack,
+        messages = messages,
+        onOpenCalibration = onOpenCalibration,
+        onOpenCamera = onOpenCamera,
+    )
 }
 
 /** Test tags for the Android settings screen. */
@@ -78,4 +87,11 @@ object SettingsTestTags {
 
     /** A field checklist row's "move down" button, by its field. */
     fun calloutFieldMoveDown(field: CalloutField): String = "settings.callouts.field.${field.name}.down"
+
+    // Plan F1d: the Device / Practice / Data groups and the Device group's pushed screens.
+    const val GROUP_DEVICE = "settings.group.device"
+    const val GROUP_PRACTICE = "settings.group.practice"
+    const val GROUP_DATA = "settings.group.data"
+    const val OPEN_CALIBRATION = "settings.openCalibration"
+    const val OPEN_CAMERA = "settings.openCamera"
 }

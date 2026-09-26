@@ -4,7 +4,9 @@ import XCTest
 /// Settings, Camera and Training (plan R6c) under `--ui-testing --preview-shot`. The preview
 /// repository never starts the Pi's Socket.IO session, so every Wi-Fi-only control must render
 /// disabled with the shared reason "Not connected" (the shutdown confirmation itself is exercised
-/// in the live mock run, where the session is up).
+/// in the live mock run, where the session is up). Plan F1d: Camera is pushed from Settings' Device
+/// group and Training from Practice's "More options" menu; `AppNav` opens the top-level
+/// destinations on an iPhone's tab bar and on an iPad's sidebar alike.
 final class PiScreensUITests: XCTestCase {
     override func setUp() {
         continueAfterFailure = false
@@ -17,7 +19,7 @@ final class PiScreensUITests: XCTestCase {
         addTeardownBlock { self.selectUnits(app, "Imperial (mph, yds)") }
 
         selectUnits(app, "Metric (km/h, m)")
-        app.tabBars.buttons["Dashboard"].tap()
+        AppNav.open(.practice, in: app)
         let ballSpeed = app.descendants(matching: .any)["dashboard.ballSpeed"]
         XCTAssertTrue(ballSpeed.waitForExistence(timeout: 5))
         // 151.4 mph × 1.60934 = 243.65 km/h; 264 yds × 0.9144 = 241.4 m.
@@ -29,13 +31,13 @@ final class PiScreensUITests: XCTestCase {
         )
 
         selectUnits(app, "Imperial (mph, yds)")
-        app.tabBars.buttons["Dashboard"].tap()
+        AppNav.open(.practice, in: app)
         XCTAssertEqual(ballSpeed.value as? String, "151.4 miles per hour")
     }
 
     func testShutdownAndPiControlsAreDisabledWithoutThePiSession() {
         let app = launch()
-        app.tabBars.buttons["Settings"].tap()
+        AppNav.open(.settings, in: app)
 
         let liveSession = app.descendants(matching: .any)["settings.liveSession"]
         XCTAssertTrue(liveSession.waitForExistence(timeout: 5))
@@ -46,14 +48,20 @@ final class PiScreensUITests: XCTestCase {
         scroll(app, to: reason)
         XCTAssertFalse(shutdown.isEnabled)
         XCTAssertTrue(reason.label.contains("Not connected"), "reason: \(reason.label)")
-        XCTAssertFalse(app.buttons["settings.cloud.upload"].isEnabled)
+        // Plan F1d: cloud upload sits in the Data group, below the Device group's shutdown.
+        let upload = app.buttons["settings.cloud.upload"]
+        scroll(app, to: upload)
+        XCTAssertFalse(upload.isEnabled)
     }
 
     // MARK: Camera
 
     func testCameraShowsTheOfflineStateWithRefreshDisabled() {
         let app = launch()
-        app.tabBars.buttons["Camera"].tap()
+        AppNav.open(.settings, in: app)
+        let openCamera = app.buttons["settings.openCamera"]
+        scroll(app, to: openCamera)
+        openCamera.tap()
 
         let title = app.staticTexts["camera.phaseTitle"]
         XCTAssertTrue(title.waitForExistence(timeout: 5))
@@ -70,7 +78,12 @@ final class PiScreensUITests: XCTestCase {
 
     func testTrainingRendersThePickerDisabledWithoutThePiSession() {
         let app = launch()
-        app.tabBars.buttons["Training"].tap()
+        let more = app.buttons["dashboard.more"]
+        XCTAssertTrue(more.waitForExistence(timeout: 5))
+        more.tap()
+        let training = app.buttons["dashboard.openTraining"]
+        XCTAssertTrue(training.waitForExistence(timeout: 5))
+        training.tap()
 
         let player = app.staticTexts["training.player"]
         XCTAssertTrue(player.waitForExistence(timeout: 5))
@@ -90,17 +103,14 @@ final class PiScreensUITests: XCTestCase {
     // MARK: Helpers
 
     private func launch() -> XCUIApplication {
-        let app = XCUIApplication()
-        app.launchArguments = ["--ui-testing", "--preview-shot"]
-        app.launch()
-        XCTAssertTrue(app.tabBars.buttons["Settings"].waitForExistence(timeout: 10))
-        return app
+        AppNav.launch(["--ui-testing", "--preview-shot"])
     }
 
     private func selectUnits(_ app: XCUIApplication, _ label: String) {
-        app.tabBars.buttons["Settings"].tap()
+        AppNav.open(.settings, in: app)
+        // Plan F1d: units open the Practice group, below the Device group.
         let option = app.segmentedControls["settings.units"].buttons[label]
-        XCTAssertTrue(option.waitForExistence(timeout: 5))
+        scroll(app, to: option)
         option.tap()
         let selected = NSPredicate(format: "isSelected == true")
         expectation(for: selected, evaluatedWith: option)

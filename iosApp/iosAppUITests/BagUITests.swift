@@ -2,7 +2,7 @@
 import XCTest
 
 /// My Bag (plan F5): the first open seeds the default 14-club bag and lists it with the conditions
-/// card. On iPhone the sixth tab sits under "More", so the helper looks there too.
+/// card. Plan F1d: Bag is one of four top-level destinations, so it's never under "More".
 final class BagUITests: XCTestCase {
     override func setUp() {
         continueAfterFailure = false
@@ -21,27 +21,8 @@ final class BagUITests: XCTestCase {
     }
 
     static func openBag() -> XCUIApplication {
-        let app = XCUIApplication()
-        app.launchArguments = ["--ui-testing", "--preview-shot"]
-        app.launch()
-        // iPad (regular width) shows a sidebar instead of a tab bar (plan F1c).
-        let sidebarItem = app.descendants(matching: .any)["app.nav.sidebar.bag"]
-        let bag = app.tabBars.buttons["Bag"]
-        let floatingTab = app.buttons["Bag"].firstMatch
-        if sidebarItem.waitForExistence(timeout: 5) {
-            sidebarItem.tap()
-        } else if bag.waitForExistence(timeout: 10) {
-            bag.tap()
-        } else if floatingTab.exists {
-            floatingTab.tap()
-        } else {
-            let more = app.tabBars.buttons["More"]
-            XCTAssertTrue(more.waitForExistence(timeout: 5))
-            more.tap()
-            let entry = app.cells.staticTexts["Bag"].firstMatch
-            XCTAssertTrue(entry.waitForExistence(timeout: 5))
-            entry.tap()
-        }
+        let app = AppNav.launch(["--ui-testing", "--preview-shot"])
+        AppNav.open(.bag, in: app)
         return app
     }
 }

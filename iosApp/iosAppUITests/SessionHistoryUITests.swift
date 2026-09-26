@@ -64,14 +64,12 @@ final class SessionHistoryUITests: XCTestCase {
 
     func testAStoredShotDeleteAsksThenShowsPendingThenDone() {
         let app = Self.openHistory()
-        app.descendants(matching: .any)[Self.older].tap()
+        Self.openSession(Self.older, in: app)
         let row = app.descendants(matching: .any)["session.shot.2026-09-21T18:12:05.000000"]
-        XCTAssertTrue(row.waitForExistence(timeout: 5))
-        // The row starts under the floating tab bar, which takes horizontal swipes itself (it
-        // switches tabs): scroll it up into the open first.
-        app.swipeUp()
-        app.swipeUp()
-        XCTAssertTrue(row.isHittable)
+        // On an iPad the detail pane beside the list holds it, below its stats; on an iPhone it
+        // starts under the floating tab bar. Either way, scroll it into the open first.
+        XCTAssertTrue(SessionUITests.reveal(row, in: app))
+        XCTAssertTrue(SessionUITests.makeHittable(row, in: app))
 
         row.swipeLeft()
         XCTAssertTrue(app.buttons["Delete"].waitForExistence(timeout: 5))
@@ -104,6 +102,16 @@ final class SessionHistoryUITests: XCTestCase {
         XCTAssertTrue(open.waitForExistence(timeout: 5))
         open.tap()
         return app
+    }
+
+    /// Opens a stored session once its row has settled (the History push can still be animating
+    /// when the row first exists, and a tap then is lost). Its detail is pushed on an iPhone and
+    /// shown beside the list on an iPad.
+    static func openSession(_ identifier: String, in app: XCUIApplication) {
+        let row = app.descendants(matching: .any)[identifier]
+        let settled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == true AND isHittable == true"), object: row)
+        XCTAssertEqual(XCTWaiter.wait(for: [settled], timeout: 5), .completed, "\(identifier) never became tappable")
+        row.tap()
     }
 
     private func stat(_ app: XCUIApplication, _ label: String) -> XCUIElement {
