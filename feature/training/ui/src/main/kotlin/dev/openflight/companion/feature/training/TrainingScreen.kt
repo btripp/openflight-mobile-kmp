@@ -24,8 +24,8 @@ import dev.openflight.companion.core.designsystem.OfButton
 import dev.openflight.companion.core.designsystem.OfCard
 import dev.openflight.companion.core.designsystem.OfChip
 import dev.openflight.companion.core.designsystem.OfColorTokens
+import dev.openflight.companion.core.designsystem.OfContentWidth
 import dev.openflight.companion.core.designsystem.OfDisabledReason
-import dev.openflight.companion.core.designsystem.OfOutlinedButton
 import dev.openflight.companion.core.designsystem.OfScaffold
 import dev.openflight.companion.core.designsystem.OfSpacing
 import dev.openflight.companion.core.designsystem.OfText
@@ -44,8 +44,14 @@ import dev.openflight.companion.core.model.pi.PiFeatureAvailability
  * The swing-speed training screen (plan R6c), ported from the web UI's swing-speed `ShotDisplay.tsx`
  * view (Last/Best/Average) and `TrainingImplementPicker.tsx` (implements grouped by training
  * system). Wi-Fi only: without the Pi's live session the picker is disabled with the VM's reason.
- * Stateless: everything comes from [uiState] and goes out through [onEvent] or [onBack].
+ * Stateless: everything comes from [uiState] and goes out through [onEvent].
+ *
+ * Plan F1b: Training is a top-level destination reached through the app shell's bottom bar or
+ * rail, which stays on screen here too, so a "Done" button would just duplicate its Home entry.
+ * [onBack] is kept for the caller's navigation wiring (and any future push-only entry into this
+ * screen), even though nothing in this screen calls it today.
  */
+@Suppress("UnusedParameter") // onBack: kept for the caller's navigation wiring, see the KDoc above.
 @Composable
 fun TrainingScreen(
     uiState: TrainingUiState,
@@ -55,33 +61,24 @@ fun TrainingScreen(
 ) {
     OfScaffold(
         modifier = modifier,
-        topBar = {
-            OfTopBar(
-                title = "Swing Training",
-                eyebrow = "OPENFLIGHT",
-                actions = {
-                    OfOutlinedButton(
-                        text = "Done",
-                        onClick = onBack,
-                        modifier = Modifier.padding(end = OfSpacing.Sm).testTag(TrainingTestTags.DONE),
-                    )
-                },
-            )
-        },
+        topBar = { OfTopBar(title = "Swing Training", eyebrow = "OPENFLIGHT") },
     ) { padding ->
-        Column(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .padding(padding)
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = OfSpacing.Xl, vertical = OfSpacing.Sm),
-            verticalArrangement = Arrangement.spacedBy(OfSpacing.Lg),
-        ) {
-            StatusCard(uiState, onEvent)
-            uiState.error?.let { ErrorBanner(it, onDismiss = { onEvent(TrainingEvent.DismissError) }) }
-            SpeedCard(uiState.stats, uiState.units, uiState.lastRep)
-            ImplementPicker(uiState, onEvent)
+        // Plan F1b: a max readable width, centered, so the cards don't stretch edge to edge on a
+        // tablet.
+        OfContentWidth(modifier = Modifier.fillMaxSize().padding(padding)) {
+            Column(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = OfSpacing.Xl, vertical = OfSpacing.Sm),
+                verticalArrangement = Arrangement.spacedBy(OfSpacing.Lg),
+            ) {
+                StatusCard(uiState, onEvent)
+                uiState.error?.let { ErrorBanner(it, onDismiss = { onEvent(TrainingEvent.DismissError) }) }
+                SpeedCard(uiState.stats, uiState.units, uiState.lastRep)
+                ImplementPicker(uiState, onEvent)
+            }
         }
     }
 }

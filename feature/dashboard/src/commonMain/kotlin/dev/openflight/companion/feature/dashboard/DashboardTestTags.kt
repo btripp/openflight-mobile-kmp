@@ -44,4 +44,10 @@ object DashboardTestTags {
 
     /** A detail metric in the latest-shot grid, by its title (for example "Smash"). */
     fun metric(title: String): String = "dashboard.metric.$title"
+
+    /** Android only (plan F1b): the left ("live metrics") column of the expanded two-column layout. */
+    const val METRICS_COLUMN = "dashboard.metricsColumn"
+
+    /** Android only (plan F1b): the right ("club and connection") column of the expanded layout. */
+    const val CONNECTION_COLUMN = "dashboard.connectionColumn"
 }

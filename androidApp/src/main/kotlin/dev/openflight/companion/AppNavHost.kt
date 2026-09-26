@@ -203,6 +203,7 @@ private fun AppGraph(
             SessionHistoryRoute(
                 onBack = onBack,
                 onOpenSession = { navController.navigate(SessionHistoryDetail(it)) },
+                onShareCsv = rememberCsvSharer(),
             )
         }
         composable<SessionHistoryDetail> { entry ->

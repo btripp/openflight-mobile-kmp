@@ -20,4 +20,7 @@ object RangeTestTags {
 
     /** The one-line strip the detail metrics fold into while a ball flies and lands (plan R7b). */
     const val METRICS_COMPACT = "range.metricsCompact"
+
+    /** The side panel the metrics dock into on an expanded window in landscape (plan F1b). */
+    const val METRICS_DOCK = "range.metricsDock"
 }

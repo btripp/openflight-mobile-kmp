@@ -9,13 +9,16 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -37,7 +40,9 @@ import dev.openflight.companion.core.designsystem.OfStatusChip
 import dev.openflight.companion.core.designsystem.OfText
 import dev.openflight.companion.core.designsystem.OfTextRole
 import dev.openflight.companion.core.designsystem.OfTheme
+import dev.openflight.companion.core.designsystem.OfWindowClass
 import dev.openflight.companion.core.designsystem.StatusTone
+import dev.openflight.companion.core.designsystem.rememberOfWindowClass
 import dev.openflight.companion.core.model.ShotEvent
 
 /**
@@ -45,6 +50,10 @@ import dev.openflight.companion.core.model.ShotEvent
  * overlay, the "Driving Range Ready" card before the first shot, and the exit / status / replay
  * controls. Stateless: everything comes from [uiState]; interactions go out through [onEvent] and
  * [onExit].
+ *
+ * @param windowClass injectable for tests and previews; defaults to [rememberOfWindowClass]. On an
+ *   [OfWindowClass.EXPANDED] window in landscape the metrics move into a docked side panel
+ *   ([MetricsDock]) instead of overlaying the scene (plan F1b, §4a A3).
  */
 @Composable
 fun DrivingRangeScreen(
@@ -53,9 +62,60 @@ fun DrivingRangeScreen(
     onEvent: (DrivingRangeEvent) -> Unit,
     onExit: () -> Unit,
     modifier: Modifier = Modifier,
+    windowClass: OfWindowClass = rememberOfWindowClass(),
 ) {
     BoxWithConstraints(modifier = modifier.fillMaxSize().background(OfColorTokens.BgDeep)) {
         val isLandscape = maxWidth > maxHeight
+        when (RangeOverlayLayout.of(windowClass, isLandscape)) {
+            RangeOverlayLayout.OVERLAID -> {
+                SceneLayer(
+                    uiState = uiState,
+                    reduceMotion = reduceMotion,
+                    isLandscape = isLandscape,
+                    onEvent = onEvent,
+                    onExit = onExit,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+
+            RangeOverlayLayout.DOCKED -> {
+                Row(modifier = Modifier.fillMaxSize()) {
+                    SceneLayer(
+                        uiState = uiState,
+                        reduceMotion = reduceMotion,
+                        isLandscape = isLandscape,
+                        onEvent = onEvent,
+                        onExit = onExit,
+                        showMetrics = false,
+                        modifier = Modifier.weight(1f).fillMaxHeight(),
+                    )
+                    MetricsDock(
+                        uiState = uiState,
+                        onEvent = onEvent,
+                        modifier = Modifier.width(DockWidth).fillMaxHeight(),
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * The scene (the [RangeCanvas], its shading and, unless [showMetrics] is false, the metrics
+ * overlaid on top), plus the exit/status/replay [Controls] and the ready card. Shared between the
+ * full-bleed phone layout and the scene side of a docked tablet layout.
+ */
+@Composable
+private fun SceneLayer(
+    uiState: DrivingRangeUiState,
+    reduceMotion: Boolean,
+    isLandscape: Boolean,
+    onEvent: (DrivingRangeEvent) -> Unit,
+    onExit: () -> Unit,
+    modifier: Modifier = Modifier,
+    showMetrics: Boolean = true,
+) {
+    Box(modifier = modifier) {
         RangeCanvas(
             flight = uiState.activeFlight,
             cameraMode = uiState.cameraMode,
@@ -78,17 +138,43 @@ fun DrivingRangeScreen(
                     onExit = onExit,
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
                 )
-                RangeMetricsOverlay(
-                    uiState = uiState,
-                    isLandscape = isLandscape,
-                    onSelectClub = { onEvent(DrivingRangeEvent.ClubSelected(it)) },
-                    modifier = Modifier.weight(1f),
-                )
+                if (showMetrics) {
+                    RangeMetricsOverlay(
+                        uiState = uiState,
+                        isLandscape = isLandscape,
+                        onSelectClub = { onEvent(DrivingRangeEvent.ClubSelected(it)) },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
             }
             if (uiState is DrivingRangeUiState.Ready) {
                 ReadyCard(modifier = Modifier.align(Alignment.Center))
             }
         }
+    }
+}
+
+/**
+ * The metrics as a solid side panel next to the scene (plan F1b), instead of overlaid text: the
+ * panel is narrow, so it always uses [RangeMetricsOverlay]'s portrait (stacked) metrics grid, not
+ * its single landscape row. Scrollable and not [RangeMetricsOverlay.expandToFill]: a wide window
+ * isn't necessarily a tall one (a phone rotated to landscape can be shorter than the metrics grid
+ * needs), and the dock has no scene above or below to make room by shrinking.
+ */
+@Composable
+private fun MetricsDock(
+    uiState: DrivingRangeUiState,
+    onEvent: (DrivingRangeEvent) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Box(modifier = modifier.background(DockBackground).testTag(RangeTestTags.METRICS_DOCK)) {
+        RangeMetricsOverlay(
+            uiState = uiState,
+            isLandscape = false,
+            onSelectClub = { onEvent(DrivingRangeEvent.ClubSelected(it)) },
+            expandToFill = false,
+            modifier = Modifier.fillMaxSize().safeDrawingPadding().verticalScroll(rememberScrollState()),
+        )
     }
 }
 
@@ -218,6 +304,10 @@ private val ControlBackground = Color.Black.copy(alpha = 0.6f)
 private val PillShape = RoundedCornerShape(percent = 50)
 private val ReadyShape = RoundedCornerShape(22.dp)
 
+/** The docked metrics panel's fixed width (plan F1b): wide enough for the two-column metrics grid. */
+private val DockWidth = 340.dp
+private val DockBackground = OfColorTokens.BgCard
+
 @Preview
 @Composable
 private fun DrivingRangeReadyPreview() {
@@ -251,6 +341,36 @@ private fun DrivingRangeShotPreview() {
             reduceMotion = false,
             onEvent = {},
             onExit = {},
+        )
+    }
+}
+
+@Preview(widthDp = 1280, heightDp = 800)
+@Composable
+private fun DrivingRangeDockedPreview() {
+    val shot =
+        ShotEvent(
+            schemaVersion = 1,
+            eventId = "B0D91F0A-7950-4D7E-9DD5-AF9777C190E1",
+            timestamp = "2026-07-29T19:42:10",
+            club = "driver",
+            ballSpeedMph = 151.4,
+            clubSpeedMph = 103.2,
+            smashFactor = 1.47,
+            estimatedCarryYards = 264.0,
+            launchAngleVertical = 12.6,
+            launchAngleHorizontal = -1.3,
+            spinRpm = 2380.0,
+            clubPathDeg = 2.1,
+            spinAxisDeg = -3.4,
+        )
+    OfTheme {
+        DrivingRangeScreen(
+            uiState = DrivingRangeUiState.Showing(shot, RangePhase.Landed, activeFlight = null),
+            reduceMotion = false,
+            onEvent = {},
+            onExit = {},
+            windowClass = OfWindowClass.EXPANDED,
         )
     }
 }

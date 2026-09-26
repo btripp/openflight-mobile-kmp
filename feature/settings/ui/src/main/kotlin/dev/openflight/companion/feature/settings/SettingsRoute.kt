@@ -28,7 +28,6 @@ fun SettingsRoute(
 
 /** Test tags for the Android settings screen. */
 object SettingsTestTags {
-    const val DONE = "settings.done"
     const val UNITS = "settings.units"
     const val CONNECTION = "settings.connection"
     const val SIMULATORS = "settings.simulators"

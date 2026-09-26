@@ -36,8 +36,9 @@ private const val DISABLED_ALPHA = 0.45f
  * implement in the training picker. [onClick] `null` makes it display-only (the dashboard's club
  * chips); [selected] fills it gold.
  *
- * @param minTouchTarget pads a tappable chip's touch area out to 48 dp (the pill keeps its size),
- *   for screens that have been through the plan R8f accessibility pass.
+ * @param minTouchTarget pads a tappable chip's touch area out to 48 dp (the pill keeps its size).
+ *   Defaults to true (plan F1b): every tappable chip gets a minimum touch target unless a caller
+ *   opts out for a reason. Display-only chips ([onClick] `null`) ignore it either way.
  */
 @Composable
 fun OfChip(
@@ -46,7 +47,7 @@ fun OfChip(
     count: Int? = null,
     selected: Boolean = false,
     enabled: Boolean = true,
-    minTouchTarget: Boolean = false,
+    minTouchTarget: Boolean = true,
     onClick: (() -> Unit)? = null,
 ) {
     val container = if (selected) OfColorTokens.Gold else OfColorTokens.BgElevated

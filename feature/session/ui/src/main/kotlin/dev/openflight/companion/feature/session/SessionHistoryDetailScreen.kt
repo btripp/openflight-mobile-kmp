@@ -64,8 +64,6 @@ fun SessionHistoryDetailScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val session = uiState.session
-    val reduceMotion = rememberReduceMotionEnabled()
     OfScaffold(
         modifier = modifier,
         topBar = {
@@ -83,52 +81,73 @@ fun SessionHistoryDetailScreen(
             )
         },
     ) { padding ->
-        LazyColumn(
+        SessionHistoryDetailBody(
+            uiState = uiState,
+            onEvent = onEvent,
             modifier = Modifier.fillMaxSize().padding(padding),
-            contentPadding = PaddingValues(horizontal = OfSpacing.Xl, vertical = OfSpacing.Sm),
-            verticalArrangement = Arrangement.spacedBy(OfSpacing.Lg),
-        ) {
-            item(key = "heading") { Heading(uiState) }
-            if (uiState.action !is SessionActionState.Idle) {
-                item(key = "action") {
-                    SessionActionPanel(
-                        state = uiState.action,
-                        onRetry = { onEvent(SessionHistoryDetailEvent.RetryAction) },
-                        onDismiss = { onEvent(SessionHistoryDetailEvent.DismissAction) },
-                    )
-                }
+        )
+    }
+}
+
+/**
+ * The heading, profile chips, tabs, stats, export and shot rows, without a scaffold or its own
+ * back/close action: shared by the full-screen [SessionHistoryDetailScreen] (plan R8h, a pushed
+ * route on a compact or medium window) and the docked detail pane on an expanded window
+ * ([SessionHistoryRoute], plan F1b).
+ */
+@Composable
+internal fun SessionHistoryDetailBody(
+    uiState: SessionHistoryDetailUiState,
+    onEvent: (SessionHistoryDetailEvent) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val session = uiState.session
+    val reduceMotion = rememberReduceMotionEnabled()
+    LazyColumn(
+        modifier = modifier,
+        contentPadding = PaddingValues(horizontal = OfSpacing.Xl, vertical = OfSpacing.Sm),
+        verticalArrangement = Arrangement.spacedBy(OfSpacing.Lg),
+    ) {
+        item(key = "heading") { Heading(uiState) }
+        if (uiState.action !is SessionActionState.Idle) {
+            item(key = "action") {
+                SessionActionPanel(
+                    state = uiState.action,
+                    onRetry = { onEvent(SessionHistoryDetailEvent.RetryAction) },
+                    onDismiss = { onEvent(SessionHistoryDetailEvent.DismissAction) },
+                )
             }
-            if (uiState.profileChips.isNotEmpty()) {
-                item(
-                    key = "profiles",
-                ) { ProfileChips(uiState) { onEvent(SessionHistoryDetailEvent.SelectProfile(it)) } }
+        }
+        if (uiState.profileChips.isNotEmpty()) {
+            item(
+                key = "profiles",
+            ) { ProfileChips(uiState) { onEvent(SessionHistoryDetailEvent.SelectProfile(it)) } }
+        }
+        if (session.hasShots) {
+            item(key = "tabs") { ClubTabs(session) { onEvent(SessionHistoryDetailEvent.SelectClub(it)) } }
+            item(key = "stats") { StatsCard(session) }
+            item(key = "export") {
+                OfOutlinedButton(
+                    text = "Export CSV",
+                    onClick = { onEvent(SessionHistoryDetailEvent.ExportCsv) },
+                    modifier = Modifier.fillMaxWidth().testTag(SessionHistoryTestTags.DETAIL_EXPORT),
+                )
             }
-            if (session.hasShots) {
-                item(key = "tabs") { ClubTabs(session) { onEvent(SessionHistoryDetailEvent.SelectClub(it)) } }
-                item(key = "stats") { StatsCard(session) }
-                item(key = "export") {
-                    OfOutlinedButton(
-                        text = "Export CSV",
-                        onClick = { onEvent(SessionHistoryDetailEvent.ExportCsv) },
-                        modifier = Modifier.fillMaxWidth().testTag(SessionHistoryTestTags.DETAIL_EXPORT),
-                    )
-                }
-                item(key = "shotsHeader") {
-                    OfText(
-                        text = if (uiState.canDelete) "SHOTS · swipe left to delete" else "SHOTS",
-                        role = OfTextRole.Eyebrow,
-                        color = OfColorTokens.Gold,
-                    )
-                }
-                items(session.shots, key = { it.id }) { shot ->
-                    SessionShotRowItem(
-                        shot = shot,
-                        units = session.units,
-                        onDelete = { onEvent(SessionHistoryDetailEvent.DeleteShot(shot.id)) },
-                        modifier = animateItemUnless(reduceMotion),
-                        deletable = uiState.canDelete,
-                    )
-                }
+            item(key = "shotsHeader") {
+                OfText(
+                    text = if (uiState.canDelete) "SHOTS · swipe left to delete" else "SHOTS",
+                    role = OfTextRole.Eyebrow,
+                    color = OfColorTokens.Gold,
+                )
+            }
+            items(session.shots, key = { it.id }) { shot ->
+                SessionShotRowItem(
+                    shot = shot,
+                    units = session.units,
+                    onDelete = { onEvent(SessionHistoryDetailEvent.DeleteShot(shot.id)) },
+                    modifier = animateItemUnless(reduceMotion),
+                    deletable = uiState.canDelete,
+                )
             }
         }
     }
@@ -174,7 +193,6 @@ private fun ProfileChips(
         OfChip(
             label = "All profiles",
             selected = uiState.selectedProfileId == null,
-            minTouchTarget = true,
             onClick = { onSelect(null) },
             modifier = Modifier.testTag(SessionHistoryTestTags.PROFILE_ALL),
         )
@@ -183,7 +201,6 @@ private fun ProfileChips(
                 label = chip.name,
                 count = chip.count,
                 selected = uiState.selectedProfileId == chip.id,
-                minTouchTarget = true,
                 onClick = { onSelect(chip.id) },
                 modifier = Modifier.testTag(SessionHistoryTestTags.profile(chip.id)),
             )

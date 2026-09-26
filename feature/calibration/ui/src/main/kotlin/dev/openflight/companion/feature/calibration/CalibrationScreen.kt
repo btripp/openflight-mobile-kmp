@@ -22,6 +22,7 @@ import dev.openflight.companion.core.data.TransportType
 import dev.openflight.companion.core.designsystem.OfButton
 import dev.openflight.companion.core.designsystem.OfCard
 import dev.openflight.companion.core.designsystem.OfColorTokens
+import dev.openflight.companion.core.designsystem.OfContentWidth
 import dev.openflight.companion.core.designsystem.OfOutlinedButton
 import dev.openflight.companion.core.designsystem.OfScaffold
 import dev.openflight.companion.core.designsystem.OfSpacing
@@ -59,19 +60,22 @@ fun CalibrationScreen(
             )
         },
     ) { padding ->
-        Column(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .padding(padding)
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = OfSpacing.Xl, vertical = OfSpacing.Sm),
-            verticalArrangement = Arrangement.spacedBy(OfSpacing.Xl),
-        ) {
-            InstructionsCard()
-            TransportCard(uiState, onEvent)
-            MeasurementCard(uiState.sensor)
-            SubmissionCard(uiState, onEvent)
+        // Plan F1b: a max readable width, centered, so the cards don't stretch edge to edge on a
+        // tablet.
+        OfContentWidth(modifier = Modifier.fillMaxSize().padding(padding)) {
+            Column(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = OfSpacing.Xl, vertical = OfSpacing.Sm),
+                verticalArrangement = Arrangement.spacedBy(OfSpacing.Xl),
+            ) {
+                InstructionsCard()
+                TransportCard(uiState, onEvent)
+                MeasurementCard(uiState.sensor)
+                SubmissionCard(uiState, onEvent)
+            }
         }
     }
 }

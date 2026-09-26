@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import dev.openflight.companion.core.designsystem.OfButton
 import dev.openflight.companion.core.designsystem.OfCard
 import dev.openflight.companion.core.designsystem.OfColorTokens
+import dev.openflight.companion.core.designsystem.OfContentWidth
 import dev.openflight.companion.core.designsystem.OfMessageHostState
 import dev.openflight.companion.core.designsystem.OfOutlinedButton
 import dev.openflight.companion.core.designsystem.OfScaffold
@@ -44,8 +45,13 @@ private const val FEED_ASPECT = 4f / 3f
  * The camera screen (plan R8c): the polled preview of the Pi's high-speed camera ([frame], the
  * newest decoded still), the capture settings, and the shots whose captures can be replayed. A
  * prepared replay opens in the system's video player. Stateless: everything comes from
- * [uiState]/[frame] and goes out through [onEvent]/[onBack]. Polish is plan R8f.
+ * [uiState]/[frame] and goes out through [onEvent]. Polish is plan R8f.
+ *
+ * Plan F1b: Camera is a top-level destination reached through the app shell's bottom bar or rail,
+ * which stays on screen here too, so a "Done" button would just duplicate its Home entry. [onBack]
+ * is kept for the caller's navigation wiring, even though nothing in this screen calls it today.
  */
+@Suppress("UnusedParameter") // onBack: kept for the caller's navigation wiring, see the KDoc above.
 @Composable
 fun CameraScreen(
     uiState: CameraUiState,
@@ -58,32 +64,23 @@ fun CameraScreen(
     OfScaffold(
         modifier = modifier,
         messages = messages,
-        topBar = {
-            OfTopBar(
-                title = "Camera",
-                eyebrow = "OPENFLIGHT",
-                actions = {
-                    OfOutlinedButton(
-                        text = "Done",
-                        onClick = onBack,
-                        modifier = Modifier.padding(end = OfSpacing.Sm).testTag(CameraTestTags.DONE),
-                    )
-                },
-            )
-        },
+        topBar = { OfTopBar(title = "Camera", eyebrow = "OPENFLIGHT") },
     ) { padding ->
-        Column(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .padding(padding)
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = OfSpacing.Xl, vertical = OfSpacing.Sm),
-            verticalArrangement = Arrangement.spacedBy(OfSpacing.Lg),
-        ) {
-            Feed(uiState, frame)
-            CaptureCard(uiState, onEvent)
-            ReplaysCard(uiState, onEvent)
+        // Plan F1b: a max readable width, centered, so the cards don't stretch edge to edge on a
+        // tablet.
+        OfContentWidth(modifier = Modifier.fillMaxSize().padding(padding)) {
+            Column(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = OfSpacing.Xl, vertical = OfSpacing.Sm),
+                verticalArrangement = Arrangement.spacedBy(OfSpacing.Lg),
+            ) {
+                Feed(uiState, frame)
+                CaptureCard(uiState, onEvent)
+                ReplaysCard(uiState, onEvent)
+            }
         }
     }
 }
