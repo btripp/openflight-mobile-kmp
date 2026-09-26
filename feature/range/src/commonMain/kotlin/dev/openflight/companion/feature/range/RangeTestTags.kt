@@ -64,4 +64,7 @@ object RangeTestTags {
     fun shot(id: String): String = "range.shot.$id"
 
     // endregion
+
+    /** The side panel the metrics dock into on an expanded window in landscape (plan F1b). */
+    const val METRICS_DOCK = "range.metricsDock"
 }

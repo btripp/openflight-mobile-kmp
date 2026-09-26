@@ -20,11 +20,11 @@ import dev.openflight.companion.core.designsystem.OfCard
 import dev.openflight.companion.core.designsystem.OfChip
 import dev.openflight.companion.core.designsystem.OfColorTokens
 import dev.openflight.companion.core.designsystem.OfConfirmDialog
+import dev.openflight.companion.core.designsystem.OfContentWidth
 import dev.openflight.companion.core.designsystem.OfDisabledReason
 import dev.openflight.companion.core.designsystem.OfDropdownMenu
 import dev.openflight.companion.core.designsystem.OfMessageHostState
 import dev.openflight.companion.core.designsystem.OfNotice
-import dev.openflight.companion.core.designsystem.OfOutlinedButton
 import dev.openflight.companion.core.designsystem.OfPill
 import dev.openflight.companion.core.designsystem.OfScaffold
 import dev.openflight.companion.core.designsystem.OfSegmentedPicker
@@ -50,7 +50,13 @@ import kotlin.math.roundToInt
  * tuning and diagnostics, debug logging, cloud upload) and the Pi shutdown behind a confirmation.
  * Every Wi-Fi-only control is disabled with the VM's reason. Stateless apart from the unsent
  * player-name draft.
+ *
+ * Plan F1b: Settings is a top-level destination reached through the app shell's bottom bar or
+ * rail, which stays on screen here too, so a "Done" button would just duplicate its Home entry.
+ * [onBack] is kept for the caller's navigation wiring, even though nothing in this screen calls it
+ * today.
  */
+@Suppress("UnusedParameter") // onBack: kept for the caller's navigation wiring, see the KDoc above.
 @Composable
 fun SettingsScreen(
     uiState: SettingsUiState,
@@ -64,40 +70,31 @@ fun SettingsScreen(
     OfScaffold(
         modifier = modifier,
         messages = messages,
-        topBar = {
-            OfTopBar(
-                title = "Settings",
-                eyebrow = "OPENFLIGHT",
-                actions = {
-                    OfOutlinedButton(
-                        text = "Done",
-                        onClick = onBack,
-                        modifier = Modifier.padding(end = OfSpacing.Sm).testTag(SettingsTestTags.DONE),
-                    )
-                },
-            )
-        },
+        topBar = { OfTopBar(title = "Settings", eyebrow = "OPENFLIGHT") },
     ) { padding ->
-        Column(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .padding(padding)
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = OfSpacing.Xl, vertical = OfSpacing.Sm),
-            verticalArrangement = Arrangement.spacedBy(OfSpacing.Lg),
-        ) {
-            UnitsCard(uiState.units, onEvent)
-            ConnectionCard(uiState)
-            LaunchMonitorCard(uiState.trigger)
-            uiState.power?.let { PowerStatusCard(it) }
-            SimulatorsCard(uiState.simulators, uiState.link.disabledReason)
-            RadarCard(uiState.radar, onEvent)
-            // Hidden until the Pi reports its debug mode: never offer "Start" before that is known.
-            if (uiState.debug.loaded) DebugCard(uiState.debug, onEvent)
-            CloudCard(uiState.cloud, onEvent)
-            AudioCalloutsCard(uiState.callouts, onEvent, windowClass)
-            ShutdownCard(uiState.shutdown, onEvent)
+        // Plan F1b: a max readable width, centered, so the cards don't stretch edge to edge on a
+        // tablet.
+        OfContentWidth(modifier = Modifier.fillMaxSize().padding(padding)) {
+            Column(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = OfSpacing.Xl, vertical = OfSpacing.Sm),
+                verticalArrangement = Arrangement.spacedBy(OfSpacing.Lg),
+            ) {
+                UnitsCard(uiState.units, onEvent)
+                ConnectionCard(uiState)
+                LaunchMonitorCard(uiState.trigger)
+                uiState.power?.let { PowerStatusCard(it) }
+                SimulatorsCard(uiState.simulators, uiState.link.disabledReason)
+                RadarCard(uiState.radar, onEvent)
+                // Hidden until the Pi reports its debug mode: never offer "Start" before that is known.
+                if (uiState.debug.loaded) DebugCard(uiState.debug, onEvent)
+                CloudCard(uiState.cloud, onEvent)
+                AudioCalloutsCard(uiState.callouts, onEvent, windowClass)
+                ShutdownCard(uiState.shutdown, onEvent)
+            }
         }
     }
     if (uiState.shutdown.confirmationRequired) {

@@ -12,4 +12,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(platform(libs.koin.bom))
     implementation(libs.koin.androidx.compose)
+    // The history route's device tests drive real Session*ViewModels over these fakes (plan F1b).
+    androidTestImplementation(projects.core.data)
+    androidTestImplementation(projects.core.testing)
 }

@@ -30,4 +30,8 @@ object SessionHistoryTestTags {
 
     /** One session row, by its id. */
     fun session(id: String): String = "session.history.session.$id"
+
+    /** Android only (plan F1b): the expanded window's docked detail pane and its placeholder. */
+    const val DETAIL_PANE = "session.history.detailPane"
+    const val DETAIL_EMPTY = "session.history.detailPane.empty"
 }

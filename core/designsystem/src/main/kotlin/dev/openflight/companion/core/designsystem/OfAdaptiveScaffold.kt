@@ -22,6 +22,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 
 /**
@@ -133,7 +134,14 @@ fun OfAdaptiveScaffold(
                             onClick = item.onClick,
                             // Tinted by the item (LocalContentColor), so the selected entry stands out.
                             icon = { Icon(imageVector = item.icon, contentDescription = null) },
-                            label = { Text(item.label) },
+                            label = {
+                                // R8f leftover (plan F1b): at a 200 % system font scale, a label like
+                                // "Settings" no longer fit the bar/rail's fixed-width cell on one
+                                // line, and without a break opportunity Compose wrapped it mid-word
+                                // ("Setti"/"ngs"). One line with an ellipsis instead: TalkBack still
+                                // reads the full word, since it reads the text, not its layout.
+                                Text(item.label, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis)
+                            },
                             navigationSuiteType = suiteType,
                             modifier = Modifier.testTag(item.testTag),
                         )

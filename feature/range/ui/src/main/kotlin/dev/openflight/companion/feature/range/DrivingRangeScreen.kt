@@ -9,13 +9,17 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -29,7 +33,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import dev.openflight.companion.core.data.RangeCameraMode
 import dev.openflight.companion.core.designsystem.OfColorTokens
@@ -41,17 +44,19 @@ import dev.openflight.companion.core.designsystem.OfSpacing
 import dev.openflight.companion.core.designsystem.OfStatusChip
 import dev.openflight.companion.core.designsystem.OfText
 import dev.openflight.companion.core.designsystem.OfTextRole
-import dev.openflight.companion.core.designsystem.OfTheme
 import dev.openflight.companion.core.designsystem.OfWindowClass
 import dev.openflight.companion.core.designsystem.StatusTone
 import dev.openflight.companion.core.designsystem.rememberOfWindowClass
-import dev.openflight.companion.core.model.ShotEvent
 
 /**
  * The driving range (DrivingRangeView.swift): the 2.5D scene under a shading gradient, the metrics
  * overlay, the "Driving Range Ready" card before the first shot, and the exit / status / replay
  * controls. Stateless: everything comes from [uiState]; interactions go out through [onEvent] and
  * [onExit].
+ *
+ * @param windowClass injectable for tests and previews; defaults to [rememberOfWindowClass]. On an
+ *   [OfWindowClass.EXPANDED] window in landscape the metrics move into a docked side panel
+ *   ([MetricsDock]) instead of overlaying the scene (plan F1b, §4a A3).
  */
 @Composable
 fun DrivingRangeScreen(
@@ -73,11 +78,26 @@ fun DrivingRangeScreen(
             modifier = modifier,
             list = { RangeShotList(browse, onSelect = { onEvent(DrivingRangeEvent.SelectShot(it)) }) },
             detail = {
-                RangeStage(uiState, reduceMotion, onEvent, onExit, onOpenSessions = { showSessions = true })
+                RangeStage(
+                    uiState,
+                    reduceMotion,
+                    onEvent,
+                    onExit,
+                    windowClass,
+                    onOpenSessions = { showSessions = true },
+                )
             },
         )
     } else {
-        RangeStage(uiState, reduceMotion, onEvent, onExit, onOpenSessions = { showSessions = true }, modifier)
+        RangeStage(
+            uiState,
+            reduceMotion,
+            onEvent,
+            onExit,
+            windowClass,
+            onOpenSessions = { showSessions = true },
+            modifier,
+        )
     }
     if (showSessions) {
         RangeSessionSheet(sessions = browse.sessions, onEvent = onEvent, onDismiss = { showSessions = false })
@@ -91,12 +111,66 @@ private fun RangeStage(
     reduceMotion: Boolean,
     onEvent: (DrivingRangeEvent) -> Unit,
     onExit: () -> Unit,
+    windowClass: OfWindowClass,
     onOpenSessions: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val browse = uiState.browse
     BoxWithConstraints(modifier = modifier.fillMaxSize().background(OfColorTokens.BgDeep)) {
         val isLandscape = maxWidth > maxHeight
+        when (RangeOverlayLayout.of(windowClass, isLandscape)) {
+            RangeOverlayLayout.OVERLAID -> {
+                SceneLayer(
+                    uiState = uiState,
+                    reduceMotion = reduceMotion,
+                    isLandscape = isLandscape,
+                    onEvent = onEvent,
+                    onExit = onExit,
+                    onOpenSessions = onOpenSessions,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+
+            RangeOverlayLayout.DOCKED -> {
+                Row(modifier = Modifier.fillMaxSize()) {
+                    SceneLayer(
+                        uiState = uiState,
+                        reduceMotion = reduceMotion,
+                        isLandscape = isLandscape,
+                        onEvent = onEvent,
+                        onExit = onExit,
+                        onOpenSessions = onOpenSessions,
+                        showMetrics = false,
+                        modifier = Modifier.weight(1f).fillMaxHeight(),
+                    )
+                    MetricsDock(
+                        uiState = uiState,
+                        onEvent = onEvent,
+                        modifier = Modifier.width(DockWidth).fillMaxHeight(),
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * The scene (the [RangeCanvas], its shading and, unless [showMetrics] is false, the metrics
+ * overlaid on top), plus the exit/status/replay [Controls] and the ready card. Shared between the
+ * full-bleed phone layout and the scene side of a docked tablet layout.
+ */
+@Composable
+private fun SceneLayer(
+    uiState: DrivingRangeUiState,
+    reduceMotion: Boolean,
+    isLandscape: Boolean,
+    onEvent: (DrivingRangeEvent) -> Unit,
+    onExit: () -> Unit,
+    onOpenSessions: () -> Unit,
+    modifier: Modifier = Modifier,
+    showMetrics: Boolean = true,
+) {
+    val browse = uiState.browse
+    Box(modifier = modifier) {
         RangeCanvas(
             flight = uiState.activeFlight,
             cameraMode = uiState.cameraMode,
@@ -129,12 +203,17 @@ private fun RangeStage(
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
                 )
                 BrowseChips(uiState, onEvent, Modifier.padding(horizontal = 14.dp))
-                RangeMetricsOverlay(
-                    uiState = uiState,
-                    isLandscape = isLandscape,
-                    onSelectClub = { onEvent(DrivingRangeEvent.ClubSelected(it)) },
-                    modifier = Modifier.weight(1f),
-                )
+                if (showMetrics) {
+                    RangeMetricsOverlay(
+                        uiState = uiState,
+                        isLandscape = isLandscape,
+                        onSelectClub = { onEvent(DrivingRangeEvent.ClubSelected(it)) },
+                        modifier = Modifier.weight(1f),
+                    )
+                } else {
+                    // Plan F1b: the metrics are docked beside the scene; keep the replay bar at the bottom.
+                    Spacer(modifier = Modifier.weight(1f))
+                }
                 if (!browse.isLive) {
                     RangeBrowseBar(
                         browse = browse,
@@ -147,6 +226,30 @@ private fun RangeStage(
                 ReadyCard(modifier = Modifier.align(Alignment.Center))
             }
         }
+    }
+}
+
+/**
+ * The metrics as a solid side panel next to the scene (plan F1b), instead of overlaid text: the
+ * panel is narrow, so it always uses [RangeMetricsOverlay]'s portrait (stacked) metrics grid, not
+ * its single landscape row. Scrollable and not [RangeMetricsOverlay.expandToFill]: a wide window
+ * isn't necessarily a tall one (a phone rotated to landscape can be shorter than the metrics grid
+ * needs), and the dock has no scene above or below to make room by shrinking.
+ */
+@Composable
+private fun MetricsDock(
+    uiState: DrivingRangeUiState,
+    onEvent: (DrivingRangeEvent) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Box(modifier = modifier.background(DockBackground).testTag(RangeTestTags.METRICS_DOCK)) {
+        RangeMetricsOverlay(
+            uiState = uiState,
+            isLandscape = false,
+            onSelectClub = { onEvent(DrivingRangeEvent.ClubSelected(it)) },
+            expandToFill = false,
+            modifier = Modifier.fillMaxSize().safeDrawingPadding().verticalScroll(rememberScrollState()),
+        )
     }
 }
 
@@ -284,81 +387,6 @@ private val PillShape = RoundedCornerShape(percent = 50)
 private val ReadyShape = RoundedCornerShape(22.dp)
 private const val SHOT_LIST_FRACTION = 0.3f
 
-@Preview
-@Composable
-private fun DrivingRangeReadyPreview() {
-    OfTheme {
-        DrivingRangeScreen(uiState = DrivingRangeUiState.Ready(), reduceMotion = false, onEvent = {}, onExit = {})
-    }
-}
-
-@Preview
-@Composable
-private fun DrivingRangeShotPreview() {
-    val shot =
-        ShotEvent(
-            schemaVersion = 1,
-            eventId = "B0D91F0A-7950-4D7E-9DD5-AF9777C190E1",
-            timestamp = "2026-07-29T19:42:10",
-            club = "driver",
-            ballSpeedMph = 151.4,
-            clubSpeedMph = 103.2,
-            smashFactor = 1.47,
-            estimatedCarryYards = 264.0,
-            launchAngleVertical = 12.6,
-            launchAngleHorizontal = -1.3,
-            spinRpm = 2380.0,
-            clubPathDeg = 2.1,
-            spinAxisDeg = -3.4,
-        )
-    OfTheme {
-        DrivingRangeScreen(
-            uiState = DrivingRangeUiState.Showing(shot, RangePhase.Landed, activeFlight = null),
-            reduceMotion = false,
-            onEvent = {},
-            onExit = {},
-        )
-    }
-}
-
-private val previewReplay =
-    RangeBrowseState(
-        mode = RangeMode.Replay(sessionId = "s1", index = 1),
-        shots =
-            listOf(
-                RangeShotItem("1", 1, "driver", "Driver", 262.0, 150.1, "2026-09-25T10:03:00", flyable = true),
-                RangeShotItem("2", 2, "7-iron", "7-Iron", 171.0, 118.4, "2026-09-25T10:04:00", flyable = true),
-                RangeShotItem("3", 3, "pw", "Pitching Wedge", 128.0, 96.0, "2026-09-25T10:05:00", flyable = true),
-            ),
-        selectedShotId = "2",
-        playing = true,
-        newLiveShot = true,
-    )
-
-@Preview
-@Composable
-private fun DrivingRangeReplayPreview() {
-    OfTheme {
-        DrivingRangeScreen(
-            uiState = DrivingRangeUiState.Ready(browse = previewReplay),
-            reduceMotion = false,
-            onEvent = {},
-            onExit = {},
-            windowClass = OfWindowClass.COMPACT,
-        )
-    }
-}
-
-@Preview(widthDp = 1280, heightDp = 800)
-@Composable
-private fun DrivingRangeReplayTabletPreview() {
-    OfTheme {
-        DrivingRangeScreen(
-            uiState = DrivingRangeUiState.Ready(browse = previewReplay),
-            reduceMotion = false,
-            onEvent = {},
-            onExit = {},
-            windowClass = OfWindowClass.EXPANDED,
-        )
-    }
-}
+/** The docked metrics panel's fixed width (plan F1b): wide enough for the two-column metrics grid. */
+private val DockWidth = 340.dp
+private val DockBackground = OfColorTokens.BgCard

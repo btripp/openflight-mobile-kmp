@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
@@ -36,6 +37,12 @@ import dev.openflight.companion.core.model.ShotMetricFormatter
  * selector, in one row in landscape or a two-column grid in portrait. While a ball flies and
  * through the landing dwell ([compactMetrics], plan R7b) the detail metrics fold into one strip so
  * the landing area stays visible.
+ *
+ * @param expandToFill true (the phone overlay, full screen height) pushes the bottom content down
+ *   with a growing spacer, so it sits at the bottom of the scene regardless of how tall the top
+ *   metrics are. false (the docked side panel, plan F1b, a fixed but possibly short height) uses a
+ *   small fixed gap instead: a growing spacer needs the parent's height to be bounded, which a
+ *   scrollable dock (for a panel shorter than its content) can't guarantee.
  */
 @Composable
 internal fun RangeMetricsOverlay(
@@ -43,6 +50,7 @@ internal fun RangeMetricsOverlay(
     isLandscape: Boolean,
     onSelectClub: (GolfClub) -> Unit,
     modifier: Modifier = Modifier,
+    expandToFill: Boolean = true,
 ) {
     val shot = uiState.displayedShot
     Column(
@@ -78,7 +86,11 @@ internal fun RangeMetricsOverlay(
                 modifier = Modifier.weight(1f).testTag(RangeTestTags.CARRY),
             )
         }
-        Spacer(modifier = Modifier.weight(1f))
+        if (expandToFill) {
+            Spacer(modifier = Modifier.weight(1f))
+        } else {
+            Spacer(modifier = Modifier.height(OfSpacing.Md))
+        }
         uiState.club.error?.let { error ->
             Pill(text = "⚠ $error", color = OfColorTokens.Danger, modifier = Modifier.testTag(RangeTestTags.CLUB_ERROR))
         }

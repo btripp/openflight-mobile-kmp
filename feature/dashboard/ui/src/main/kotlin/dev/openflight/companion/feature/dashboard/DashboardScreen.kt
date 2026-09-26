@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -24,13 +25,12 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import dev.openflight.companion.core.data.TransportType
 import dev.openflight.companion.core.designsystem.OfCard
 import dev.openflight.companion.core.designsystem.OfColorTokens
-import dev.openflight.companion.core.designsystem.OfDivider
 import dev.openflight.companion.core.designsystem.OfDropdownMenu
+import dev.openflight.companion.core.designsystem.OfListDetailPane
 import dev.openflight.companion.core.designsystem.OfMetricDetail
 import dev.openflight.companion.core.designsystem.OfMetricPrimary
 import dev.openflight.companion.core.designsystem.OfOutlinedButton
@@ -42,17 +42,13 @@ import dev.openflight.companion.core.designsystem.OfStatusChip
 import dev.openflight.companion.core.designsystem.OfText
 import dev.openflight.companion.core.designsystem.OfTextField
 import dev.openflight.companion.core.designsystem.OfTextRole
-import dev.openflight.companion.core.designsystem.OfTheme
 import dev.openflight.companion.core.designsystem.OfTopBar
+import dev.openflight.companion.core.designsystem.OfWindowClass
 import dev.openflight.companion.core.designsystem.StatusTone
+import dev.openflight.companion.core.designsystem.rememberOfWindowClass
 import dev.openflight.companion.core.insights.ClubChip
-import dev.openflight.companion.core.insights.ConfidenceLevel
-import dev.openflight.companion.core.insights.ShotEnrichment
-import dev.openflight.companion.core.insights.SpinSource
 import dev.openflight.companion.core.model.ConnectionState
 import dev.openflight.companion.core.model.GolfClub
-import dev.openflight.companion.core.model.ShotEvent
-import dev.openflight.companion.core.model.ShotMetricFormatter
 
 /**
  * The dashboard (ContentView.swift): header with the Range entry, the connection card, and either
@@ -63,6 +59,10 @@ import dev.openflight.companion.core.model.ShotMetricFormatter
  * which replays whenever [shotFlashes] changes (the route bumps it on `DashboardEffect.NewShot`).
  * Session, Training, Camera and Settings are reached from the app shell's bottom bar or rail
  * (plan F1a), not from here.
+ *
+ * @param windowClass injectable for tests and previews; defaults to [rememberOfWindowClass]. On an
+ *   [OfWindowClass.EXPANDED] window the live metrics and the connection/club card sit side by side
+ *   in two independently-scrolling columns (plan F1b) instead of stacking in one.
  */
 @Composable
 fun DashboardScreen(
@@ -72,6 +72,7 @@ fun DashboardScreen(
     onOpenRange: () -> Unit,
     modifier: Modifier = Modifier,
     shotFlashes: Int = 0,
+    windowClass: OfWindowClass = rememberOfWindowClass(),
 ) {
     OfScaffold(
         modifier = modifier,
@@ -89,32 +90,81 @@ fun DashboardScreen(
             )
         },
     ) { padding ->
-        Column(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .padding(padding)
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = OfSpacing.Xl, vertical = OfSpacing.Sm),
-            verticalArrangement = Arrangement.spacedBy(OfSpacing.Xl),
-        ) {
-            // Above the long connection card, so it's on screen while swinging (plan R8f).
-            uiState.processing?.let { ProcessingNotice(it) }
-            ConnectionCard(uiState.connection, onEvent, onOpenCalibration)
-            when (uiState) {
-                is DashboardUiState.Waiting -> {
-                    EmptyState()
-                }
-
-                is DashboardUiState.Live -> {
-                    Box {
-                        ShotCard(uiState.latest, uiState.units, uiState.latestEnrichment)
-                        ShotFlash(trigger = shotFlashes, modifier = Modifier.matchParentSize())
-                    }
-                    if (uiState.clubChips.isNotEmpty()) ClubChipsCard(uiState.clubChips)
-                    if (uiState.previous.isNotEmpty()) ShotHistoryCard(uiState.previous, uiState.units)
+        val expanded = windowClass == OfWindowClass.EXPANDED
+        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+            // Above the long connection card, so it's on screen while swinging (plan R8f). Full
+            // width in both layouts: it's a transient banner, not part of either column.
+            uiState.processing?.let {
+                Box(modifier = Modifier.padding(horizontal = OfSpacing.Xl, vertical = OfSpacing.Sm)) {
+                    ProcessingNotice(it)
                 }
             }
+            // hasSelection is always false: there's no selection here, only whether the window is
+            // wide enough for two panes. On COMPACT/MEDIUM that's a single LIST pane holding
+            // everything stacked, same as before F1b; DETAIL is only ever composed on EXPANDED.
+            OfListDetailPane(
+                hasSelection = false,
+                windowClass = windowClass,
+                modifier = Modifier.fillMaxSize(),
+                list = {
+                    // On COMPACT/MEDIUM this pane holds everything (no detail pane is ever shown),
+                    // so it only gets the "metrics column" tag once it's actually metrics-only.
+                    ColumnContent(
+                        modifier = if (expanded) Modifier.testTag(DashboardTestTags.METRICS_COLUMN) else Modifier,
+                    ) {
+                        if (expanded) {
+                            MetricsContent(uiState, shotFlashes)
+                        } else {
+                            ConnectionCard(uiState.connection, onEvent, onOpenCalibration)
+                            MetricsContent(uiState, shotFlashes)
+                        }
+                    }
+                },
+                detail = {
+                    ColumnContent(modifier = Modifier.testTag(DashboardTestTags.CONNECTION_COLUMN)) {
+                        ConnectionCard(uiState.connection, onEvent, onOpenCalibration)
+                    }
+                },
+            )
+        }
+    }
+}
+
+/** A scrollable, padded column: the shared shell for the dashboard's list and detail panes. */
+@Composable
+private fun ColumnContent(
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Column(
+        modifier =
+            modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = OfSpacing.Xl, vertical = OfSpacing.Sm),
+        verticalArrangement = Arrangement.spacedBy(OfSpacing.Xl),
+        content = content,
+    )
+}
+
+/** The live metrics: the latest shot (or the empty state), the club chips and the shot history. */
+@Composable
+private fun MetricsContent(
+    uiState: DashboardUiState,
+    shotFlashes: Int,
+) {
+    when (uiState) {
+        is DashboardUiState.Waiting -> {
+            EmptyState()
+        }
+
+        is DashboardUiState.Live -> {
+            Box {
+                ShotCard(uiState.latest, uiState.units, uiState.latestEnrichment)
+                ShotFlash(trigger = shotFlashes, modifier = Modifier.matchParentSize())
+            }
+            if (uiState.clubChips.isNotEmpty()) ClubChipsCard(uiState.clubChips)
+            if (uiState.previous.isNotEmpty()) ShotHistoryCard(uiState.previous, uiState.units)
         }
     }
 }
@@ -257,56 +307,3 @@ private fun ConnectionState.tone(): StatusTone =
         is ConnectionState.Error, is ConnectionState.Unavailable -> StatusTone.Negative
         ConnectionState.Idle -> StatusTone.Neutral
     }
-
-@Preview
-@Composable
-private fun DashboardLivePreview() {
-    val shot =
-        ShotEvent(
-            schemaVersion = 1,
-            eventId = "B0D91F0A-7950-4D7E-9DD5-AF9777C190E1",
-            timestamp = "2026-07-29T19:42:10",
-            club = "driver",
-            ballSpeedMph = 151.4,
-            clubSpeedMph = 103.2,
-            smashFactor = 1.47,
-            estimatedCarryYards = 264.0,
-            launchAngleVertical = 12.6,
-            launchAngleHorizontal = -1.3,
-            spinRpm = 2380.0,
-            clubPathDeg = 2.1,
-            spinAxisDeg = -3.4,
-        )
-    OfTheme {
-        DashboardScreen(
-            uiState =
-                DashboardUiState.Live(
-                    connection =
-                        ConnectionPanelState(
-                            transport = TransportType.WIFI,
-                            state = ConnectionState.Connected,
-                        ),
-                    latest = shot,
-                    previous = listOf(shot.copy(eventId = "B0D91F0A-7950-4D7E-9DD5-AF9777C190E2", club = "7-iron")),
-                    clubChips = listOf(ClubChip("driver", 1), ClubChip("7-iron", 1)),
-                    enrichments =
-                        mapOf(
-                            shot.eventId to
-                                ShotEnrichment(
-                                    launchAngleConfidence = ConfidenceLevel.HIGH,
-                                    angleSource = "radar",
-                                    spinQuality = ConfidenceLevel.MEDIUM,
-                                    spinSource = SpinSource.ESTIMATED,
-                                    carryRangeLowYards = 251.0,
-                                    carryRangeHighYards = 277.0,
-                                    carrySpinAdjustedYards = null,
-                                    profileName = "Alex",
-                                ),
-                        ),
-                ),
-            onEvent = {},
-            onOpenCalibration = {},
-            onOpenRange = {},
-        )
-    }
-}
