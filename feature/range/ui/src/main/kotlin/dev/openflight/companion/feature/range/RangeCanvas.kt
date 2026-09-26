@@ -34,8 +34,7 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.openflight.companion.core.data.RangeCameraMode
-import dev.openflight.companion.core.flight.RangeQualityProfile
-import dev.openflight.companion.core.flight.RangeSceneDescription
+import dev.openflight.companion.core.designsystem.OfClubPalette
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -93,9 +92,11 @@ fun RangeCanvas(
     val viewChanged by rememberUpdatedState(onViewChanged)
     val resetView by rememberUpdatedState(onResetView)
     val selectLanding by rememberUpdatedState(onSelectLanding)
-    val quality = RangeQualityProfile.BALANCED
+    // Plan F8c1: the shared palette and sizes; F8a2 makes the theme selectable.
+    val style = RangeTheme.DAY.style
     val rig = remember { RangeCameraRig() }
-    val renderer = remember { RangeRenderer(RangeScene(RangeSceneDescription.standard(quality.treeCount))) }
+    val renderer =
+        remember(style) { RangeRenderer(RangeFrame(style, OfClubPalette.colors.size, ::ComposePathSink)) }
     val textMeasurer = rememberTextMeasurer()
 
     // Entering the overlay drops the frozen tracer: the overlay's own trajectories replace it.
@@ -137,21 +138,39 @@ fun RangeCanvas(
     val drawCache: CacheDrawScope.() -> DrawResult =
         remember(renderer, textMeasurer) {
             {
-                renderer.resize(size.width, size.height, rig.fixedPose)
-                renderer.setFlight(shown, quality.tracerPointCount)
+                val frame = renderer.frame
+                frame.resize(size.width, size.height, rig.fixedPose)
+                frame.setFlight(shown, RangeFrame.QUALITY.tracerPointCount)
                 val flights = overlayState.value
                 val selected = selectedState.value
                 val estimate = rollOutState.value
-                renderer.setOverlay(flights, selected)
+                frame.setOverlay(flights, selected)
                 val rollOutTrajectory = shown?.trajectory ?: flights.firstOrNull { it.shotId == selected }?.trajectory
-                renderer.setRollOut(estimate, rollOutTrajectory)
+                frame.setRollOut(estimate, rollOutTrajectory)
+                val labelColor = style.label.toColor()
                 val rollOutLabel =
-                    estimate?.let { textMeasurer.measure(it.totalLabel, rollOutStyle.copy(fontSize = ROLL_OUT_SP.sp)) }
+                    estimate?.let {
+                        textMeasurer.measure(
+                            it.totalLabel,
+                            TextStyle(
+                                color = labelColor,
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = style.rollOutLabelSize.sp,
+                            ),
+                        )
+                    }
                 renderer.labelLayouts =
                     renderer.scene.labels.map { label ->
-                        textMeasurer.measure(label.text, labelStyle.copy(fontSize = MAX_LABEL_SP.sp))
+                        textMeasurer.measure(
+                            label.text,
+                            TextStyle(
+                                color = labelColor,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = style.maxLabelSize.sp,
+                            ),
+                        )
                     }
-                renderer.labelFontPixels = MAX_LABEL_SP.sp.toPx()
+                renderer.labelFontPixels = style.maxLabelSize.sp.toPx()
                 onDrawBehind {
                     val current = shown
                     val transform = currentView.value
@@ -171,8 +190,8 @@ fun RangeCanvas(
                         this,
                         pose,
                         progress.floatValue,
-                        LABEL_HEIGHT_METERS,
-                        MIN_LABEL_SP.sp.toPx(),
+                        style.labelHeightMeters,
+                        style.minLabelSize.sp.toPx(),
                         rollOutLabel,
                     )
                 }
@@ -288,12 +307,6 @@ private fun viewDescription(view: ViewTransform): String =
     }
 
 private const val NANOS_PER_SECOND = 1_000_000_000.0
-private const val LABEL_HEIGHT_METERS = 2.2f
-private const val MIN_LABEL_SP = 9f
-private const val MAX_LABEL_SP = 16f
-private const val ROLL_OUT_SP = 13f
 private const val TAP_REACH_DP = 40
 private const val MIN_SPEED = 0.1
 private const val PERCENT = 100
-private val labelStyle = TextStyle(color = androidx.compose.ui.graphics.Color.White, fontWeight = FontWeight.Bold)
-private val rollOutStyle = TextStyle(color = androidx.compose.ui.graphics.Color.White, fontWeight = FontWeight.SemiBold)

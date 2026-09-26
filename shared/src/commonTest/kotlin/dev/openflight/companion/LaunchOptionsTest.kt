@@ -82,4 +82,23 @@ class LaunchOptionsTest {
         assertThat(options.host).isEqualTo(null)
         assertThat(LaunchOptions.fromArguments(listOf("--host", "--ui-testing")).host).isEqualTo(null)
     }
+
+    @Test
+    fun rangeFreezeProgressTakesAFractionClampedToTheFlight() {
+        fun freeze(value: String) = LaunchOptions.fromArguments(listOf("app", "--range-freeze-progress", value))
+
+        assertThat(freeze("0.5").rangeFreezeProgress).isEqualTo(0.5)
+        assertThat(freeze("1.7").rangeFreezeProgress).isEqualTo(1.0)
+        assertThat(freeze("-2").rangeFreezeProgress).isEqualTo(0.0)
+        assertThat(freeze("half").rangeFreezeProgress).isEqualTo(null)
+        assertThat(freeze("NaN").rangeFreezeProgress).isEqualTo(null)
+        assertThat(LaunchOptions.fromArguments(listOf("app")).rangeFreezeProgress).isEqualTo(null)
+        assertThat(freeze("0.5").usesFakeRepository).isFalse()
+    }
+
+    @Test
+    fun rangeRealityKitIsAFlag() {
+        assertThat(LaunchOptions.fromArguments(listOf("app", "--range-realitykit")).rangeRealityKit).isTrue()
+        assertThat(LaunchOptions.fromArguments(listOf("app")).rangeRealityKit).isFalse()
+    }
 }

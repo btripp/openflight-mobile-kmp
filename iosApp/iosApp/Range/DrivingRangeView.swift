@@ -17,6 +17,8 @@ struct DrivingRangeView: View {
     let autoplay: Bool
 
     @StateObject private var host = ViewModelHost(KoinHelper().drivingRangeViewModel())
+    /// Debug launch hooks (plan F8c2): `--range-realitykit`, `--range-freeze-progress`.
+    private let launchOptions = KoinHelper().launchOptions()
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
@@ -29,7 +31,9 @@ struct DrivingRangeView: View {
             onExit: {
                 host.viewModel.suspend()
                 dismiss()
-            }
+            },
+            usesRealityKit: launchOptions.rangeRealityKit,
+            freezeProgress: launchOptions.rangeFreezeProgress?.doubleValue
         )
         .toolbar(.hidden, for: .navigationBar)
         .onAppear {
@@ -53,13 +57,19 @@ struct DrivingRangeView: View {
     }
 }
 
-/// The stateless range: the RealityKit scene under a shading gradient, the metrics overlay, the
+/// The stateless range: the scene under a shading gradient, the metrics overlay, the
 /// "Driving Range Ready" card before the first shot, and the exit / status / replay controls.
+///
+/// The scene is the shared-geometry `RangeCanvasView` (plan F8c2, ADR 0002). The previous
+/// RealityKit `RangeSceneView` stays behind `usesRealityKit` (`--range-realitykit`) for one release.
 struct DrivingRangeContent: View {
     let state: DrivingRangeUiState
     let reduceMotion: Bool
     let send: (DrivingRangeEvent) -> Void
     let onExit: () -> Void
+    var usesRealityKit = false
+    /// Debug (`--range-freeze-progress`): hold every flight at this playback progress.
+    var freezeProgress: Double?
 
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
@@ -71,21 +81,12 @@ struct DrivingRangeContent: View {
             let docksToSide = horizontalSizeClass == .regular && isLandscape
 
             ZStack {
-                RangeSceneView(
-                    flight: state.activeFlight,
-                    cameraMode: state.cameraMode,
-                    reduceMotion: reduceMotion,
-                    onFlightCompleted: { send(DrivingRangeEventFlightCompleted.shared) }
-                )
-                .ignoresSafeArea()
+                scene
+                    .ignoresSafeArea()
 
-                LinearGradient(
-                    colors: [.black.opacity(0.38), .clear, .black.opacity(0.60)],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .ignoresSafeArea()
-                .allowsHitTesting(false)
+                RangeTheme.day.style.shadeGradient
+                    .ignoresSafeArea()
+                    .allowsHitTesting(false)
 
                 RangeMetricsOverlay(
                     state: state,
@@ -106,6 +107,32 @@ struct DrivingRangeContent: View {
         }
         .foregroundStyle(Theme.cream)
         .preferredColorScheme(.dark)
+    }
+
+    @ViewBuilder
+    private var scene: some View {
+        if usesRealityKit {
+            RangeSceneView(
+                flight: state.activeFlight,
+                cameraMode: state.cameraMode,
+                reduceMotion: reduceMotion,
+                onFlightCompleted: { send(DrivingRangeEventFlightCompleted.shared) }
+            )
+        } else {
+            let browse = state.browse
+            RangeCanvasView(
+                flight: state.activeFlight,
+                cameraMode: state.cameraMode,
+                reduceMotion: reduceMotion,
+                view: browse.view,
+                rollOut: state.rollOut,
+                overlay: browse.overlayFlights,
+                overlayMode: state.mode is RangeModeOverlay,
+                selectedOverlayId: browse.selectedShotId,
+                freezeProgress: freezeProgress,
+                onFlightCompleted: { send(DrivingRangeEventFlightCompleted.shared) }
+            )
+        }
     }
 
     private var controls: some View {

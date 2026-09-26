@@ -33,6 +33,11 @@ import dev.openflight.companion.core.data.TransportType
  * @property previewPiSession swap in [PreviewPiSessionRepository]: a connected Pi whose deletes and
  *   clears are confirmed after a short delay (plan R8f). Use with [uiTesting].
  * @property previewPiSessionStuck like [previewPiSession], but the Pi never answers.
+ * @property rangeFreezeProgress iOS only (plan F8c2), for screenshots: `--range-freeze-progress
+ *   0.5` holds every range flight at that playback progress (0..1, clamped). At 1 the flight lands
+ *   and the follow camera is shown fully settled.
+ * @property rangeRealityKit iOS only (plan F8c2): `--range-realitykit` draws the range with the
+ *   previous RealityKit scene instead of the Canvas renderer. Kept for one release (ADR 0002).
  */
 data class LaunchOptions(
     val uiTesting: Boolean = false,
@@ -46,6 +51,8 @@ data class LaunchOptions(
     val previewHistoryStuck: Boolean = false,
     val previewPiSession: Boolean = false,
     val previewPiSessionStuck: Boolean = false,
+    val rangeFreezeProgress: Double? = null,
+    val rangeRealityKit: Boolean = false,
 ) {
     val usesFakeRepository: Boolean
         get() = uiTesting || previewShot || previewPi
@@ -62,6 +69,8 @@ data class LaunchOptions(
         const val PREVIEW_HISTORY_STUCK = "--preview-history-stuck"
         const val PREVIEW_PI_SESSION = "--preview-pi-session"
         const val PREVIEW_PI_SESSION_STUCK = "--preview-pi-session-stuck"
+        const val RANGE_FREEZE_PROGRESS = "--range-freeze-progress"
+        const val RANGE_REALITYKIT = "--range-realitykit"
 
         /** Parses process arguments; unknown arguments (Xcode adds its own) are ignored. */
         fun fromArguments(arguments: List<String>): LaunchOptions {
@@ -81,6 +90,12 @@ data class LaunchOptions(
                 previewHistoryStuck = PREVIEW_HISTORY_STUCK in arguments,
                 previewPiSession = PREVIEW_PI_SESSION in arguments,
                 previewPiSessionStuck = PREVIEW_PI_SESSION_STUCK in arguments,
+                rangeFreezeProgress =
+                    valueAfter(RANGE_FREEZE_PROGRESS)
+                        ?.toDoubleOrNull()
+                        ?.takeIf { it.isFinite() }
+                        ?.coerceIn(0.0, 1.0),
+                rangeRealityKit = RANGE_REALITYKIT in arguments,
             )
         }
     }
