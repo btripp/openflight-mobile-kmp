@@ -31,4 +31,10 @@ object SessionTestTags {
 
     /** A shot row, by its [SessionShotRow.id]. */
     fun shot(id: String): String = "session.shot.$id"
+
+    /** Plan F8d: the selected-shot card's "View on range". */
+    const val SELECTED_VIEW_ON_RANGE = "session.selected.viewOnRange"
+
+    /** Plan F8d: a shot row's "Range" button, by its [SessionShotRow.id]. */
+    fun viewOnRange(id: String): String = "session.shot.$id.viewOnRange"
 }

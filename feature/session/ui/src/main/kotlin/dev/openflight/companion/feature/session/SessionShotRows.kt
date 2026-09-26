@@ -25,6 +25,7 @@ import dev.openflight.companion.core.designsystem.OfColorTokens
 import dev.openflight.companion.core.designsystem.OfSpacing
 import dev.openflight.companion.core.designsystem.OfSwipeToDelete
 import dev.openflight.companion.core.designsystem.OfText
+import dev.openflight.companion.core.designsystem.OfTextButton
 import dev.openflight.companion.core.designsystem.OfTextRole
 import dev.openflight.companion.core.designsystem.OfTheme
 import dev.openflight.companion.core.insights.ClubChip
@@ -53,15 +54,16 @@ internal fun SessionShotRowItem(
     deletable: Boolean = true,
     selected: Boolean = false,
     onSelect: (() -> Unit)? = null,
+    onViewOnRange: (() -> Unit)? = null,
 ) {
     val tagged = modifier.testTag(SessionTestTags.shot(shot.id))
     if (deletable) {
         // The delete asks for confirmation first (plan R8f), so the row slides back meanwhile.
         OfSwipeToDelete(onDelete = onDelete, modifier = tagged, snapBack = true) {
-            ShotRowContent(shot, units, selected, onSelect)
+            ShotRowContent(shot, units, selected, onSelect, onViewOnRange)
         }
     } else {
-        Row(modifier = tagged) { ShotRowContent(shot, units, selected, onSelect) }
+        Row(modifier = tagged) { ShotRowContent(shot, units, selected, onSelect, onViewOnRange) }
     }
 }
 
@@ -71,6 +73,7 @@ private fun ShotRowContent(
     units: UnitSystem,
     selected: Boolean,
     onSelect: (() -> Unit)?,
+    onViewOnRange: (() -> Unit)?,
 ) {
     val shape = RoundedCornerShape(12.dp)
     Row(
@@ -118,8 +121,20 @@ private fun ShotRowContent(
                 distanceUnitLabel(units).uppercase(),
             )
         }
+        // Plan F8d: only a shot with the ball speed and carry a flight needs can be viewed.
+        if (onViewOnRange != null && shot.canFly) {
+            OfTextButton(
+                text = "Range",
+                onClick = onViewOnRange,
+                modifier = Modifier.testTag(SessionTestTags.viewOnRange(shot.id)),
+            )
+        }
     }
 }
+
+/** The range can fly this row (plan F8d): a ball shot with ball speed and carry. */
+internal val SessionShotRow.canFly: Boolean
+    get() = !isSwingSpeed && ballSpeedMph != null && carryYards != null
 
 @Composable
 private fun RowMetric(

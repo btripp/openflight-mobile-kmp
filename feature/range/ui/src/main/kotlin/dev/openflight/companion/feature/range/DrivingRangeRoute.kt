@@ -25,6 +25,8 @@ import org.koin.androidx.compose.koinViewModel
  * @param replaySessionId plan F8a1: open straight into a replay of this stored session (Session
  *   history detail → "Replay on range"); once, not again after a configuration change.
  * @param windowClass injectable so device tests can force the phone or the tablet layout.
+ * @param replayShotId plan F8d: with [replaySessionId], open paused on this shot ("View on range");
+ *   any id [RangeLaunch.shotId] accepts.
  */
 @Composable
 fun DrivingRangeRoute(
@@ -34,6 +36,7 @@ fun DrivingRangeRoute(
     reduceMotion: Boolean = rememberReduceMotionEnabled(),
     replaySessionId: String? = null,
     windowClass: OfWindowClass = rememberOfWindowClass(),
+    replayShotId: String? = null,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     LifecycleResumeEffect(viewModel) {
@@ -46,10 +49,10 @@ fun DrivingRangeRoute(
         if (autoplay) viewModel.onEvent(DrivingRangeEvent.Replay)
     }
     var replayStarted by rememberSaveable { mutableStateOf(false) }
-    LaunchedEffect(viewModel, replaySessionId) {
+    LaunchedEffect(viewModel, replaySessionId, replayShotId) {
         if (replaySessionId != null && !replayStarted) {
             replayStarted = true
-            viewModel.onEvent(DrivingRangeEvent.StartReplay(replaySessionId))
+            viewModel.onEvent(DrivingRangeEvent.Launch(RangeLaunch(replaySessionId, replayShotId)))
         }
     }
     DrivingRangeScreen(

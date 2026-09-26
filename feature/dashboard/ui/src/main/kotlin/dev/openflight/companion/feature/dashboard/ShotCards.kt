@@ -25,6 +25,7 @@ import dev.openflight.companion.core.designsystem.OfMetricDetail
 import dev.openflight.companion.core.designsystem.OfMetricPrimary
 import dev.openflight.companion.core.designsystem.OfSpacing
 import dev.openflight.companion.core.designsystem.OfText
+import dev.openflight.companion.core.designsystem.OfTextButton
 import dev.openflight.companion.core.designsystem.OfTextRole
 import dev.openflight.companion.core.designsystem.metricContentDescription
 import dev.openflight.companion.core.insights.ClubChip
@@ -49,20 +50,31 @@ internal fun ShotCard(
     shot: ShotEvent,
     units: UnitSystem = UnitSystem.IMPERIAL,
     enrichment: ShotEnrichment? = null,
+    onViewOnRange: (() -> Unit)? = null,
 ) {
     OfCard(
         modifier = Modifier.fillMaxWidth().testTag(DashboardTestTags.LATEST_SHOT),
         contentSpacing = OfSpacing.Xl,
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            OfText(text = "LATEST SHOT", role = OfTextRole.Eyebrow, color = OfColorTokens.Gold)
-            OfText(text = shot.displayClub, role = OfTextRole.Title)
-            enrichment?.profileName?.let { player ->
-                OfText(
-                    text = player,
-                    role = OfTextRole.BodySmall,
-                    color = OfColorTokens.CreamDim,
-                    modifier = Modifier.testTag(DashboardUiTags.PLAYER),
+        Row(verticalAlignment = Alignment.Top) {
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                OfText(text = "LATEST SHOT", role = OfTextRole.Eyebrow, color = OfColorTokens.Gold)
+                OfText(text = shot.displayClub, role = OfTextRole.Title)
+                enrichment?.profileName?.let { player ->
+                    OfText(
+                        text = player,
+                        role = OfTextRole.BodySmall,
+                        color = OfColorTokens.CreamDim,
+                        modifier = Modifier.testTag(DashboardUiTags.PLAYER),
+                    )
+                }
+            }
+            // Plan F8d: fly this shot on the range, paused on it.
+            if (onViewOnRange != null) {
+                OfTextButton(
+                    text = "View on range",
+                    onClick = onViewOnRange,
+                    modifier = Modifier.testTag(DashboardTestTags.VIEW_ON_RANGE),
                 )
             }
         }

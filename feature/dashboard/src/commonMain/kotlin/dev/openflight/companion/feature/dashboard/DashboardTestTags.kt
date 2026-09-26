@@ -56,4 +56,7 @@ object DashboardTestTags {
 
     /** Plan F1d: the menu entry that pushes swing-speed training. */
     const val OPEN_TRAINING = "dashboard.openTraining"
+
+    /** Plan F8d: the latest shot's "View on range". */
+    const val VIEW_ON_RANGE = "dashboard.viewOnRange"
 }

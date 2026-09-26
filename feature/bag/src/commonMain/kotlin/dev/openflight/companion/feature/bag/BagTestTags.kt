@@ -2,6 +2,7 @@
 package dev.openflight.companion.feature.bag
 
 /** Test tags (Android) and accessibility identifiers (iOS) for the bag screens (plan F5). */
+@Suppress("TooManyFunctions") // One tag builder per per-item control.
 object BagTestTags {
     const val LIST = "bag.list"
     const val BAG_NAME = "bag.name"
@@ -61,4 +62,7 @@ object BagTestTags {
     fun option(label: String): String = "bag.analysis.option.$label"
 
     fun surface(label: String): String = "bag.conditions.surface.$label"
+
+    /** Plan F8d: a Club Detail recent shot's "Range", by its stored row id. */
+    fun viewOnRange(shotId: Long): String = "bag.detail.recent.$shotId.viewOnRange"
 }

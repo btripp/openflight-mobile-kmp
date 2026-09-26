@@ -18,6 +18,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
+import dev.openflight.companion.core.data.ShotHistoryRepository
 import dev.openflight.companion.core.designsystem.OfAdaptiveScaffold
 import dev.openflight.companion.core.designsystem.OfIcons
 import dev.openflight.companion.core.designsystem.OfNavigationItem
@@ -194,6 +195,15 @@ private fun AppGraph(
     launchOptions: LaunchOptions,
 ) {
     val onBack: () -> Unit = { navController.popBackStack() }
+    // Plan F8d: "View on range" opens RangeReplay on the shot, in the live session's history session.
+    val koin = getKoin()
+    val history = remember(koin) { koin.get<ShotHistoryRepository>() }
+    val viewLiveShotOnRange: (String) -> Unit = { shotId ->
+        navController.navigate(RangeReplay(history.currentSessionId.value.orEmpty(), shotId))
+    }
+    val viewStoredShotOnRange: (String, String) -> Unit = { sessionId, shotId ->
+        navController.navigate(RangeReplay(sessionId, shotId))
+    }
     NavHost(navController = navController, startDestination = Dashboard) {
         composable<Dashboard> {
             DashboardRoute(
@@ -206,6 +216,7 @@ private fun AppGraph(
                     ->
                     TransportPermissionRequest(transport, onResult)
                 },
+                onViewOnRange = viewLiveShotOnRange,
             )
         }
         composable<Calibration> { CalibrationRoute(onBack = onBack) }
@@ -215,6 +226,7 @@ private fun AppGraph(
                 onBack = onBack,
                 onShareCsv = rememberCsvSharer(),
                 onOpenHistory = { navController.navigate(SessionHistory) },
+                onViewOnRange = viewLiveShotOnRange,
             )
         }
         composable<SessionHistory> {
@@ -222,6 +234,8 @@ private fun AppGraph(
                 onBack = onBack,
                 onOpenSession = { navController.navigate(SessionHistoryDetail(it)) },
                 onShareCsv = rememberCsvSharer(),
+                onReplayOnRange = { navController.navigate(RangeReplay(it)) },
+                onViewOnRange = viewStoredShotOnRange,
             )
         }
         composable<SessionHistoryDetail> { entry ->
@@ -234,6 +248,7 @@ private fun AppGraph(
                         RangeReplay(entry.toRoute<SessionHistoryDetail>().sessionId),
                     )
                 },
+                onViewOnRange = { viewStoredShotOnRange(entry.toRoute<SessionHistoryDetail>().sessionId, it) },
             )
         }
         composable<Training> { TrainingRoute(onBack = onBack) }
@@ -245,21 +260,32 @@ private fun AppGraph(
                 onOpenCamera = { navController.navigate(Camera) },
             )
         }
-        composable<Bag> { BagRoute(onOpenAnalysis = { navController.navigate(BagAnalysis) }) }
+        composable<Bag> {
+            BagRoute(onOpenAnalysis = { navController.navigate(BagAnalysis) }, onViewOnRange = viewStoredShotOnRange)
+        }
         composable<BagAnalysis> {
             ClubAnalysisRoute(onBack = onBack, onOpenClub = { navController.navigate(BagClubDetail(it)) })
         }
         composable<BagClubDetail> { entry ->
-            ClubDetailRoute(wireValue = entry.toRoute<BagClubDetail>().wireValue, onBack = onBack)
+            ClubDetailRoute(
+                wireValue = entry.toRoute<BagClubDetail>().wireValue,
+                onBack = onBack,
+                onViewOnRange = viewStoredShotOnRange,
+            )
         }
         composable<RangeReplay> { entry ->
-            DrivingRangeRoute(onExit = onBack, replaySessionId = entry.toRoute<RangeReplay>().sessionId)
+            val route = entry.toRoute<RangeReplay>()
+            DrivingRangeRoute(onExit = onBack, replaySessionId = route.sessionId, replayShotId = route.shotId)
         }
     }
 }
 
-/** Plan F8a1: the driving range replaying stored session [sessionId] (Session history detail). */
+/**
+ * Plan F8a1: the driving range replaying stored session [sessionId] (Session history detail). Plan
+ * F8d: with a [shotId] ("View on range") it opens paused on that shot instead.
+ */
 @Serializable
 data class RangeReplay(
     val sessionId: String,
+    val shotId: String? = null,
 )

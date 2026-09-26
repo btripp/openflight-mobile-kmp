@@ -38,6 +38,8 @@ import org.koin.core.parameter.parametersOf
  *
  * @param onReplayOnRange plan F8a1: opens the driving range replaying this session; `null` hides
  *   the button.
+ * @param onViewOnRange plan F8d: opens the driving range paused on one of this session's shots, by
+ *   its [SessionShotRow.id]; `null` hides the rows' "Range" buttons.
  */
 @Composable
 fun SessionHistoryDetailRoute(
@@ -45,6 +47,7 @@ fun SessionHistoryDetailRoute(
     onBack: () -> Unit,
     onShareCsv: (csv: String, filename: String) -> Unit,
     onReplayOnRange: (() -> Unit)? = null,
+    onViewOnRange: ((shotId: String) -> Unit)? = null,
     viewModel: SessionHistoryDetailViewModel = koinViewModel(key = "history:$sessionId") { parametersOf(sessionId) },
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -59,6 +62,7 @@ fun SessionHistoryDetailRoute(
         onEvent = viewModel::onEvent,
         onBack = onBack,
         onReplayOnRange = onReplayOnRange,
+        onViewOnRange = onViewOnRange,
     )
 }
 
@@ -73,6 +77,7 @@ fun SessionHistoryDetailScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     onReplayOnRange: (() -> Unit)? = null,
+    onViewOnRange: ((shotId: String) -> Unit)? = null,
 ) {
     OfScaffold(
         modifier = modifier,
@@ -96,6 +101,7 @@ fun SessionHistoryDetailScreen(
             onEvent = onEvent,
             modifier = Modifier.fillMaxSize().padding(padding),
             onReplayOnRange = onReplayOnRange,
+            onViewOnRange = onViewOnRange,
         )
     }
 }
@@ -112,6 +118,7 @@ internal fun SessionHistoryDetailBody(
     onEvent: (SessionHistoryDetailEvent) -> Unit,
     modifier: Modifier = Modifier,
     onReplayOnRange: (() -> Unit)? = null,
+    onViewOnRange: ((shotId: String) -> Unit)? = null,
 ) {
     val session = uiState.session
     val reduceMotion = rememberReduceMotionEnabled()
@@ -168,6 +175,7 @@ internal fun SessionHistoryDetailBody(
                     onDelete = { onEvent(SessionHistoryDetailEvent.DeleteShot(shot.id)) },
                     modifier = animateItemUnless(reduceMotion),
                     deletable = uiState.canDelete,
+                    onViewOnRange = onViewOnRange?.let { view -> { view(shot.id) } },
                 )
             }
         }

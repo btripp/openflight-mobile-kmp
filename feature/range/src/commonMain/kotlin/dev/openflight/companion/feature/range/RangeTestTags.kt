@@ -67,4 +67,14 @@ object RangeTestTags {
 
     /** The side panel the metrics dock into on an expanded window in landscape (plan F1b). */
     const val METRICS_DOCK = "range.metricsDock"
+
+    // region Plan F8d: range everywhere.
+
+    /** "Simulate shot": only on a `--mock` Pi over Wi-Fi ([DrivingRangeUiState.canSimulate]). */
+    const val SIMULATE = "range.simulate"
+
+    /** Why the last simulate request failed. */
+    const val SIMULATE_ERROR = "range.simulateError"
+
+    // endregion
 }

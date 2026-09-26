@@ -39,6 +39,7 @@ import dev.openflight.companion.core.designsystem.OfScaffold
 import dev.openflight.companion.core.designsystem.OfSegmentedPicker
 import dev.openflight.companion.core.designsystem.OfSpacing
 import dev.openflight.companion.core.designsystem.OfText
+import dev.openflight.companion.core.designsystem.OfTextButton
 import dev.openflight.companion.core.designsystem.OfTextRole
 import dev.openflight.companion.core.designsystem.OfTheme
 import dev.openflight.companion.core.designsystem.OfTopBar
@@ -52,15 +53,21 @@ import dev.openflight.companion.core.insights.distanceUnitLabel
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 
-/** Club Detail for [wireValue] as a pushed screen (from Club Analysis). */
+/**
+ * Club Detail for [wireValue] as a pushed screen (from Club Analysis).
+ *
+ * @param onViewOnRange plan F8d: opens the driving range paused on a recent shot (its session and
+ *   stored row id); `null` hides the rows' "Range" buttons.
+ */
 @Composable
 fun ClubDetailRoute(
     wireValue: String,
     onBack: () -> Unit,
     viewModel: ClubDetailViewModel = koinViewModel(key = "club-$wireValue") { parametersOf(wireValue) },
+    onViewOnRange: ((sessionId: String, shotId: String) -> Unit)? = null,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    ClubDetailScreen(uiState = uiState, onEvent = viewModel::onEvent, onBack = onBack)
+    ClubDetailScreen(uiState = uiState, onEvent = viewModel::onEvent, onBack = onBack, onViewOnRange = onViewOnRange)
 }
 
 /** The detail pane's content for [wireValue], owning its own [ClubDetailViewModel]. */
@@ -69,9 +76,15 @@ fun ClubDetailPane(
     wireValue: String,
     modifier: Modifier = Modifier,
     viewModel: ClubDetailViewModel = koinViewModel(key = "club-$wireValue") { parametersOf(wireValue) },
+    onViewOnRange: ((sessionId: String, shotId: String) -> Unit)? = null,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    ClubDetailContent(uiState = uiState, onEvent = viewModel::onEvent, modifier = modifier)
+    ClubDetailContent(
+        uiState = uiState,
+        onEvent = viewModel::onEvent,
+        modifier = modifier,
+        onViewOnRange = onViewOnRange,
+    )
 }
 
 @Composable
@@ -80,6 +93,7 @@ fun ClubDetailScreen(
     onEvent: (ClubDetailEvent) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    onViewOnRange: ((sessionId: String, shotId: String) -> Unit)? = null,
 ) {
     OfScaffold(
         modifier = modifier,
@@ -97,7 +111,12 @@ fun ClubDetailScreen(
             )
         },
     ) { padding ->
-        ClubDetailContent(uiState = uiState, onEvent = onEvent, modifier = Modifier.padding(padding))
+        ClubDetailContent(
+            uiState = uiState,
+            onEvent = onEvent,
+            modifier = Modifier.padding(padding),
+            onViewOnRange = onViewOnRange,
+        )
     }
 }
 
@@ -107,6 +126,7 @@ fun ClubDetailContent(
     uiState: ClubDetailUiState,
     onEvent: (ClubDetailEvent) -> Unit,
     modifier: Modifier = Modifier,
+    onViewOnRange: ((sessionId: String, shotId: String) -> Unit)? = null,
 ) {
     LazyColumn(
         modifier = modifier.fillMaxSize().testTag(BagTestTags.DETAIL),
@@ -140,7 +160,15 @@ fun ClubDetailContent(
         uiState.dispersion?.let { dispersion -> item(key = "dispersion") { DispersionCard(dispersion) } }
         if (uiState.recentShots.isNotEmpty()) {
             item(key = "recentHeader") { OfText(text = "Recent shots", role = OfTextRole.TitleSmall) }
-            items(uiState.recentShots, key = { it.id }) { RecentShot(it) }
+            items(uiState.recentShots, key = { it.id }) { row ->
+                RecentShot(
+                    row,
+                    onViewOnRange =
+                        onViewOnRange?.let { view ->
+                            { view(row.sessionId, row.id.toString()) }
+                        },
+                )
+            }
         }
     }
 }
@@ -225,7 +253,10 @@ private fun HistogramCard(
 }
 
 @Composable
-private fun RecentShot(row: RecentShotRow) {
+private fun RecentShot(
+    row: RecentShotRow,
+    onViewOnRange: (() -> Unit)?,
+) {
     Row(
         modifier = Modifier.fillMaxWidth().testTag(BagTestTags.RECENT),
         verticalAlignment = Alignment.CenterVertically,
@@ -244,6 +275,13 @@ private fun RecentShot(row: RecentShotRow) {
         }
         row.sideLabel?.let { OfText(text = it, role = OfTextRole.BodySmall, color = OfColorTokens.CreamDim) }
         if (row.possibleBadRead) OfPill(label = "Bad read?", tone = StatusTone.Negative)
+        if (onViewOnRange != null) {
+            OfTextButton(
+                text = "Range",
+                onClick = onViewOnRange,
+                modifier = Modifier.testTag(BagTestTags.viewOnRange(row.id)),
+            )
+        }
     }
 }
 
@@ -275,7 +313,7 @@ private fun previewState(): ClubDetailUiState {
                 computeDispersionViewport(samples, listOfNotNull(ellipse))!!,
                 "Dispersion",
             ),
-        recentShots = listOf(RecentShotRow(1, "2026-09-25 10:00", "160 yds", "172 yds", "on line", false)),
+        recentShots = listOf(RecentShotRow(1, "2026-09-25 10:00", "160 yds", "172 yds", "on line", false, "s1")),
     )
 }
 

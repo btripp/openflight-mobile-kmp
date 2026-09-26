@@ -55,6 +55,8 @@ import org.koin.core.parameter.parametersOf
  *   [OfWindowClass.EXPANDED] window a tapped session opens in a docked detail pane beside the list
  *   ([OfListDetailPane], plan F1b) instead of being pushed as its own destination; [onOpenSession]
  *   is only used on narrower windows.
+ * @param onReplayOnRange / [onViewOnRange] the docked detail pane's "Replay on range" (plan F8a1)
+ *   and its rows' "Range" (plan F8d), like the pushed [SessionHistoryDetailRoute]'s; `null` hides them.
  */
 @Composable
 fun SessionHistoryRoute(
@@ -63,6 +65,8 @@ fun SessionHistoryRoute(
     onShareCsv: (csv: String, filename: String) -> Unit,
     viewModel: SessionHistoryViewModel = koinViewModel(),
     windowClass: OfWindowClass = rememberOfWindowClass(),
+    onReplayOnRange: ((sessionId: String) -> Unit)? = null,
+    onViewOnRange: ((sessionId: String, shotId: String) -> Unit)? = null,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     if (windowClass == OfWindowClass.EXPANDED) {
@@ -87,6 +91,8 @@ fun SessionHistoryRoute(
                         sessionId = sessionId,
                         onClose = { selectedSessionId = null },
                         onShareCsv = onShareCsv,
+                        onReplayOnRange = onReplayOnRange?.let { replay -> { replay(sessionId) } },
+                        onViewOnRange = onViewOnRange?.let { view -> { shotId -> view(sessionId, shotId) } },
                     )
                 }
             },
@@ -112,6 +118,8 @@ private fun SessionHistoryDetailPane(
     onClose: () -> Unit,
     onShareCsv: (csv: String, filename: String) -> Unit,
     viewModel: SessionHistoryDetailViewModel = koinViewModel(key = "history:$sessionId") { parametersOf(sessionId) },
+    onReplayOnRange: (() -> Unit)? = null,
+    onViewOnRange: ((shotId: String) -> Unit)? = null,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val share by rememberUpdatedState(onShareCsv)
@@ -135,7 +143,13 @@ private fun SessionHistoryDetailPane(
                 modifier = Modifier.testTag(SessionHistoryTestTags.DETAIL_BACK),
             )
         }
-        SessionHistoryDetailBody(uiState = uiState, onEvent = viewModel::onEvent, modifier = Modifier.fillMaxSize())
+        SessionHistoryDetailBody(
+            uiState = uiState,
+            onEvent = viewModel::onEvent,
+            modifier = Modifier.fillMaxSize(),
+            onReplayOnRange = onReplayOnRange,
+            onViewOnRange = onViewOnRange,
+        )
     }
 }
 

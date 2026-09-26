@@ -67,6 +67,8 @@ import dev.openflight.companion.core.model.pi.PiFeatureAvailability
  * @param windowClass injectable for tests and previews; defaults to [rememberOfWindowClass]. On an
  *   [OfWindowClass.EXPANDED] window the selected shot's detail moves out of the shot list into its
  *   own pane beside it ([OfListDetailPane]), instead of appearing inline in the list.
+ * @param onViewOnRange plan F8d: opens the driving range on a shot, by its [SessionShotRow.id]
+ *   (the rows' and the selected card's "Range"); `null` hides those buttons.
  */
 @Suppress("UnusedParameter") // onBack: kept for the caller's navigation wiring, see the KDoc above.
 @Composable
@@ -78,6 +80,7 @@ fun SessionScreen(
     messages: OfMessageHostState? = null,
     onOpenHistory: (() -> Unit)? = null,
     windowClass: OfWindowClass = rememberOfWindowClass(),
+    onViewOnRange: ((shotId: String) -> Unit)? = null,
 ) {
     val canEdit = uiState.canEdit
     val reduceMotion = rememberReduceMotionEnabled()
@@ -114,6 +117,7 @@ fun SessionScreen(
                         reduceMotion = reduceMotion,
                         showSelectedInline = false,
                         modifier = Modifier.fillMaxSize().testTag(SessionTestTags.LIST_PANE),
+                        onViewOnRange = onViewOnRange,
                     )
                 },
                 detail = {
@@ -122,6 +126,7 @@ fun SessionScreen(
                         units = uiState.units,
                         canEdit = canEdit,
                         onEvent = onEvent,
+                        onViewOnRange = onViewOnRange,
                         modifier = Modifier.fillMaxSize().testTag(SessionTestTags.DETAIL_PANE),
                     )
                 },
@@ -134,6 +139,7 @@ fun SessionScreen(
                 reduceMotion = reduceMotion,
                 showSelectedInline = true,
                 modifier = Modifier.fillMaxSize().padding(padding),
+                onViewOnRange = onViewOnRange,
             )
         }
     }
@@ -158,6 +164,7 @@ private fun SessionShotList(
     reduceMotion: Boolean,
     showSelectedInline: Boolean,
     modifier: Modifier = Modifier,
+    onViewOnRange: ((shotId: String) -> Unit)? = null,
 ) {
     LazyColumn(
         modifier = modifier,
@@ -207,6 +214,7 @@ private fun SessionShotList(
                             onClose = { onEvent(SessionEvent.SelectShot(null)) },
                             onDelete = { onEvent(SessionEvent.DeleteShot(card.id)) },
                             deletable = canEdit,
+                            onViewOnRange = onViewOnRange?.let { view -> { view(card.id) } },
                         )
                     }
                 }
@@ -236,6 +244,7 @@ private fun SessionShotList(
                     onDelete = { onEvent(SessionEvent.DeleteShot(shot.id)) },
                     modifier = animateItemUnless(reduceMotion),
                     deletable = canEdit,
+                    onViewOnRange = onViewOnRange?.let { view -> { view(shot.id) } },
                 )
             }
         }
@@ -254,6 +263,7 @@ private fun SelectedShotDetailPane(
     canEdit: Boolean,
     onEvent: (SessionEvent) -> Unit,
     modifier: Modifier = Modifier,
+    onViewOnRange: ((shotId: String) -> Unit)? = null,
 ) {
     Box(modifier = modifier.padding(OfSpacing.Xl), contentAlignment = Alignment.Center) {
         if (card == null) {
@@ -272,6 +282,7 @@ private fun SelectedShotDetailPane(
                     onClose = { onEvent(SessionEvent.SelectShot(null)) },
                     onDelete = { onEvent(SessionEvent.DeleteShot(card.id)) },
                     deletable = canEdit,
+                    onViewOnRange = onViewOnRange?.let { view -> { view(card.id) } },
                 )
             }
         }
