@@ -13,26 +13,39 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
+import dev.openflight.companion.core.data.CalloutTrigger
 import dev.openflight.companion.core.data.TransportType
 import dev.openflight.companion.core.designsystem.OfCard
+import dev.openflight.companion.core.designsystem.OfChip
 import dev.openflight.companion.core.designsystem.OfColorTokens
 import dev.openflight.companion.core.designsystem.OfConfirmDialog
+import dev.openflight.companion.core.designsystem.OfContentWidth
 import dev.openflight.companion.core.designsystem.OfDisabledReason
+import dev.openflight.companion.core.designsystem.OfDropdownMenu
 import dev.openflight.companion.core.designsystem.OfMessageHostState
 import dev.openflight.companion.core.designsystem.OfNotice
 import dev.openflight.companion.core.designsystem.OfOutlinedButton
 import dev.openflight.companion.core.designsystem.OfPill
 import dev.openflight.companion.core.designsystem.OfScaffold
 import dev.openflight.companion.core.designsystem.OfSegmentedPicker
+import dev.openflight.companion.core.designsystem.OfSlider
 import dev.openflight.companion.core.designsystem.OfSpacing
+import dev.openflight.companion.core.designsystem.OfSwitchRow
 import dev.openflight.companion.core.designsystem.OfText
 import dev.openflight.companion.core.designsystem.OfTextButton
 import dev.openflight.companion.core.designsystem.OfTextRole
 import dev.openflight.companion.core.designsystem.OfTopBar
+import dev.openflight.companion.core.designsystem.OfWindowClass
 import dev.openflight.companion.core.designsystem.StatusTone
+import dev.openflight.companion.core.designsystem.rememberOfWindowClass
 import dev.openflight.companion.core.insights.UnitSystem
 import dev.openflight.companion.core.model.pi.PiLinkState
+import dev.openflight.companion.core.speech.Voice
+import dev.openflight.companion.core.speech.VoiceQuality
+import kotlin.math.roundToInt
 
 /**
  * The settings screen (plan R6c): the phone's unit preference and connection info, then the Pi's
@@ -40,7 +53,18 @@ import dev.openflight.companion.core.model.pi.PiLinkState
  * tuning and diagnostics, debug logging, cloud upload) and the Pi shutdown behind a confirmation.
  * Every Wi-Fi-only control is disabled with the VM's reason. Stateless apart from the unsent
  * player-name draft.
+ *
+ * Plan F1b: Settings is a top-level destination reached through the app shell's bottom bar or
+ * rail, which stays on screen here too, so a "Done" button would just duplicate its Home entry.
+ * [onBack] is kept for the caller's navigation wiring, even though nothing in this screen calls it
+ * today.
+ *
+ * Plan F1d: the cards are grouped into Device (connection, calibrate, camera, radar, simulators,
+ * shutdown), Practice (units, audio call-outs) and Data (debug logging, cloud upload). The Device
+ * group's "Calibrate radar" and "Camera" rows push those screens; each row only shows when its
+ * [onOpenCalibration] / [onOpenCamera] is given.
  */
+@Suppress("UnusedParameter") // onBack: kept for the caller's navigation wiring, see the KDoc above.
 @Composable
 fun SettingsScreen(
     uiState: SettingsUiState,
@@ -48,43 +72,45 @@ fun SettingsScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     messages: OfMessageHostState? = null,
+    // Plan F7: the audio call-outs card branches compact/expanded; tests and previews force one.
+    windowClass: OfWindowClass = rememberOfWindowClass(),
+    onOpenCalibration: (() -> Unit)? = null,
+    onOpenCamera: (() -> Unit)? = null,
 ) {
     OfScaffold(
         modifier = modifier,
         messages = messages,
-        topBar = {
-            OfTopBar(
-                title = "Settings",
-                eyebrow = "OPENFLIGHT",
-                actions = {
-                    OfOutlinedButton(
-                        text = "Done",
-                        onClick = onBack,
-                        modifier = Modifier.padding(end = OfSpacing.Sm).testTag(SettingsTestTags.DONE),
-                    )
-                },
-            )
-        },
+        topBar = { OfTopBar(title = "Settings", eyebrow = "OPENFLIGHT") },
     ) { padding ->
-        Column(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .padding(padding)
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = OfSpacing.Xl, vertical = OfSpacing.Sm),
-            verticalArrangement = Arrangement.spacedBy(OfSpacing.Lg),
-        ) {
-            UnitsCard(uiState.units, onEvent)
-            ConnectionCard(uiState)
-            LaunchMonitorCard(uiState.trigger)
-            uiState.power?.let { PowerStatusCard(it) }
-            SimulatorsCard(uiState.simulators, uiState.link.disabledReason)
-            RadarCard(uiState.radar, onEvent)
-            // Hidden until the Pi reports its debug mode: never offer "Start" before that is known.
-            if (uiState.debug.loaded) DebugCard(uiState.debug, onEvent)
-            CloudCard(uiState.cloud, onEvent)
-            ShutdownCard(uiState.shutdown, onEvent)
+        // Plan F1b: a max readable width, centered, so the cards don't stretch edge to edge on a
+        // tablet.
+        OfContentWidth(modifier = Modifier.fillMaxSize().padding(padding)) {
+            Column(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = OfSpacing.Xl, vertical = OfSpacing.Sm),
+                verticalArrangement = Arrangement.spacedBy(OfSpacing.Lg),
+            ) {
+                GroupHeader("Device", SettingsTestTags.GROUP_DEVICE)
+                ConnectionCard(uiState)
+                if (onOpenCalibration != null || onOpenCamera != null) {
+                    DeviceToolsCard(onOpenCalibration, onOpenCamera)
+                }
+                LaunchMonitorCard(uiState.trigger)
+                uiState.power?.let { PowerStatusCard(it) }
+                SimulatorsCard(uiState.simulators, uiState.link.disabledReason)
+                RadarCard(uiState.radar, onEvent)
+                ShutdownCard(uiState.shutdown, onEvent)
+                GroupHeader("Practice", SettingsTestTags.GROUP_PRACTICE)
+                UnitsCard(uiState.units, onEvent)
+                AudioCalloutsCard(uiState.callouts, onEvent, windowClass)
+                GroupHeader("Data", SettingsTestTags.GROUP_DATA)
+                // Hidden until the Pi reports its debug mode: never offer "Start" before that is known.
+                if (uiState.debug.loaded) DebugCard(uiState.debug, onEvent)
+                CloudCard(uiState.cloud, onEvent)
+            }
         }
     }
     if (uiState.shutdown.confirmationRequired) {
@@ -98,6 +124,44 @@ fun SettingsScreen(
             confirmTag = SettingsTestTags.SHUTDOWN_CONFIRM,
             dismissTag = SettingsTestTags.SHUTDOWN_CANCEL,
         )
+    }
+}
+
+/** Plan F1d: a group of cards' heading (Device, Practice, Data). */
+@Composable
+private fun GroupHeader(
+    text: String,
+    tag: String,
+) {
+    OfText(
+        text = text,
+        role = OfTextRole.Title,
+        modifier = Modifier.padding(top = OfSpacing.Sm).semantics { heading() }.testTag(tag),
+    )
+}
+
+/** Plan F1d: the Device group's entries into the pushed Calibrate and Camera screens. */
+@Composable
+private fun DeviceToolsCard(
+    onOpenCalibration: (() -> Unit)?,
+    onOpenCamera: (() -> Unit)?,
+) {
+    OfCard(modifier = Modifier.fillMaxWidth(), contentSpacing = OfSpacing.Sm) {
+        SectionTitle("TOOLS")
+        onOpenCalibration?.let {
+            OfOutlinedButton(
+                text = "Calibrate radar",
+                onClick = it,
+                modifier = Modifier.fillMaxWidth().testTag(SettingsTestTags.OPEN_CALIBRATION),
+            )
+        }
+        onOpenCamera?.let {
+            OfOutlinedButton(
+                text = "Camera",
+                onClick = it,
+                modifier = Modifier.fillMaxWidth().testTag(SettingsTestTags.OPEN_CAMERA),
+            )
+        }
     }
 }
 

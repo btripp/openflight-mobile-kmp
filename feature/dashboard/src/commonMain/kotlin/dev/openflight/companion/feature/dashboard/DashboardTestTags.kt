@@ -44,4 +44,16 @@ object DashboardTestTags {
 
     /** A detail metric in the latest-shot grid, by its title (for example "Smash"). */
     fun metric(title: String): String = "dashboard.metric.$title"
+
+    /** Android only (plan F1b): the left ("live metrics") column of the expanded two-column layout. */
+    const val METRICS_COLUMN = "dashboard.metricsColumn"
+
+    /** Android only (plan F1b): the right ("club and connection") column of the expanded layout. */
+    const val CONNECTION_COLUMN = "dashboard.connectionColumn"
+
+    /** Plan F1d: the top bar's overflow menu (Android) / "More" menu (iOS). */
+    const val MORE = "dashboard.more"
+
+    /** Plan F1d: the menu entry that pushes swing-speed training. */
+    const val OPEN_TRAINING = "dashboard.openTraining"
 }

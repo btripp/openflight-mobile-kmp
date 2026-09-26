@@ -78,6 +78,47 @@ final class DrivingRangeUITests: XCTestCase {
         XCTAssertFalse(app.buttons["range.replay"].exists)
     }
 
+    /// Plan F8c2: the range is the shared-geometry Canvas, tagged like Android's scene and
+    /// describing the user's view the same way.
+    func testSceneIsTheCanvasAtTheDefaultView() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing", "--preview-shot", "--range-mode"]
+        app.launch()
+
+        let scene = app.descendants(matching: .any)["range.scene"]
+        XCTAssertTrue(scene.waitForExistence(timeout: 10))
+        XCTAssertEqual(scene.value as? String, "Default view")
+        XCTAssertGreaterThan(scene.frame.height, app.frame.height * 0.9)
+    }
+
+    /// Plan F8c2: `--range-freeze-progress` holds the flight in the air for screenshots.
+    func testFreezeProgressHoldsTheFlightInTheAir() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "--ui-testing", "--preview-shot", "--range-mode", "--preview-flight", "--range-freeze-progress", "0.5",
+        ]
+        app.launch()
+
+        let status = app.descendants(matching: .any)["range.status"]
+        XCTAssertTrue(status.waitForExistence(timeout: 10))
+        // Longer than the longest playback (6 s) plus the landing dwell.
+        let landed = NSPredicate(format: "label CONTAINS %@ OR label CONTAINS %@", "Shot complete", "Ready for the next shot")
+        let notLanded = expectation(for: landed, evaluatedWith: status)
+        notLanded.isInverted = true
+        wait(for: [notLanded], timeout: 8)
+        XCTAssertTrue(status.label.contains("Ball in flight"), "status: \(status.label)")
+    }
+
+    /// Plan F8c2: the RealityKit scene stays behind `--range-realitykit` for one release.
+    func testRealityKitFallbackStillFliesTheShot() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing", "--preview-shot", "--range-mode", "--preview-flight", "--range-realitykit"]
+        app.launch()
+
+        XCTAssertTrue(app.descendants(matching: .any)["range.scene"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["range.replay"].waitForExistence(timeout: 15))
+    }
+
     func testPreviewFlightFliesTheShotAndShowsItsMetrics() {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-testing", "--preview-shot", "--range-mode", "--preview-flight"]

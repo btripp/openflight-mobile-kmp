@@ -2,23 +2,62 @@
 import Shared
 import SwiftUI
 
-/// The screens the dashboard navigates to.
+/// The pushed (full-screen, bar-less) screens. Practice pushes Calibrate, Range and Speed training;
+/// Settings' Device group pushes Calibrate and Camera (plan F1d).
 enum AppRoute: Hashable {
     case calibration
     case range
+    case training
+    case camera
 }
 
-/// The app's top-level sections (plan R5b/R6c): a native tab bar, where Android has its bottom bar.
-enum AppTab: Hashable {
-    case dashboard, session, training, camera, settings
+/// The app's top-level destinations (plan F1d): Practice · Sessions · Bag · Settings, the same
+/// labels and order as Android's `TopLevelDestination` (`AppNavHost.kt`) on every form factor. A
+/// native tab bar on a compact width, where Android shows its bottom bar; a `NavigationSplitView`
+/// sidebar on a regular width (plan F1c), where Android shows a navigation rail. F9b/F9c insert
+/// Play at index 1. Four (later five) entries never overflow into the iPhone's "More" tab.
+enum AppTab: Hashable, CaseIterable {
+    case practice, sessions, bag, settings
+
+    var label: String {
+        switch self {
+        case .practice: "Practice"
+        case .sessions: "Sessions"
+        case .bag: "Bag"
+        case .settings: "Settings"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .practice: "gauge.with.dots.needle.67percent"
+        case .sessions: "list.bullet.rectangle"
+        case .bag: "bag"
+        case .settings: "gearshape"
+        }
+    }
 }
 
-/// The app shell: a `TabView` of Dashboard, Session, Training, Camera and Settings. The dashboard
-/// tab keeps its own `NavigationStack` for Calibrate and the full-screen Range, as before.
+/// Accessibility identifiers for the app shell's top-level navigation (the tab bar or the
+/// sidebar), the SwiftUI counterpart of Android's `AppNavTags`.
+enum AppNavigationTags {
+    static let sidebar = "app.nav.sidebar"
+
+    static func sidebarItem(_ tab: AppTab) -> String { "app.nav.sidebar.\(tab)" }
+}
+
+/// The app shell: Practice, Sessions, Bag and Settings (plan F1d). Practice keeps the shared `path`
+/// for Calibrate, Speed training and the full-screen Range (and `--range-mode`).
+///
+/// Plan F1c: a `TabView` on a compact `horizontalSizeClass` (an iPhone, or an iPad in a compact
+/// split), and a `NavigationSplitView` sidebar of the same destinations on a regular width (an
+/// iPad, full screen or in a wide split). Pushed routes stay pushed on top of whichever shell is
+/// showing. Plan F1d: while the Range is up, the sidebar collapses, so it's truly full screen.
 struct AppRoot: View {
     let launchOptions: LaunchOptions
     @State private var path: [AppRoute]
-    @State private var tab: AppTab = .dashboard
+    @State private var tab: AppTab = .practice
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     init(launchOptions: LaunchOptions) {
         self.launchOptions = launchOptions
@@ -27,43 +66,143 @@ struct AppRoot: View {
     }
 
     var body: some View {
-        TabView(selection: $tab) {
-            NavigationStack(path: $path) {
-                DashboardView()
-                    .navigationDestination(for: AppRoute.self) { route in
-                        switch route {
-                        case .calibration:
-                            CalibrationView()
-                                .toolbar(.hidden, for: .tabBar)
-                        case .range:
-                            // Full screen, like the reference: no navigation or tab bar.
-                            DrivingRangeView(autoplay: launchOptions.previewFlight)
-                                .toolbar(.hidden, for: .tabBar)
-                        }
-                    }
+        Group {
+            if horizontalSizeClass == .regular {
+                AppSidebarShell(launchOptions: launchOptions, path: $path, tab: $tab)
+            } else {
+                AppTabShell(launchOptions: launchOptions, path: $path, tab: $tab)
             }
-            .tabItem { Label("Dashboard", systemImage: "gauge.with.dots.needle.67percent") }
-            .tag(AppTab.dashboard)
-
-            NavigationStack { SessionView() }
-                .tabItem { Label("Session", systemImage: "list.bullet.rectangle") }
-                .tag(AppTab.session)
-
-            NavigationStack { TrainingView() }
-                .tabItem { Label("Training", systemImage: "speedometer") }
-                .tag(AppTab.training)
-
-            NavigationStack { CameraView() }
-                .tabItem { Label("Camera", systemImage: "camera") }
-                .tag(AppTab.camera)
-
-            NavigationStack { SettingsView() }
-                .tabItem { Label("Settings", systemImage: "gearshape") }
-                .tag(AppTab.settings)
         }
         .tint(Theme.gold)
         .font(.of(.body))
         .preferredColorScheme(.dark)
+    }
+}
+
+/// A pushed `AppRoute`'s screen. Each one hides the tab bar, as Android's pushed routes hide the
+/// bottom bar or rail.
+private struct AppRouteDestination: View {
+    let route: AppRoute
+    let launchOptions: LaunchOptions
+
+    var body: some View {
+        switch route {
+        case .calibration:
+            CalibrationView()
+                .toolbar(.hidden, for: .tabBar)
+        case .range:
+            // Full screen, like the reference: no navigation or tab bar.
+            DrivingRangeView(autoplay: launchOptions.previewFlight)
+                .toolbar(.hidden, for: .tabBar)
+        case .training:
+            TrainingView()
+                .toolbar(.hidden, for: .tabBar)
+        case .camera:
+            CameraView()
+                .toolbar(.hidden, for: .tabBar)
+        }
+    }
+}
+
+/// One `AppTab`'s root content, its own `NavigationStack` around it. Only Practice uses the shared
+/// `path` (for Calibrate, Speed training, the full-screen Range and `--range-mode`); Settings
+/// pushes its Device screens on its own stack, and Sessions and Bag push their own destinations
+/// declaratively (`SessionView`'s "History" link).
+private struct TabRootView: View {
+    let tab: AppTab
+    let launchOptions: LaunchOptions
+    @Binding var path: [AppRoute]
+
+    var body: some View {
+        switch tab {
+        case .practice:
+            NavigationStack(path: $path) {
+                DashboardView(onOpenTraining: { path.append(.training) })
+                    .navigationDestination(for: AppRoute.self) { route in
+                        AppRouteDestination(route: route, launchOptions: launchOptions)
+                    }
+            }
+        case .sessions:
+            NavigationStack { SessionView() }
+        case .bag:
+            // Plan F5: My Bag.
+            NavigationStack { BagView() }
+        case .settings:
+            NavigationStack {
+                SettingsView()
+                    .navigationDestination(for: AppRoute.self) { route in
+                        AppRouteDestination(route: route, launchOptions: launchOptions)
+                    }
+            }
+        }
+    }
+}
+
+/// The compact shell: a native `TabView`, exactly as before F1c.
+private struct AppTabShell: View {
+    let launchOptions: LaunchOptions
+    @Binding var path: [AppRoute]
+    @Binding var tab: AppTab
+
+    var body: some View {
+        TabView(selection: $tab) {
+            ForEach(AppTab.allCases, id: \.self) { entry in
+                TabRootView(tab: entry, launchOptions: launchOptions, path: $path)
+                    .tabItem { Label(entry.label, systemImage: entry.systemImage) }
+                    .tag(entry)
+            }
+        }
+    }
+}
+
+/// The regular-width shell (plan F1c): a `NavigationSplitView` sidebar of the same destinations,
+/// where Android shows a navigation rail (plan F1a).
+private struct AppSidebarShell: View {
+    let launchOptions: LaunchOptions
+    @Binding var path: [AppRoute]
+    @Binding var tab: AppTab
+    /// The visibility the user (or the system) last chose, kept apart from the Range's override.
+    @State private var chosenVisibility: NavigationSplitViewVisibility = .automatic
+
+    /// `List(selection:)` wants an optional binding; a `nil` selection can't happen here; the
+    /// sidebar always has exactly one of `AppTab` selected.
+    private var selection: Binding<AppTab?> {
+        Binding(get: { tab }, set: { newValue in if let newValue { tab = newValue } })
+    }
+
+    /// Plan F1d: the Range is full screen on an iPad too, so the sidebar collapses while it's on
+    /// Practice's stack (a `--range-mode` launch included) and comes back once it's popped.
+    private var showsRange: Bool { tab == .practice && path.contains(.range) }
+
+    /// `.detailOnly` for as long as the Range is up, whatever the split view writes back meanwhile
+    /// (it resets the visibility when it first lays out, which a one-off `onChange` would lose on a
+    /// `--range-mode` launch); otherwise the chosen visibility.
+    private var columnVisibility: Binding<NavigationSplitViewVisibility> {
+        Binding(
+            get: { showsRange ? .detailOnly : chosenVisibility },
+            set: { newValue in if !showsRange { chosenVisibility = newValue } }
+        )
+    }
+
+    var body: some View {
+        NavigationSplitView(columnVisibility: columnVisibility) {
+            List(selection: selection) {
+                ForEach(AppTab.allCases, id: \.self) { entry in
+                    Label(entry.label, systemImage: entry.systemImage)
+                        .tag(entry)
+                        // One element, not a separate icon and text, so the whole row is what
+                        // XCUITest taps and finds by this identifier.
+                        .accessibilityElement(children: .combine)
+                        .accessibilityIdentifier(AppNavigationTags.sidebarItem(entry))
+                }
+            }
+            .listStyle(.sidebar)
+            .navigationTitle("OpenFlight")
+            .accessibilityIdentifier(AppNavigationTags.sidebar)
+        } detail: {
+            TabRootView(tab: tab, launchOptions: launchOptions, path: $path)
+        }
+        .navigationSplitViewStyle(.balanced)
     }
 }
 

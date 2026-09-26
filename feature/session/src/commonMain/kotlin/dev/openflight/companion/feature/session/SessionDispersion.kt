@@ -1,16 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 package dev.openflight.companion.feature.session
 
-import dev.openflight.companion.core.flight.BallFlightSimulator
-import dev.openflight.companion.core.flight.FlightInputResolutionError
-import dev.openflight.companion.core.flight.FlightInputResolver
 import dev.openflight.companion.core.flight.FlightMeasurements
-import dev.openflight.companion.core.flight.FlightParameter
 import dev.openflight.companion.core.flight.toFlightMeasurements
 import dev.openflight.companion.core.insights.DispersionEllipse
 import dev.openflight.companion.core.insights.DispersionSample
 import dev.openflight.companion.core.insights.DispersionViewport
 import dev.openflight.companion.core.insights.MIN_SHOTS_FOR_ELLIPSE
+import dev.openflight.companion.core.insights.OfflineDistance
+import dev.openflight.companion.core.insights.OfflineDistanceEstimator
 import dev.openflight.companion.core.insights.UnitSystem
 import dev.openflight.companion.core.insights.computeDispersionEllipse
 import dev.openflight.companion.core.insights.computeDispersionViewport
@@ -29,8 +27,8 @@ import kotlin.math.abs
  * @property id the same id as its [SessionShotRow], so a dot and its row select together.
  * @property colorIndex the club's colour slot: clubs in this session, in bag order (driver
  *   first), so a club keeps its colour when the tab filters the others out.
- * @property offlineYards positive right of the target line. Nothing on the wire reports it: it's
- *   the landing point of `core:flight`'s simulated trajectory, scaled to the reported carry.
+ * @property offlineYards positive right of the target line, from `core:insights`'
+ *   [OfflineDistanceEstimator] (nothing on the wire reports it).
  * @property sideEstimated the shot reported neither horizontal launch nor spin axis, so it sits on
  *   the target line by default rather than by measurement.
  * @property possibleBadRead it lands far outside the rest of its club (`findDispersionOutliers`):
@@ -117,10 +115,9 @@ data class SelectedShotCard(
  * Not thread-safe; [SessionViewModel] only calls it from its state flow.
  */
 internal class DispersionCalculator(
-    private val resolver: FlightInputResolver = FlightInputResolver(),
-    private val simulator: BallFlightSimulator = BallFlightSimulator(),
+    private val offline: OfflineDistanceEstimator = OfflineDistanceEstimator(),
 ) {
-    private var landings: Map<FlightMeasurements, Landing?> = emptyMap()
+    private var landings: Map<FlightMeasurements, OfflineDistance?> = emptyMap()
 
     /** Points for the phone's history (newest first); swing reps (known from the Pi) are left out. */
     fun localPoints(
@@ -162,10 +159,10 @@ internal class DispersionCalculator(
 
     private fun points(candidates: List<Candidate>): List<DispersionPoint> {
         val previous = landings
-        val next = HashMap<FlightMeasurements, Landing?>(candidates.size)
+        val next = HashMap<FlightMeasurements, OfflineDistance?>(candidates.size)
         for (candidate in candidates) {
             val key = candidate.measurements
-            next[key] = if (key in previous) previous[key] else land(key)
+            next[key] = if (key in previous) previous[key] else offline.estimate(key)
         }
         landings = next
 
@@ -186,35 +183,10 @@ internal class DispersionCalculator(
         }
     }
 
-    /** `null` when the shot can't be flown (no usable ball speed or carry). */
-    private fun land(measurements: FlightMeasurements): Landing? {
-        val input =
-            try {
-                resolver.resolve(measurements)
-            } catch (_: FlightInputResolutionError) {
-                return null
-            }
-        val trajectory = simulator.simulate(input)
-        val estimated = input.provenance.estimatedParameters
-        return Landing(
-            offlineYards = trajectory.lateralMeters / METERS_PER_YARD,
-            sideEstimated = FlightParameter.HORIZONTAL_LAUNCH in estimated && FlightParameter.SPIN_AXIS in estimated,
-        )
-    }
-
     private data class Candidate(
         val shotNumber: Int,
         val measurements: FlightMeasurements,
     )
-
-    private data class Landing(
-        val offlineYards: Double,
-        val sideEstimated: Boolean,
-    )
-
-    private companion object {
-        const val METERS_PER_YARD = 0.9144
-    }
 }
 
 /** Colour slots for [clubs]: bag order (unknown clubs last, alphabetically), numbered from 0. */

@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 package dev.openflight.companion.feature.settings
 
+import dev.openflight.companion.core.data.CalloutTrigger
 import dev.openflight.companion.core.data.TransportType
+import dev.openflight.companion.core.insights.CalloutField
 import dev.openflight.companion.core.insights.UnitSystem
 import dev.openflight.companion.core.model.ConnectionProblem
 import dev.openflight.companion.core.model.ConnectionState
@@ -11,6 +13,7 @@ import dev.openflight.companion.core.model.pi.PiLinkState
 import dev.openflight.companion.core.model.pi.RadarConfig
 import dev.openflight.companion.core.model.pi.TriggerDiagnostic
 import dev.openflight.companion.core.model.pi.TriggerStatus
+import dev.openflight.companion.core.speech.Voice
 
 /**
  * The settings screen (plan R6b): the phone-side preferences plus everything the web UI keeps in
@@ -44,6 +47,8 @@ data class SettingsUiState(
     val connectionProblem: ConnectionProblem? = null,
     val power: PowerCard? = null,
     val trigger: TriggerCard = TriggerCard.Waiting,
+    // Plan F7: audio call-outs, added at the end to keep this file's diff mergeable (§4a A7).
+    val callouts: CalloutSettingsUiState = CalloutSettingsUiState(),
 )
 
 /** A simulator connector's severity bucket (`SimStatus.tsx`'s `severity`). */
@@ -170,3 +175,52 @@ data class ShutdownSettings(
         const val CONFIRMATION_TEXT: String = ShutdownPhase.CONFIRM_TITLE
     }
 }
+
+// Plan F7: audio call-outs, added at the end to keep this file's diff mergeable (§4a A7).
+
+/**
+ * The "Audio call-outs" settings section: enable, trigger, voice, rate, and which fields a
+ * call-out speaks and in what order.
+ *
+ * @property voiceGroups every voice the platform reports, grouped by [VoiceGroup.locale] (sorted
+ *   locale then quality then name within a group), for a voice picker "grouped by locale".
+ * @property selectedVoiceId `null` means the platform default voice.
+ * @property fields every [CalloutField], selected ones first in speaking order, then the rest
+ *   (plan F7: "field list with checkboxes + drag reorder" — reorder is exposed as move
+ *   up/down, which is both simpler and more accessible than a drag gesture with no
+ *   keyboard/switch-access equivalent).
+ * @property previewText what a call-out with the current [fields] and units would say for a
+ *   fixed sample shot (plan F7's "live preview line"); empty when no field is selected.
+ *   [SettingsEvent.PreviewCallout] speaks it, unless a screen reader is currently talking (plan
+ *   A11y): that check happens where the speech call is made, not in this state, so it can read
+ *   the screen reader's status at the moment "Preview" is tapped rather than whenever it was
+ *   last recomposed.
+ */
+data class CalloutSettingsUiState(
+    val enabled: Boolean = false,
+    val trigger: CalloutTrigger = CalloutTrigger.EVERY_SHOT,
+    // Fixed, and listed here (not just `CalloutTrigger.entries`) so SwiftUI's trigger Picker can
+    // build its tags from an existing Kotlin instance per option, the same way `RadarSlider.field`
+    // does for the radar sliders — never by spelling a multi-word enum case out by hand in Swift.
+    val availableTriggers: List<CalloutTrigger> = CalloutTrigger.entries,
+    val rate: Float = 1f,
+    val voiceGroups: List<VoiceGroup> = emptyList(),
+    val selectedVoiceId: String? = null,
+    val fields: List<CalloutFieldRow> = emptyList(),
+    val previewText: String = "",
+)
+
+/** One locale's voices for the picker, e.g. `"en-US"` -> Samantha, Alex, ... */
+data class VoiceGroup(
+    val locale: String,
+    val voices: List<Voice>,
+)
+
+/** One row of the call-out field checklist. */
+data class CalloutFieldRow(
+    val field: CalloutField,
+    val label: String,
+    val selected: Boolean,
+    val canMoveUp: Boolean,
+    val canMoveDown: Boolean,
+)

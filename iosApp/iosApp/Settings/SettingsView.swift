@@ -6,12 +6,17 @@ import SwiftUI
 /// simulator status, the radar/debug panel, cloud upload and Pi shutdown. Wi-Fi-only controls stay
 /// visible and are disabled with the VM's reason. Android's `SettingsScreen.kt` renders the same
 /// state.
+///
+/// Plan F1d: grouped into Device (connection, calibrate, camera, launch monitor, power, simulators,
+/// radar, shutdown), Practice (units, audio call-outs) and Data (cloud upload, debug logging), like
+/// Android. The Device group's "Calibrate radar" and "Camera" rows push `AppRoute`s onto the
+/// Settings tab's own `NavigationStack`.
 struct SettingsView: View {
     @StateObject private var host = ViewModelHost(KoinHelper().settingsViewModel())
     @State private var message: String?
 
     var body: some View {
-        SettingsContent(state: host.state, send: host.send)
+        SettingsContent(state: host.state, send: host.send, showDeviceLinks: true)
             .navigationTitle("Settings")
             .messageBanner($message)
             .task {
@@ -25,22 +30,33 @@ struct SettingsView: View {
 struct SettingsContent: View {
     let state: SettingsUiState
     let send: (SettingsEvent) -> Void
+    /// Plan F1d: the Device group's Calibrate/Camera rows (they need an `AppRoute` destination).
+    var showDeviceLinks = false
 
     @State private var showingShutdown = false
 
     var body: some View {
         Form {
-            unitsSection
+            // Device
             connectionSection
+            if showDeviceLinks { deviceLinksSection }
             launchMonitorSection
             if let power = state.power { powerStatusSection(power) }
             simulatorsSection
             radarSection
+            shutdownSection
+            // Practice
+            unitsSection
+            calloutsSection
+            // Data
+            cloudSection
             // Hidden until the Pi reports its debug mode: never offer "Start" before that is known.
             if state.debug.loaded { debugSection }
-            cloudSection
-            shutdownSection
         }
+        // Plan F1c: capped and centered on a regular width (`core:designsystem`'s
+        // `OfContentWidth`, 840 pt), so the form stays readable on an iPad instead of
+        // stretching edge to edge.
+        .contentWidth()
         .screenBackground()
         .onChange(of: state.shutdown.confirmationRequired, initial: true) { _, required in
             showingShutdown = required
@@ -77,7 +93,7 @@ struct SettingsContent: View {
             .pickerStyle(.segmented)
             .accessibilityIdentifier("settings.units")
         } header: {
-            header("UNITS")
+            header("UNITS", group: "Practice")
         }
         .listRowBackground(Theme.bgCard)
     }
@@ -114,7 +130,25 @@ struct SettingsContent: View {
                     .foregroundStyle(Theme.warning)
             }
         } header: {
-            header("CONNECTION")
+            header("CONNECTION", group: "Device")
+        }
+        .listRowBackground(Theme.bgCard)
+    }
+
+    // MARK: Device links (plan F1d)
+
+    private var deviceLinksSection: some View {
+        Section {
+            NavigationLink(value: AppRoute.calibration) {
+                Label("Calibrate radar", systemImage: "scope")
+            }
+            .accessibilityIdentifier("settings.openCalibration")
+            NavigationLink(value: AppRoute.camera) {
+                Label("Camera", systemImage: "camera")
+            }
+            .accessibilityIdentifier("settings.openCamera")
+        } header: {
+            header("TOOLS")
         }
         .listRowBackground(Theme.bgCard)
     }
@@ -281,9 +315,142 @@ struct SettingsContent: View {
                     .accessibilityIdentifier("settings.cloud.status")
             }
         } header: {
-            header("FLIGHTWEB CLOUD")
+            header("FLIGHTWEB CLOUD", group: "Data")
         }
         .listRowBackground(Theme.bgCard)
+    }
+
+    // MARK: Audio call-outs (plan F7)
+
+    private var calloutTriggerBinding: Binding<CalloutTrigger> {
+        Binding(get: { state.callouts.trigger }, set: { send(SettingsEventSetCalloutTrigger(trigger: $0)) })
+    }
+
+    private var calloutVoiceBinding: Binding<String?> {
+        Binding(get: { state.callouts.selectedVoiceId }, set: { send(SettingsEventSetCalloutVoice(voiceId: $0)) })
+    }
+
+    private var calloutRateBinding: Binding<Double> {
+        Binding(get: { Double(state.callouts.rate) }, set: { send(SettingsEventSetCalloutRate(rate: Float($0))) })
+    }
+
+    /// `VoiceQuality.name`/`CalloutTrigger.name` (plan-proven idiom, see `RadarSliderRow`'s
+    /// `slider.field.name`) sidestep guessing how Kotlin/Native's Swift export spells a
+    /// multi-word or keyword-colliding enum case (`GAMES_ONLY`, `DEFAULT`, ...).
+    private func qualityBadge(_ quality: VoiceQuality) -> String {
+        switch quality.name {
+        case "PREMIUM": "Premium"
+        case "ENHANCED": "Enhanced"
+        default: "Standard"
+        }
+    }
+
+    private func triggerLabel(_ trigger: CalloutTrigger) -> String {
+        trigger.name == "GAMES_ONLY" ? "Games only" : "Every shot"
+    }
+
+    private var calloutsSection: some View {
+        let callouts = state.callouts
+        return Section {
+            Toggle(isOn: Binding(get: { callouts.enabled }, set: { send(SettingsEventSetCalloutsEnabled(enabled: $0)) })) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Speak shot results").font(.of(.body, weight: .semibold))
+                    // Plan A16: deliberate, not a bug — a coaching/navigation voice, not a mutable notification.
+                    Text("Call-outs play even with the silent switch on.")
+                        .font(.of(.footnote))
+                        .foregroundStyle(Theme.creamDim)
+                }
+            }
+            .tint(Theme.gold)
+            .accessibilityIdentifier("settings.callouts.enabled")
+
+            if callouts.enabled {
+                Picker("Trigger", selection: calloutTriggerBinding) {
+                    ForEach(callouts.availableTriggers, id: \.name) { trigger in
+                        Text(triggerLabel(trigger)).tag(trigger)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .accessibilityIdentifier("settings.callouts.trigger")
+
+                Picker("Voice", selection: calloutVoiceBinding) {
+                    Text("Default voice").tag(String?.none)
+                    ForEach(callouts.voiceGroups, id: \.locale) { group in
+                        Section(group.locale) {
+                            ForEach(group.voices, id: \.id) { voice in
+                                Text("\(voice.displayName) (\(qualityBadge(voice.quality)))").tag(String?(voice.id))
+                            }
+                        }
+                    }
+                }
+                .accessibilityIdentifier("settings.callouts.voice")
+
+                Button {
+                    send(SettingsEventPreviewCallout.shared)
+                } label: {
+                    Label("Preview", systemImage: "play.circle")
+                }
+                .accessibilityIdentifier("settings.callouts.previewButton")
+
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Text("Speech rate").font(.of(.body, weight: .medium))
+                        Spacer()
+                        Text("\(Int(callouts.rate * 100))%").font(.of(.body, weight: .semibold).monospacedDigit())
+                    }
+                    Slider(value: calloutRateBinding, in: 0.5 ... 2.0, step: 0.05)
+                        .tint(Theme.gold)
+                        .accessibilityIdentifier("settings.callouts.rate")
+                }
+
+                Text(callouts.previewText.isEmpty ? "Select at least one field below" : callouts.previewText)
+                    .font(.of(.subheadline))
+                    .foregroundStyle(Theme.creamDim)
+                    .accessibilityIdentifier("settings.callouts.previewText")
+
+                Text("Fields to speak, in order").font(.of(.footnote)).foregroundStyle(Theme.creamDim)
+                ForEach(callouts.fields, id: \.field) { row in
+                    calloutFieldRow(row)
+                }
+            }
+        } header: {
+            header("AUDIO CALL-OUTS")
+        }
+        .listRowBackground(Theme.bgCard)
+    }
+
+    private func calloutFieldRow(_ row: CalloutFieldRow) -> some View {
+        HStack {
+            Button {
+                send(SettingsEventToggleCalloutField(field: row.field))
+            } label: {
+                HStack {
+                    Image(systemName: row.selected ? "checkmark.square.fill" : "square")
+                        .foregroundStyle(row.selected ? Theme.gold : Theme.creamDim)
+                    Text(row.label).font(.of(.body))
+                }
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("settings.callouts.field.\(row.field.name).toggle")
+            Spacer()
+            if row.selected {
+                Button {
+                    send(SettingsEventMoveCalloutField(field: row.field, up: true))
+                } label: {
+                    Image(systemName: "chevron.up")
+                }
+                .disabled(!row.canMoveUp)
+                .accessibilityIdentifier("settings.callouts.field.\(row.field.name).up")
+                Button {
+                    send(SettingsEventMoveCalloutField(field: row.field, up: false))
+                } label: {
+                    Image(systemName: "chevron.down")
+                }
+                .disabled(!row.canMoveDown)
+                .accessibilityIdentifier("settings.callouts.field.\(row.field.name).down")
+            }
+        }
+        .accessibilityIdentifier("settings.callouts.field.\(row.field.name)")
     }
 
     // MARK: Launch monitor and power (plan R8f, Expo `device.tsx`)
@@ -422,6 +589,20 @@ struct SettingsContent: View {
             .font(.ofEyebrow)
             .tracking(1.7)
             .foregroundStyle(Theme.gold)
+    }
+
+    /// Plan F1d: the first section of a group carries the group's title (Device, Practice, Data)
+    /// above its own eyebrow.
+    private func header(_ text: String, group: String) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(group)
+                .font(.of(.title2, weight: .bold))
+                .foregroundStyle(Theme.cream)
+                .textCase(nil)
+                .accessibilityAddTraits(.isHeader)
+                .accessibilityIdentifier("settings.group.\(group.lowercased())")
+            header(text)
+        }
     }
 
     private func row(_ label: String, _ value: String) -> some View {

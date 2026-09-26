@@ -23,6 +23,9 @@ class KoinHelperIosTest {
             assertThat(helper.trainingViewModel()).isNotNull()
             assertThat(helper.cameraViewModel()).isNotNull()
             assertThat(helper.settingsViewModel()).isNotNull()
+            assertThat(helper.bagViewModel()).isNotNull()
+            assertThat(helper.clubAnalysisViewModel()).isNotNull()
+            assertThat(helper.clubDetailViewModel("7-iron")).isNotNull()
         } finally {
             stopKoin()
         }

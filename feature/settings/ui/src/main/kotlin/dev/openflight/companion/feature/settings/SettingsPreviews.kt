@@ -5,6 +5,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.tooling.preview.Preview
 import dev.openflight.companion.core.data.TransportType
 import dev.openflight.companion.core.designsystem.OfTheme
+import dev.openflight.companion.core.insights.CalloutField
 import dev.openflight.companion.core.insights.UnitSystem
 import dev.openflight.companion.core.model.ConnectionProblem
 import dev.openflight.companion.core.model.ConnectionState
@@ -16,6 +17,8 @@ import dev.openflight.companion.core.model.pi.PowerStatus
 import dev.openflight.companion.core.model.pi.RadarConfig
 import dev.openflight.companion.core.model.pi.TriggerDiagnostic
 import dev.openflight.companion.core.model.pi.TriggerStatus
+import dev.openflight.companion.core.speech.Voice
+import dev.openflight.companion.core.speech.VoiceQuality
 
 /** A connected (or, with [link] ≠ Connected, a disconnected) settings state for previews. */
 @Suppress("MagicNumber", "LongMethod", "CyclomaticComplexMethod") // Sample data.
@@ -28,6 +31,7 @@ internal fun previewSettingsState(
     power: PowerStatus? = PREVIEW_POWER,
     trigger: TriggerStatus? = PREVIEW_TRIGGER,
     connectionState: ConnectionState? = null,
+    callouts: CalloutSettingsUiState = PREVIEW_CALLOUTS,
 ): SettingsUiState {
     val available = PiFeatureAvailability.of(link)
     val connected = available.isAvailable
@@ -119,6 +123,7 @@ internal fun previewSettingsState(
             ),
         power = if (connected) DevicePanels.power(power) else null,
         trigger = DevicePanels.trigger(if (connected) trigger else null, available),
+        callouts = callouts,
     )
 }
 
@@ -145,10 +150,54 @@ internal val PREVIEW_TRIGGER: TriggerStatus =
         triggersRejected = 3,
     )
 
+// Plan F7: audio call-outs preview data, added at the end (§4a A7).
+
+private val PREVIEW_VOICES =
+    listOf(
+        Voice("en-us-1", "Samantha", "en-US", VoiceQuality.ENHANCED),
+        Voice("en-us-2", "Alex", "en-US", VoiceQuality.DEFAULT),
+        Voice("en-gb-1", "Daniel", "en-GB", VoiceQuality.PREMIUM),
+    )
+
+private val PREVIEW_SELECTED_FIELDS = listOf(CalloutField.CARRY, CalloutField.BALL_SPEED, CalloutField.SMASH)
+
+private fun previewFieldRows(): List<CalloutFieldRow> {
+    val lastIndex = PREVIEW_SELECTED_FIELDS.lastIndex
+    val selected =
+        PREVIEW_SELECTED_FIELDS.mapIndexed { index, field ->
+            CalloutFieldRow(field, field.name, selected = true, canMoveUp = index > 0, canMoveDown = index < lastIndex)
+        }
+    val rest =
+        CalloutField.entries.filterNot { it in PREVIEW_SELECTED_FIELDS }.map {
+            CalloutFieldRow(it, it.name, selected = false, canMoveUp = false, canMoveDown = false)
+        }
+    return selected + rest
+}
+
+private val PREVIEW_VOICE_GROUPS =
+    listOf(VoiceGroup("en-GB", listOf(PREVIEW_VOICES[2])), VoiceGroup("en-US", PREVIEW_VOICES.take(2)))
+
+internal val PREVIEW_CALLOUTS: CalloutSettingsUiState =
+    CalloutSettingsUiState(
+        enabled = true,
+        voiceGroups = PREVIEW_VOICE_GROUPS,
+        selectedVoiceId = PREVIEW_VOICES[0].id,
+        fields = previewFieldRows(),
+        previewText = "Carry 152 yards, Ball speed 118 miles per hour, Smash factor one point four eight",
+    )
+
 @Preview(heightDp = 1800)
 @Composable
 private fun SettingsConnectedPreview() {
-    OfTheme { SettingsScreen(uiState = previewSettingsState(), onEvent = {}, onBack = {}) }
+    OfTheme {
+        SettingsScreen(
+            uiState = previewSettingsState(),
+            onEvent = {},
+            onBack = {},
+            onOpenCalibration = {},
+            onOpenCamera = {},
+        )
+    }
 }
 
 @Preview(heightDp = 1400)

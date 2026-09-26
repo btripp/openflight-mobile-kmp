@@ -19,6 +19,8 @@ struct iOSApp: App {
         let koin = KoinHelper()
         lifecycle = koin.appLifecycle()
         launchOptions = koin.launchOptions()
+        // Plan F7: app-scoped, not tied to any one screen.
+        koin.shotCallouts()
         AppearanceSetup.apply()
     }
 

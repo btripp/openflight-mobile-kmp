@@ -3,7 +3,6 @@ package dev.openflight.companion.feature.session
 
 /** Test tags for the Android session screen. */
 object SessionTestTags {
-    const val DONE = "session.done"
     const val EXPORT = "session.export"
     const val CLEAR = "session.clear"
     const val EDIT_DISABLED_REASON = "session.edit.disabledReason"
@@ -18,6 +17,11 @@ object SessionTestTags {
     const val SELECTED_DELETE = "session.selected.delete"
     const val SPREAD = "session.spread"
     const val BAD_READ_NOTE = "session.selected.badRead"
+
+    /** Plan F1b: the expanded window's list and detail panes ([SelectedShotCard]'s own pane). */
+    const val LIST_PANE = "session.listPane"
+    const val DETAIL_PANE = "session.detailPane"
+    const val DETAIL_EMPTY = "session.detailPane.empty"
 
     /** A club tab, by its wire value (e.g. `"7-iron"`). */
     fun tab(club: String): String = "session.tab.$club"

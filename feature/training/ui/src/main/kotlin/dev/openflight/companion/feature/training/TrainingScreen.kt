@@ -24,6 +24,7 @@ import dev.openflight.companion.core.designsystem.OfButton
 import dev.openflight.companion.core.designsystem.OfCard
 import dev.openflight.companion.core.designsystem.OfChip
 import dev.openflight.companion.core.designsystem.OfColorTokens
+import dev.openflight.companion.core.designsystem.OfContentWidth
 import dev.openflight.companion.core.designsystem.OfDisabledReason
 import dev.openflight.companion.core.designsystem.OfOutlinedButton
 import dev.openflight.companion.core.designsystem.OfScaffold
@@ -45,6 +46,9 @@ import dev.openflight.companion.core.model.pi.PiFeatureAvailability
  * view (Last/Best/Average) and `TrainingImplementPicker.tsx` (implements grouped by training
  * system). Wi-Fi only: without the Pi's live session the picker is disabled with the VM's reason.
  * Stateless: everything comes from [uiState] and goes out through [onEvent] or [onBack].
+ *
+ * Plan F1d: Training is a pushed route again (from Practice's overflow menu), with no app bar or
+ * rail, so its "Done" button is back.
  */
 @Composable
 fun TrainingScreen(
@@ -69,19 +73,22 @@ fun TrainingScreen(
             )
         },
     ) { padding ->
-        Column(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .padding(padding)
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = OfSpacing.Xl, vertical = OfSpacing.Sm),
-            verticalArrangement = Arrangement.spacedBy(OfSpacing.Lg),
-        ) {
-            StatusCard(uiState, onEvent)
-            uiState.error?.let { ErrorBanner(it, onDismiss = { onEvent(TrainingEvent.DismissError) }) }
-            SpeedCard(uiState.stats, uiState.units, uiState.lastRep)
-            ImplementPicker(uiState, onEvent)
+        // Plan F1b: a max readable width, centered, so the cards don't stretch edge to edge on a
+        // tablet.
+        OfContentWidth(modifier = Modifier.fillMaxSize().padding(padding)) {
+            Column(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = OfSpacing.Xl, vertical = OfSpacing.Sm),
+                verticalArrangement = Arrangement.spacedBy(OfSpacing.Lg),
+            ) {
+                StatusCard(uiState, onEvent)
+                uiState.error?.let { ErrorBanner(it, onDismiss = { onEvent(TrainingEvent.DismissError) }) }
+                SpeedCard(uiState.stats, uiState.units, uiState.lastRep)
+                ImplementPicker(uiState, onEvent)
+            }
         }
     }
 }

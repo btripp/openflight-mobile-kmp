@@ -14,6 +14,9 @@ object SessionHistoryTestTags {
     const val DETAIL_EXPORT = "session.history.detail.export"
     const val DETAIL_BACK = "session.history.detail.back"
 
+    /** Plan F8a1: opens the driving range replaying this session. */
+    const val DETAIL_REPLAY_ON_RANGE = "session.history.detail.replayOnRange"
+
     /** How a stored session was recorded ("Wi-Fi · raspberrypi.local:8080"), plan R8f. */
     const val DETAIL_SOURCE = "session.history.detail.source"
 
@@ -27,4 +30,8 @@ object SessionHistoryTestTags {
 
     /** One session row, by its id. */
     fun session(id: String): String = "session.history.session.$id"
+
+    /** Android only (plan F1b): the expanded window's docked detail pane and its placeholder. */
+    const val DETAIL_PANE = "session.history.detailPane"
+    const val DETAIL_EMPTY = "session.history.detailPane.empty"
 }

@@ -34,6 +34,11 @@ extension SessionHistoryDetailViewModel: SharedViewModel {}
 extension TrainingViewModel: SharedViewModel {}
 extension CameraViewModel: SharedViewModel {}
 extension SettingsViewModel: SharedViewModel {}
+extension BagViewModel: SharedViewModel {}
+extension ClubAnalysisViewModel: SharedViewModel {}
+extension ClubDetailViewModel: SharedViewModel {}
+extension GamesViewModel: SharedViewModel {}
+extension ActivitiesViewModel: SharedViewModel {}
 
 /// Owns one shared Kotlin ViewModel for one SwiftUI screen, the way an Android
 /// `ViewModelStoreOwner` does:

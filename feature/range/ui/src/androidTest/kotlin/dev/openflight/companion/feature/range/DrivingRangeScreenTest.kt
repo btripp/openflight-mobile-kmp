@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 package dev.openflight.companion.feature.range
 
+import android.content.pm.ActivityInfo
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -19,6 +20,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import dev.openflight.companion.core.designsystem.OfTheme
+import dev.openflight.companion.core.designsystem.OfWindowClass
 import dev.openflight.companion.core.flight.FlightInputProvenance
 import dev.openflight.companion.core.flight.FlightParameter
 import dev.openflight.companion.core.flight.FlightPoint
@@ -50,6 +52,78 @@ class DrivingRangeScreenTest {
                 )
             }
         }
+    }
+
+    /**
+     * [windowClass] is injectable per plan A17, but `isLandscape` (`DrivingRangeScreen.kt`'s
+     * `BoxWithConstraints`) reads the real available space, and a forced `Modifier.size` wider
+     * than the device would just be coerced back down to it. Rotating the activity to
+     * [orientation] is the only way to get a genuinely wider-than-tall window on a phone emulator.
+     */
+    private fun show(
+        state: DrivingRangeUiState,
+        windowClass: OfWindowClass,
+        orientation: Int,
+    ) {
+        composeRule.activity.requestedOrientation = orientation
+        composeRule.waitForIdle()
+        composeRule.setContent {
+            OfTheme {
+                DrivingRangeScreen(
+                    uiState = state,
+                    reduceMotion = true,
+                    onEvent = { events += it },
+                    onExit = { exits++ },
+                    windowClass = windowClass,
+                )
+            }
+        }
+    }
+
+    // Waiting, not Landed: Landed starts a landing dwell that folds the detail metrics (including
+    // the club selector) into one compact strip (plan R7b, see the METRICS_COMPACT/METRICS_DETAIL
+    // tests below) for a few seconds, which would make this flaky.
+
+    @Test
+    fun givenAnExpandedWindowInLandscape_whenShown_thenTheMetricsDockToTheSide() {
+        show(
+            DrivingRangeUiState.Showing(shot, RangePhase.Waiting, activeFlight = null),
+            windowClass = OfWindowClass.EXPANDED,
+            orientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE,
+        )
+
+        composeRule.onNodeWithTag(RangeTestTags.METRICS_DOCK).assertIsDisplayed()
+        composeRule
+            .onAllNodes(hasText("264") and hasAnyAncestor(hasTestTag(RangeTestTags.CARRY)), useUnmergedTree = true)
+            .assertCountEquals(1)
+        // The dock is scrollable (a phone rotated to landscape can be shorter than its content
+        // needs), so this only checks that the club selector renders somewhere in it (the docked
+        // grid, not the compact fold), not that it's on screen without scrolling first.
+        composeRule.onNodeWithTag(RangeTestTags.CLUB_SELECTOR, useUnmergedTree = true).assertExists()
+    }
+
+    @Test
+    fun givenAnExpandedWindowInPortrait_whenShown_thenTheMetricsStayOverlaid() {
+        show(
+            DrivingRangeUiState.Showing(shot, RangePhase.Waiting, activeFlight = null),
+            windowClass = OfWindowClass.EXPANDED,
+            orientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT,
+        )
+
+        composeRule.onAllNodes(hasTestTag(RangeTestTags.METRICS_DOCK)).assertCountEquals(0)
+        composeRule.onNodeWithTag(RangeTestTags.CARRY).assertIsDisplayed()
+    }
+
+    @Test
+    fun givenACompactWindowInLandscape_whenShown_thenTheMetricsStayOverlaid() {
+        show(
+            DrivingRangeUiState.Showing(shot, RangePhase.Waiting, activeFlight = null),
+            windowClass = OfWindowClass.COMPACT,
+            orientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE,
+        )
+
+        composeRule.onAllNodes(hasTestTag(RangeTestTags.METRICS_DOCK)).assertCountEquals(0)
+        composeRule.onNodeWithTag(RangeTestTags.CARRY).assertIsDisplayed()
     }
 
     @Test

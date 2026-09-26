@@ -21,7 +21,9 @@ import dev.openflight.companion.core.data.RangeCameraMode
 import dev.openflight.companion.core.data.SettingsRepository
 import dev.openflight.companion.core.designsystem.OfOutlinedButton
 import dev.openflight.companion.core.designsystem.OfTheme
+import dev.openflight.companion.core.testing.FakeConditionsRepository
 import dev.openflight.companion.core.testing.FakeSettingsRepository
+import dev.openflight.companion.core.testing.FakeShotHistoryRepository
 import dev.openflight.companion.core.testing.FakeShotRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Rule
@@ -84,7 +86,15 @@ class RangeCameraModeTest {
             OfTheme {
                 if (inRange) {
                     // A fresh view model per visit, like a new navigation entry.
-                    val viewModel = remember { DrivingRangeViewModel(shots, settings) }
+                    val viewModel =
+                        remember {
+                            DrivingRangeViewModel(
+                                shots,
+                                settings,
+                                FakeShotHistoryRepository(),
+                                FakeConditionsRepository(),
+                            )
+                        }
                     DrivingRangeRoute(onExit = { inRange = false }, viewModel = viewModel, reduceMotion = false)
                 } else {
                     Box {
@@ -115,7 +125,15 @@ class RangeCameraModeTest {
         val settings = CameraSettings()
         composeRule.setContent {
             OfTheme {
-                val viewModel = remember { DrivingRangeViewModel(FakeShotRepository(), settings) }
+                val viewModel =
+                    remember {
+                        DrivingRangeViewModel(
+                            FakeShotRepository(),
+                            settings,
+                            FakeShotHistoryRepository(),
+                            FakeConditionsRepository(),
+                        )
+                    }
                 DrivingRangeRoute(onExit = {}, viewModel = viewModel, reduceMotion = true)
             }
         }

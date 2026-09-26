@@ -23,6 +23,9 @@ import dev.openflight.companion.core.designsystem.OfIcons
 import dev.openflight.companion.core.designsystem.OfNavigationItem
 import dev.openflight.companion.core.designsystem.OfWindowClass
 import dev.openflight.companion.core.designsystem.rememberOfWindowClass
+import dev.openflight.companion.feature.bag.BagRoute
+import dev.openflight.companion.feature.bag.ClubAnalysisRoute
+import dev.openflight.companion.feature.bag.ClubDetailRoute
 import dev.openflight.companion.feature.calibration.CalibrationRoute
 import dev.openflight.companion.feature.camera.CameraRoute
 import dev.openflight.companion.feature.dashboard.DashboardRoute
@@ -35,7 +38,7 @@ import dev.openflight.companion.feature.training.TrainingRoute
 import kotlinx.serialization.Serializable
 import org.koin.compose.getKoin
 
-/** The dashboard: the start destination. */
+/** The dashboard: the start destination, shown as Practice (plan F1d). */
 @Serializable
 data object Dashboard
 
@@ -61,11 +64,11 @@ data class SessionHistoryDetail(
     val sessionId: String,
 )
 
-/** Swing-speed training (R6c, Wi-Fi only). */
+/** Swing-speed training (R6c, Wi-Fi only), pushed from Practice's overflow menu (plan F1d). */
 @Serializable
 data object Training
 
-/** The Pi's camera feed and ball detection (R6c, Wi-Fi only). */
+/** The Pi's camera feed and ball detection (R6c, Wi-Fi only), pushed from Settings (plan F1d). */
 @Serializable
 data object Camera
 
@@ -73,11 +76,26 @@ data object Camera
 @Serializable
 data object Settings
 
+/** My Bag: the active bag, its gapping and the conditions card (plan F5). */
+@Serializable
+data object Bag
+
+/** Club Analysis: the bag's clubs ranked, with the gapping insights (plan F5). */
+@Serializable
+data object BagAnalysis
+
+/** One club's distances, pushed from Club Analysis (plan F5). */
+@Serializable
+data class BagClubDetail(
+    val wireValue: String,
+)
+
 /**
- * The top-level destinations, in bar/rail order (plan F1a): the dashboard plus the four screens its
- * bottom bar used to reach (plans R5b/R6c). They show the app's navigation (a bottom bar on phones,
- * a rail on tablets). Every other route (Range, Calibration, the session history) is pushed
- * full-screen over them and hides it.
+ * The top-level destinations, in bar/rail order: plan F1d's Practice · Sessions · Bag · Settings,
+ * the same labels and order as iOS's `AppTab` on every form factor. F9b/F9c insert Play at index 1.
+ * They show the app's navigation (a bottom bar on phones, a rail on tablets, plan F1a). Every other
+ * route (Range, Calibration, Training, Camera, the session history) is pushed full-screen over them
+ * and hides it.
  */
 internal enum class TopLevelDestination(
     val label: String,
@@ -85,10 +103,9 @@ internal enum class TopLevelDestination(
     val route: Any,
     val testTag: String,
 ) {
-    HOME("Home", OfIcons.Home, Dashboard, AppNavTags.HOME),
-    SESSION("Session", OfIcons.Session, Session, AppNavTags.SESSION),
-    TRAINING("Training", OfIcons.Training, Training, AppNavTags.TRAINING),
-    CAMERA("Camera", OfIcons.Camera, Camera, AppNavTags.CAMERA),
+    PRACTICE("Practice", OfIcons.Gauge, Dashboard, AppNavTags.PRACTICE),
+    SESSIONS("Sessions", OfIcons.Session, Session, AppNavTags.SESSIONS),
+    BAG("Bag", OfIcons.Bag, Bag, AppNavTags.BAG),
     SETTINGS("Settings", OfIcons.Settings, Settings, AppNavTags.SETTINGS),
     ;
 
@@ -101,10 +118,9 @@ internal enum class TopLevelDestination(
 
 /** Test tags for the app's top-level navigation entries (bottom bar or rail alike). */
 object AppNavTags {
-    const val HOME = "app.nav.home"
-    const val SESSION = "app.nav.session"
-    const val TRAINING = "app.nav.training"
-    const val CAMERA = "app.nav.camera"
+    const val PRACTICE = "app.nav.practice"
+    const val SESSIONS = "app.nav.sessions"
+    const val BAG = "app.nav.bag"
     const val SETTINGS = "app.nav.settings"
 }
 
@@ -112,8 +128,9 @@ object AppNavTags {
  * The Android app's navigation graph (Jetpack `navigation-compose`) inside the adaptive shell
  * ([OfAdaptiveScaffold], plan F1a): a bottom bar on phones and a navigation rail on tablets reach
  * the [TopLevelDestination]s. Each feature destination is one `composable<Route>` line hosting that
- * feature's `:ui` module route. Range and Calibrate stay on the dashboard, and each screen's
- * Done/back still returns to the dashboard.
+ * feature's `:ui` module route. Plan F1d: Range, Calibrate and Speed training are pushed from
+ * Practice, Calibrate and Camera from Settings; each pushed screen's Done/back returns to where it
+ * was opened from.
  *
  * @param windowClass injectable so device tests can force the phone or the tablet layout.
  */
@@ -127,7 +144,7 @@ fun AppNavHost(
     val backStackEntry by navController.currentBackStackEntryAsState()
     // Before the graph's first entry exists, the start destination (the dashboard) is on its way.
     val destination = backStackEntry?.destination
-    val current = if (destination == null) TopLevelDestination.HOME else TopLevelDestination.of(destination)
+    val current = if (destination == null) TopLevelDestination.PRACTICE else TopLevelDestination.of(destination)
     OfAdaptiveScaffold(
         windowClass = windowClass,
         showNavigation = current != null,
@@ -155,12 +172,12 @@ fun AppNavHost(
 }
 
 /**
- * Switches top-level destination the usual Material way: the dashboard stays at the root, at most
- * one other top-level screen sits on it (so its Done/back returns to the dashboard), and a screen
- * left through the bar or rail keeps its state for when it's picked again.
+ * Switches top-level destination the usual Material way: the dashboard (Practice) stays at the
+ * root, at most one other top-level screen sits on it (so system back returns to Practice), and a
+ * screen left through the bar or rail keeps its state for when it's picked again.
  */
 private fun NavHostController.navigateToTopLevel(destination: TopLevelDestination) {
-    if (destination == TopLevelDestination.HOME) {
+    if (destination == TopLevelDestination.PRACTICE) {
         popBackStack<Dashboard>(inclusive = false)
         return
     }
@@ -182,6 +199,7 @@ private fun AppGraph(
             DashboardRoute(
                 onOpenCalibration = { navController.navigate(Calibration) },
                 onOpenRange = { navController.navigate(Range) },
+                onOpenTraining = { navController.navigate(Training) },
                 transportPermissionRequest = {
                     transport,
                     onResult,
@@ -203,6 +221,7 @@ private fun AppGraph(
             SessionHistoryRoute(
                 onBack = onBack,
                 onOpenSession = { navController.navigate(SessionHistoryDetail(it)) },
+                onShareCsv = rememberCsvSharer(),
             )
         }
         composable<SessionHistoryDetail> { entry ->
@@ -210,10 +229,37 @@ private fun AppGraph(
                 sessionId = entry.toRoute<SessionHistoryDetail>().sessionId,
                 onBack = onBack,
                 onShareCsv = rememberCsvSharer(),
+                onReplayOnRange = {
+                    navController.navigate(
+                        RangeReplay(entry.toRoute<SessionHistoryDetail>().sessionId),
+                    )
+                },
             )
         }
         composable<Training> { TrainingRoute(onBack = onBack) }
         composable<Camera> { CameraRoute(onBack = onBack) }
-        composable<Settings> { SettingsRoute(onBack = onBack) }
+        composable<Settings> {
+            SettingsRoute(
+                onBack = onBack,
+                onOpenCalibration = { navController.navigate(Calibration) },
+                onOpenCamera = { navController.navigate(Camera) },
+            )
+        }
+        composable<Bag> { BagRoute(onOpenAnalysis = { navController.navigate(BagAnalysis) }) }
+        composable<BagAnalysis> {
+            ClubAnalysisRoute(onBack = onBack, onOpenClub = { navController.navigate(BagClubDetail(it)) })
+        }
+        composable<BagClubDetail> { entry ->
+            ClubDetailRoute(wireValue = entry.toRoute<BagClubDetail>().wireValue, onBack = onBack)
+        }
+        composable<RangeReplay> { entry ->
+            DrivingRangeRoute(onExit = onBack, replaySessionId = entry.toRoute<RangeReplay>().sessionId)
+        }
     }
 }
+
+/** Plan F8a1: the driving range replaying stored session [sessionId] (Session history detail). */
+@Serializable
+data class RangeReplay(
+    val sessionId: String,
+)

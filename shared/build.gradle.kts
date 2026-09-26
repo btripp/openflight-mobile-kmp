@@ -20,6 +20,8 @@ kotlin {
             export(projects.core.data)
             export(projects.core.insights)
             export(projects.core.flight)
+            // Plan F7: the voice picker needs Voice/VoiceQuality from Swift.
+            export(projects.core.speech)
             export(projects.feature.dashboard)
             export(projects.feature.calibration)
             export(projects.feature.range)
@@ -27,6 +29,9 @@ kotlin {
             export(projects.feature.training)
             export(projects.feature.camera)
             export(projects.feature.settings)
+            export(projects.feature.bag)
+            // Plan F9a: the games engine and its ViewModels, for F9c's SwiftUI screens.
+            export(projects.feature.games)
         }
     }
 
@@ -47,12 +52,20 @@ kotlin {
             api(projects.feature.training)
             api(projects.feature.camera)
             api(projects.feature.settings)
-            // Plan F4: core:speech's speechModule joins the app's Koin graph below. Not exported
-            // to Swift yet — no UI touches SpeechEngine directly until F7.
-            implementation(projects.core.speech)
+            // Plan F5: My Bag, club analysis and gapping.
+            api(projects.feature.bag)
+            // Plan F4: core:speech's speechModule joins the app's Koin graph below. Plan F7 exports
+            // it above too: the settings voice picker needs Voice/VoiceQuality from Swift.
+            api(projects.core.speech)
+            // Plan F9a: the games engine and its ViewModels.
+            api(projects.feature.games)
             implementation(libs.kotlinx.coroutines.core)
             api(project.dependencies.platform(libs.koin.bom))
             api(libs.koin.core)
+        }
+        // Plan F7: fakes for ShotCalloutCoordinatorTest (FinalShotStream, SpeechEngine, ...).
+        commonTest.dependencies {
+            implementation(projects.core.testing)
         }
     }
 }

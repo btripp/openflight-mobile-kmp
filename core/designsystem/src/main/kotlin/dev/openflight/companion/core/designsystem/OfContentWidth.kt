@@ -11,12 +11,19 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 /** The widest a form or a column of text gets on a tablet before it's centered. */
 val OfContentMaxWidth: Dp = 840.dp
+
+/** Test tags for [OfContentWidth]. */
+object OfContentWidthTags {
+    /** The capped, centered pane, so device tests can measure it directly. */
+    const val CONTENT = "of.contentWidth"
+}
 
 /**
  * Centers [content] horizontally and caps its width at [maxWidth] (default [OfContentMaxWidth]),
@@ -30,7 +37,10 @@ fun OfContentWidth(
     content: @Composable BoxScope.() -> Unit,
 ) {
     Box(modifier = modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
-        Box(modifier = Modifier.widthIn(max = maxWidth).fillMaxWidth(), content = content)
+        Box(
+            modifier = Modifier.widthIn(max = maxWidth).fillMaxWidth().testTag(OfContentWidthTags.CONTENT),
+            content = content,
+        )
     }
 }
 

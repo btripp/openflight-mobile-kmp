@@ -9,6 +9,8 @@ kotlin {
             implementation(projects.core.data)
             implementation(projects.core.insights)
             implementation(projects.core.model)
+            // Plan F7: SpeechEngine.voices for the voice picker, ScreenReaderMonitor for the preview.
+            implementation(projects.core.speech)
             implementation(libs.kotlinx.coroutines.core)
             // Shared presentation (ADR 0001): the KMP ViewModel base class, no Compose.
             api(libs.androidx.lifecycle.viewmodel)

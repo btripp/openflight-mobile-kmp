@@ -27,23 +27,26 @@ details from memory.
 ```
 androidApp (Jetpack NavHost, permissions, launch extras, Koin start, app icon)
     ├──> feature:dashboard:ui | feature:calibration:ui | feature:range:ui
-    │        feature:session:ui | feature:training:ui | feature:camera:ui | feature:settings:ui
+    │        feature:session:ui | feature:training:ui | feature:camera:ui | feature:settings:ui | feature:bag:ui
     │        └──> its own feature:<name> + core:designsystem + core:* (never another feature)
     └──> shared (KMP: initKoin, LaunchOptions, PreviewShotRepository)
 iosApp (SwiftUI, Xcode) ──> Shared.framework = shared, exporting core:model/data/insights/flight
                              + feature:* + KoinHelper/NativeViewModels bridge; AppIcon asset catalog
-shared ──> feature:dashboard | calibration | range | session | training | camera | settings (KMP, VMs)
+shared ──> feature:dashboard | calibration | range | session | training | camera | settings | bag (KMP, VMs)
              ├──> core:data ──> core:ble / core:network / core:socketio ──> core:protocol ──> core:model
              │            ├──> core:database (Room 3 KMP shot history; internal to core:data)
-             │            └──> core:flight (conditions-adjusted carry, roll; ConditionsRepository)
+             │            ├──> core:flight (conditions-adjusted carry, roll; ConditionsRepository)
+             │            └──> core:location (device fix) + core:geodata (Open-Meteo weather/elevation;
+             │                 outside the Pi's LAN-only EndpointPolicy) -- AUTO conditions (plan F6)
              └──> core:speech (SpeechEngine text-to-speech; no core:* deps of its own)
-feature:range, feature:session ──> core:flight ; feature:calibration ──> core:sensors ; others ──> core:insights
+feature:range, feature:session, feature:bag ──> core:flight ; core:insights ──> core:flight (offline distance) ; feature:calibration ──> core:sensors ; others ──> core:insights
 core:testing → fake repositories shared by VM tests (test-only, no app depends on it directly)
 ```
 
 Current leaf `core:*` modules: `model`, `protocol`, `ble`, `network`, `socketio`, `data`,
-`database`, `flight`, `sensors`, `insights`, `designsystem`, `speech`, `testing`. Current `feature:*` modules:
-`dashboard`, `calibration`, `range`, `session`, `training`, `camera`, `settings` (each with a
+`database`, `flight`, `sensors`, `insights`, `designsystem`, `speech`, `location`, `geodata`,
+`testing`. Current `feature:*` modules:
+`dashboard`, `calibration`, `range`, `session`, `training`, `camera`, `settings`, `bag` (each with a
 matching Android-only `feature:<name>:ui`).
 
 ## Adding a module
@@ -144,3 +147,20 @@ that as the failure mode to avoid, not a one-off.
 chain before any `git commit` and blocks the commit on a non-zero exit. If it blocks, fix the
 cause. Don't bypass it. `/verify` runs the same chain on demand. Path-scoped conventions for
 shared KMP code, Compose UI and SwiftUI live in `.claude/rules/`.
+
+## Games (`feature:games`, plan F9)
+- `feature:games` (KMP, depends on core:data, core:flight, core:insights, core:model) holds the
+  pure game engine plus `GamesViewModel` and `ActivitiesViewModel`. Its Android UI
+  (`feature:games:ui`) and SwiftUI screens come in F9b/F9c; both VMs are already in
+  `gamesModule` (shared `appModules`), `KoinHelper` and the iOS bridge.
+- Engine: `GameMode` (TargetCallout, ClosestToPin, Bullseye, GolfPong, IconicShots) scores a
+  pure `GameShot`; `GameSessionReducer.reduce(state, event)` has no clock (timestamps come in the
+  events). A swing belongs to whoever is up when its `event_id` is **first sighted** and is
+  scored when it turns **final** (`FinalShotStream`, A14). Undo takes back the last attribution.
+- `GamesViewModel` publishes the running game to `ActiveGameRepository` and clears it on End or
+  `onCleared`; End files an `Activity` (type = `GameType.storageValue`, JSON from `GameRecords`).
+  No connected Pi means `GamesUiState.ConnectToPlay`; "Simulate shot" shows only for a `--mock` Pi.
+- Navigation takes a typed `GameLaunch(type, distanceYards)` (A6): Android passes it with
+  `koinViewModel { parametersOf(launch) }`, iOS with `KoinHelper().gamesViewModel(launch:)`.
+- The iconic-shot catalog is Kotlin constants (`IconicShotCatalog`, A15): generic, descriptive
+  scenarios only, never real players' names or tournament trademarks.

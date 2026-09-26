@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import dev.openflight.companion.core.designsystem.OfButton
 import dev.openflight.companion.core.designsystem.OfCard
 import dev.openflight.companion.core.designsystem.OfColorTokens
+import dev.openflight.companion.core.designsystem.OfContentWidth
 import dev.openflight.companion.core.designsystem.OfMessageHostState
 import dev.openflight.companion.core.designsystem.OfOutlinedButton
 import dev.openflight.companion.core.designsystem.OfScaffold
@@ -45,6 +46,9 @@ private const val FEED_ASPECT = 4f / 3f
  * newest decoded still), the capture settings, and the shots whose captures can be replayed. A
  * prepared replay opens in the system's video player. Stateless: everything comes from
  * [uiState]/[frame] and goes out through [onEvent]/[onBack]. Polish is plan R8f.
+ *
+ * Plan F1d: Camera is a pushed route again (from Settings' Device group), with no app bar or rail,
+ * so its "Done" button is back.
  */
 @Composable
 fun CameraScreen(
@@ -72,18 +76,21 @@ fun CameraScreen(
             )
         },
     ) { padding ->
-        Column(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .padding(padding)
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = OfSpacing.Xl, vertical = OfSpacing.Sm),
-            verticalArrangement = Arrangement.spacedBy(OfSpacing.Lg),
-        ) {
-            Feed(uiState, frame)
-            CaptureCard(uiState, onEvent)
-            ReplaysCard(uiState, onEvent)
+        // Plan F1b: a max readable width, centered, so the cards don't stretch edge to edge on a
+        // tablet.
+        OfContentWidth(modifier = Modifier.fillMaxSize().padding(padding)) {
+            Column(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = OfSpacing.Xl, vertical = OfSpacing.Sm),
+                verticalArrangement = Arrangement.spacedBy(OfSpacing.Lg),
+            ) {
+                Feed(uiState, frame)
+                CaptureCard(uiState, onEvent)
+                ReplaysCard(uiState, onEvent)
+            }
         }
     }
 }

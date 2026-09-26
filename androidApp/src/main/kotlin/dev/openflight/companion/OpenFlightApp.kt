@@ -38,9 +38,14 @@ fun OpenFlightApp(windowClass: OfWindowClass = rememberOfWindowClass()) {
 private fun AppLifecycleSource() {
     val lifecycle = koinInject<AppLifecycle>()
     val policy = koinInject<LifecycleConnectionPolicy>()
+    // Plan F7: resolved and started here, not from OpenFlightApplication.onCreate(), for the same
+    // reason `policy` is: this composition's Koin graph is the one a debug launch hook or an
+    // instrumented test may have replaced (see OpenFlightApplication's note).
+    val shotCallouts = koinInject<ShotCalloutCoordinator>()
     val activity = LocalActivity.current
-    DisposableEffect(lifecycle, policy) {
+    DisposableEffect(lifecycle, policy, shotCallouts) {
         policy.start()
+        shotCallouts.start()
         val observer =
             LifecycleEventObserver { _, event ->
                 when (event) {

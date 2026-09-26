@@ -3,6 +3,13 @@ package dev.openflight.companion
 
 import com.rickclephas.kmp.nativecoroutines.NativeCoroutines
 import com.rickclephas.kmp.nativecoroutines.NativeCoroutinesState
+import dev.openflight.companion.feature.bag.BagEffect
+import dev.openflight.companion.feature.bag.BagUiState
+import dev.openflight.companion.feature.bag.BagViewModel
+import dev.openflight.companion.feature.bag.ClubAnalysisUiState
+import dev.openflight.companion.feature.bag.ClubAnalysisViewModel
+import dev.openflight.companion.feature.bag.ClubDetailUiState
+import dev.openflight.companion.feature.bag.ClubDetailViewModel
 import dev.openflight.companion.feature.calibration.CalibrationUiState
 import dev.openflight.companion.feature.calibration.CalibrationViewModel
 import dev.openflight.companion.feature.camera.CameraEffect
@@ -11,6 +18,11 @@ import dev.openflight.companion.feature.camera.CameraViewModel
 import dev.openflight.companion.feature.dashboard.DashboardEffect
 import dev.openflight.companion.feature.dashboard.DashboardUiState
 import dev.openflight.companion.feature.dashboard.DashboardViewModel
+import dev.openflight.companion.feature.games.ActivitiesUiState
+import dev.openflight.companion.feature.games.ActivitiesViewModel
+import dev.openflight.companion.feature.games.GamesEffect
+import dev.openflight.companion.feature.games.GamesUiState
+import dev.openflight.companion.feature.games.GamesViewModel
 import dev.openflight.companion.feature.range.DrivingRangeUiState
 import dev.openflight.companion.feature.range.DrivingRangeViewModel
 import dev.openflight.companion.feature.session.SessionEffect
@@ -118,6 +130,37 @@ val SettingsViewModel.state: StateFlow<SettingsUiState>
 @NativeCoroutines
 val SettingsViewModel.sideEffects: Flow<SettingsEffect>
     get() = effects
+
+/** Plan F5: My Bag, whose effect closes the conditions editor. */
+@NativeCoroutinesState
+val BagViewModel.state: StateFlow<BagUiState>
+    get() = uiState
+
+@NativeCoroutines
+val BagViewModel.sideEffects: Flow<BagEffect>
+    get() = effects
+
+@NativeCoroutinesState
+val ClubAnalysisViewModel.state: StateFlow<ClubAnalysisUiState>
+    get() = uiState
+
+@NativeCoroutinesState
+val ClubDetailViewModel.state: StateFlow<ClubDetailUiState>
+    get() = uiState
+
+/** Plan F9a: a game in progress; `Saved` fires once the finished game is filed. */
+@NativeCoroutinesState
+val GamesViewModel.state: StateFlow<GamesUiState>
+    get() = uiState
+
+@NativeCoroutines
+val GamesViewModel.sideEffects: Flow<GamesEffect>
+    get() = effects
+
+/** Plan F9a: the Activities hub has no one-shot effects. */
+@NativeCoroutinesState
+val ActivitiesViewModel.state: StateFlow<ActivitiesUiState>
+    get() = uiState
 
 @OptIn(ExperimentalForeignApi::class, BetaInteropApi::class)
 private fun ByteArray.toNSData(): NSData =

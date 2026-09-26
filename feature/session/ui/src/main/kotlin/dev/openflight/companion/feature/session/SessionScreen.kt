@@ -3,6 +3,7 @@ package dev.openflight.companion.feature.session
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
@@ -22,12 +23,14 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import dev.openflight.companion.core.designsystem.OfButton
 import dev.openflight.companion.core.designsystem.OfCard
 import dev.openflight.companion.core.designsystem.OfChip
 import dev.openflight.companion.core.designsystem.OfColorTokens
 import dev.openflight.companion.core.designsystem.OfDisabledReason
+import dev.openflight.companion.core.designsystem.OfListDetailPane
 import dev.openflight.companion.core.designsystem.OfMessageHostState
 import dev.openflight.companion.core.designsystem.OfOutlinedButton
 import dev.openflight.companion.core.designsystem.OfPill
@@ -36,8 +39,11 @@ import dev.openflight.companion.core.designsystem.OfSpacing
 import dev.openflight.companion.core.designsystem.OfText
 import dev.openflight.companion.core.designsystem.OfTextButton
 import dev.openflight.companion.core.designsystem.OfTextRole
+import dev.openflight.companion.core.designsystem.OfTheme
 import dev.openflight.companion.core.designsystem.OfTopBar
+import dev.openflight.companion.core.designsystem.OfWindowClass
 import dev.openflight.companion.core.designsystem.StatusTone
+import dev.openflight.companion.core.designsystem.rememberOfWindowClass
 import dev.openflight.companion.core.insights.ClubStats
 import dev.openflight.companion.core.insights.SwingSpeedStats
 import dev.openflight.companion.core.insights.UnitSystem
@@ -52,8 +58,17 @@ import dev.openflight.companion.core.model.pi.PiFeatureAvailability
  * The session/stats screen (plans R5b/R6c), ported from the web UI's `StatsView.tsx` (club tabs and
  * stats) and `ShotList.tsx` (swipe-to-delete rows, clear, CSV export). Stateless: everything comes
  * from [uiState] (including a delete or clear's confirmation and outcome, plan R8f) and goes out
- * through [onEvent] or [onBack].
+ * through [onEvent].
+ *
+ * Plan F1b: Session is a top-level destination reached through the app shell's bottom bar or rail,
+ * which stays on screen here too, so a "Done" button would just duplicate its Home entry. [onBack]
+ * is kept for the caller's navigation wiring, even though nothing in this screen calls it today.
+ *
+ * @param windowClass injectable for tests and previews; defaults to [rememberOfWindowClass]. On an
+ *   [OfWindowClass.EXPANDED] window the selected shot's detail moves out of the shot list into its
+ *   own pane beside it ([OfListDetailPane]), instead of appearing inline in the list.
  */
+@Suppress("UnusedParameter") // onBack: kept for the caller's navigation wiring, see the KDoc above.
 @Composable
 fun SessionScreen(
     uiState: SessionUiState,
@@ -62,6 +77,7 @@ fun SessionScreen(
     modifier: Modifier = Modifier,
     messages: OfMessageHostState? = null,
     onOpenHistory: (() -> Unit)? = null,
+    windowClass: OfWindowClass = rememberOfWindowClass(),
 ) {
     val canEdit = uiState.canEdit
     val reduceMotion = rememberReduceMotionEnabled()
@@ -78,57 +94,111 @@ fun SessionScreen(
                         OfTextButton(
                             text = "History",
                             onClick = onOpenHistory,
-                            modifier = Modifier.testTag(SessionHistoryTestTags.OPEN),
+                            modifier = Modifier.padding(end = OfSpacing.Sm).testTag(SessionHistoryTestTags.OPEN),
                         )
                     }
-                    OfOutlinedButton(
-                        text = "Done",
-                        onClick = onBack,
-                        modifier = Modifier.padding(end = OfSpacing.Sm).testTag(SessionTestTags.DONE),
-                    )
                 },
             )
         },
     ) { padding ->
-        LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(padding),
-            contentPadding = PaddingValues(horizontal = OfSpacing.Xl, vertical = OfSpacing.Sm),
-            verticalArrangement = Arrangement.spacedBy(OfSpacing.Lg),
-        ) {
-            item(key = "header") { SourceRow(uiState, onEvent) }
-            if (uiState.action !is SessionActionState.Idle) {
-                item(key = "action") {
-                    SessionActionPanel(
-                        state = uiState.action,
-                        onRetry = { onEvent(SessionEvent.RetryAction) },
-                        onDismiss = { onEvent(SessionEvent.DismissAction) },
+        if (windowClass == OfWindowClass.EXPANDED) {
+            OfListDetailPane(
+                hasSelection = false,
+                windowClass = windowClass,
+                modifier = Modifier.fillMaxSize().padding(padding),
+                list = {
+                    SessionShotList(
+                        uiState = uiState,
+                        onEvent = onEvent,
+                        canEdit = canEdit,
+                        reduceMotion = reduceMotion,
+                        showSelectedInline = false,
+                        modifier = Modifier.fillMaxSize().testTag(SessionTestTags.LIST_PANE),
+                    )
+                },
+                detail = {
+                    SelectedShotDetailPane(
+                        card = uiState.selectedShot,
+                        units = uiState.units,
+                        canEdit = canEdit,
+                        onEvent = onEvent,
+                        modifier = Modifier.fillMaxSize().testTag(SessionTestTags.DETAIL_PANE),
+                    )
+                },
+            )
+        } else {
+            SessionShotList(
+                uiState = uiState,
+                onEvent = onEvent,
+                canEdit = canEdit,
+                reduceMotion = reduceMotion,
+                showSelectedInline = true,
+                modifier = Modifier.fillMaxSize().padding(padding),
+            )
+        }
+    }
+    SessionActionDialog(
+        state = uiState.action,
+        onConfirm = { onEvent(SessionEvent.ConfirmAction) },
+        onCancel = { onEvent(SessionEvent.CancelAction) },
+    )
+}
+
+/**
+ * The header, dispersion chart, club tabs, stats, actions and the shot rows. On a single pane
+ * (phones and tablets under [OfWindowClass.EXPANDED]) [showSelectedInline] also puts the selected
+ * shot's detail card in the list, right after the tabs, as it always has; on an expanded window the
+ * caller shows it in a separate pane instead and passes `false`.
+ */
+@Composable
+private fun SessionShotList(
+    uiState: SessionUiState,
+    onEvent: (SessionEvent) -> Unit,
+    canEdit: Boolean,
+    reduceMotion: Boolean,
+    showSelectedInline: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    LazyColumn(
+        modifier = modifier,
+        contentPadding = PaddingValues(horizontal = OfSpacing.Xl, vertical = OfSpacing.Sm),
+        verticalArrangement = Arrangement.spacedBy(OfSpacing.Lg),
+    ) {
+        item(key = "header") { SourceRow(uiState, onEvent) }
+        if (uiState.action !is SessionActionState.Idle) {
+            item(key = "action") {
+                SessionActionPanel(
+                    state = uiState.action,
+                    onRetry = { onEvent(SessionEvent.RetryAction) },
+                    onDismiss = { onEvent(SessionEvent.DismissAction) },
+                )
+            }
+        }
+        uiState.staleNote?.let { note ->
+            item(key = "stale") {
+                OfText(
+                    text = note,
+                    role = OfTextRole.BodySmall,
+                    color = OfColorTokens.Warning,
+                    modifier = Modifier.testTag(SessionActionTestTags.STALE_NOTE),
+                )
+            }
+        }
+        if (!uiState.hasShots) {
+            item(key = "empty") { EmptySession() }
+        } else {
+            uiState.dispersion?.let { dispersion ->
+                item(key = "dispersion") {
+                    DispersionCard(
+                        dispersion = dispersion,
+                        units = uiState.units,
+                        selectedId = uiState.selectedShot?.id,
+                        onSelect = { onEvent(SessionEvent.SelectShot(it)) },
                     )
                 }
             }
-            uiState.staleNote?.let { note ->
-                item(key = "stale") {
-                    OfText(
-                        text = note,
-                        role = OfTextRole.BodySmall,
-                        color = OfColorTokens.Warning,
-                        modifier = Modifier.testTag(SessionActionTestTags.STALE_NOTE),
-                    )
-                }
-            }
-            if (!uiState.hasShots) {
-                item(key = "empty") { EmptySession() }
-            } else {
-                uiState.dispersion?.let { dispersion ->
-                    item(key = "dispersion") {
-                        DispersionCard(
-                            dispersion = dispersion,
-                            units = uiState.units,
-                            selectedId = uiState.selectedShot?.id,
-                            onSelect = { onEvent(SessionEvent.SelectShot(it)) },
-                        )
-                    }
-                }
-                item(key = "tabs") { ClubTabs(uiState) { onEvent(SessionEvent.SelectClub(it)) } }
+            item(key = "tabs") { ClubTabs(uiState) { onEvent(SessionEvent.SelectClub(it)) } }
+            if (showSelectedInline) {
                 uiState.selectedShot?.let { card ->
                     item(key = "selected") {
                         SelectedShotCardView(
@@ -140,41 +210,72 @@ fun SessionScreen(
                         )
                     }
                 }
-                item(key = "stats") { StatsCard(uiState) }
-                item(key = "actions") {
-                    ActionsRow(
-                        editAvailability = uiState.editAvailability,
-                        canEdit = canEdit,
-                        onExport = { onEvent(SessionEvent.ExportCsv) },
-                        onClear = { onEvent(SessionEvent.ClearHistory) },
-                    )
-                }
-                item(key = "shotsHeader") {
-                    OfText(
-                        text = if (canEdit) "SHOTS · swipe left to delete" else "SHOTS",
-                        role = OfTextRole.Eyebrow,
-                        color = OfColorTokens.Gold,
-                    )
-                }
-                items(uiState.shots, key = { it.id }) { shot ->
-                    SessionShotRowItem(
-                        shot = shot,
-                        units = uiState.units,
-                        selected = shot.id == uiState.selectedShot?.id,
-                        onSelect = { onEvent(SessionEvent.SelectShot(shot.id)) },
-                        onDelete = { onEvent(SessionEvent.DeleteShot(shot.id)) },
-                        modifier = animateItemUnless(reduceMotion),
-                        deletable = canEdit,
-                    )
-                }
+            }
+            item(key = "stats") { StatsCard(uiState) }
+            item(key = "actions") {
+                ActionsRow(
+                    editAvailability = uiState.editAvailability,
+                    canEdit = canEdit,
+                    onExport = { onEvent(SessionEvent.ExportCsv) },
+                    onClear = { onEvent(SessionEvent.ClearHistory) },
+                )
+            }
+            item(key = "shotsHeader") {
+                OfText(
+                    text = if (canEdit) "SHOTS · swipe left to delete" else "SHOTS",
+                    role = OfTextRole.Eyebrow,
+                    color = OfColorTokens.Gold,
+                )
+            }
+            items(uiState.shots, key = { it.id }) { shot ->
+                SessionShotRowItem(
+                    shot = shot,
+                    units = uiState.units,
+                    selected = shot.id == uiState.selectedShot?.id,
+                    onSelect = { onEvent(SessionEvent.SelectShot(shot.id)) },
+                    onDelete = { onEvent(SessionEvent.DeleteShot(shot.id)) },
+                    modifier = animateItemUnless(reduceMotion),
+                    deletable = canEdit,
+                )
             }
         }
     }
-    SessionActionDialog(
-        state = uiState.action,
-        onConfirm = { onEvent(SessionEvent.ConfirmAction) },
-        onCancel = { onEvent(SessionEvent.CancelAction) },
-    )
+}
+
+/**
+ * The detail pane's content on an expanded window (plan F1b): the selected shot's card, or a
+ * placeholder when nothing is selected yet (the list's rows and dispersion dots are still
+ * tappable to pick one).
+ */
+@Composable
+private fun SelectedShotDetailPane(
+    card: SelectedShotCard?,
+    units: UnitSystem,
+    canEdit: Boolean,
+    onEvent: (SessionEvent) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Box(modifier = modifier.padding(OfSpacing.Xl), contentAlignment = Alignment.Center) {
+        if (card == null) {
+            OfText(
+                text = "Select a shot to see its details.",
+                role = OfTextRole.BodySmall,
+                color = OfColorTokens.CreamDim,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.testTag(SessionTestTags.DETAIL_EMPTY),
+            )
+        } else {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                SelectedShotCardView(
+                    card = card,
+                    units = units,
+                    onClose = { onEvent(SessionEvent.SelectShot(null)) },
+                    onDelete = { onEvent(SessionEvent.DeleteShot(card.id)) },
+                    deletable = canEdit,
+                )
+            }
+        }
+    }
 }
 
 /** The source badge ("Pi session" or "This phone") and, on a `--mock` Pi, "Simulate Shot". */
@@ -250,7 +351,6 @@ internal fun ClubTabs(
             label = "All",
             count = uiState.allCount,
             selected = uiState.selectedClub == null,
-            minTouchTarget = true,
             onClick = { onSelectClub(null) },
             modifier = Modifier.testTag(SessionTestTags.ALL_TAB),
         )
@@ -259,7 +359,6 @@ internal fun ClubTabs(
                 label = clubLabel(chip.club),
                 count = chip.count,
                 selected = uiState.selectedClub == chip.club,
-                minTouchTarget = true,
                 onClick = { onSelectClub(chip.club) },
                 modifier = Modifier.testTag(SessionTestTags.tab(chip.club)),
             )
@@ -292,5 +391,35 @@ private fun ActionsRow(
         editAvailability.disabledReason?.let { reason ->
             OfDisabledReason(reason = reason, modifier = Modifier.testTag(SessionTestTags.EDIT_DISABLED_REASON))
         }
+    }
+}
+
+private fun previewUiState(): SessionUiState =
+    SessionUiState(
+        source = SessionSource.LOCAL,
+        allCount = previewRows.size,
+        shots = previewRows,
+        selectedShot =
+            SelectedShotCard(
+                previewRows[1].id,
+                1,
+                "Driver",
+                carryYards = 264.0,
+                spinRpm = 2380.0,
+                clubSpeedMph = 103.2,
+            ),
+    )
+
+@Preview
+@Composable
+private fun SessionCompactPreview() {
+    OfTheme { SessionScreen(uiState = previewUiState(), onEvent = {}, onBack = {}) }
+}
+
+@Preview(widthDp = 1280, heightDp = 800)
+@Composable
+private fun SessionExpandedPreview() {
+    OfTheme {
+        SessionScreen(uiState = previewUiState(), onEvent = {}, onBack = {}, windowClass = OfWindowClass.EXPANDED)
     }
 }
