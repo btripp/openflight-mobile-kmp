@@ -82,10 +82,13 @@ fun initKoin(
 suspend fun Koin.applyLaunchOptions(options: LaunchOptions) {
     loadModules(listOf(module { single { options } }), allowOverride = true)
     if (options.usesFakeRepository) {
-        loadModules(listOf(previewModule(options.previewShot)), allowOverride = true)
+        loadModules(listOf(previewModule(options.previewShot, options.previewLiveShots)), allowOverride = true)
     }
-    if (options.previewHistory || options.previewHistoryStuck) {
-        loadModules(listOf(previewHistoryModule(stuck = options.previewHistoryStuck)), allowOverride = true)
+    if (options.previewHistory || options.previewHistoryStuck || options.previewHistoryBulk) {
+        loadModules(
+            listOf(previewHistoryModule(stuck = options.previewHistoryStuck, bulk = options.previewHistoryBulk)),
+            allowOverride = true,
+        )
     }
     if (options.previewPiSession || options.previewPiSessionStuck) {
         val real = get<PiSessionRepository>()
@@ -109,23 +112,31 @@ suspend fun Koin.applyLaunchOptions(options: LaunchOptions) {
     options.host?.let { settings.setHost(it) }
 }
 
-private fun previewModule(showPreviewShot: Boolean): Module =
+private fun previewModule(
+    showPreviewShot: Boolean,
+    liveShots: Boolean,
+): Module =
     module {
         // Deletes and Clear edit the preview history in memory, like the real repository.
         single<ShotRepository> {
             LocalEditsShotRepository(
                 PreviewShotRepository(settings = get(), showPreviewShot = showPreviewShot),
                 pi = get(),
+                liveShotIntervalMillis = if (liveShots) LaunchOptions.PREVIEW_LIVE_SHOT_INTERVAL_MILLIS else null,
             )
         }
     }
 
 /** Plan R8f: stored sessions to show and edit without a Pi (debug launch hooks only). */
-private fun previewHistoryModule(stuck: Boolean): Module =
+private fun previewHistoryModule(
+    stuck: Boolean,
+    bulk: Boolean,
+): Module =
     module {
         single<ShotHistoryRepository> {
             PreviewShotHistoryRepository(
                 writeDelayMillis = if (stuck) null else PreviewShotHistoryRepository.DEFAULT_WRITE_DELAY_MILLIS,
+                bulkShots = if (bulk) LaunchOptions.PREVIEW_BULK_SHOTS else 0,
             )
         }
     }

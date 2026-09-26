@@ -38,6 +38,12 @@ import dev.openflight.companion.core.data.TransportType
  *   and the follow camera is shown fully settled.
  * @property rangeRealityKit iOS only (plan F8c2): `--range-realitykit` draws the range with the
  *   previous RealityKit scene instead of the Canvas renderer. Kept for one release (ADR 0002).
+ * @property previewLiveShots plan F8b: with [usesFakeRepository], the preview Pi "hits" a new copy
+ *   of the preview shot every [PREVIEW_LIVE_SHOT_INTERVAL_MILLIS], so a live shot arrives while the
+ *   range replays or overlays (the "New shot · Return to live" chip). `--preview-live-shots`.
+ * @property previewHistoryBulk plan F8b: [PreviewShotHistoryRepository] with a third, older session
+ *   of [PREVIEW_BULK_SHOTS] shots, more than the range overlay's 200-shot cap (the performance
+ *   check). Implies [previewHistory]. `--preview-history-bulk`.
  */
 data class LaunchOptions(
     val uiTesting: Boolean = false,
@@ -53,6 +59,8 @@ data class LaunchOptions(
     val previewPiSessionStuck: Boolean = false,
     val rangeFreezeProgress: Double? = null,
     val rangeRealityKit: Boolean = false,
+    val previewLiveShots: Boolean = false,
+    val previewHistoryBulk: Boolean = false,
 ) {
     val usesFakeRepository: Boolean
         get() = uiTesting || previewShot || previewPi
@@ -71,6 +79,14 @@ data class LaunchOptions(
         const val PREVIEW_PI_SESSION_STUCK = "--preview-pi-session-stuck"
         const val RANGE_FREEZE_PROGRESS = "--range-freeze-progress"
         const val RANGE_REALITYKIT = "--range-realitykit"
+        const val PREVIEW_LIVE_SHOTS = "--preview-live-shots"
+        const val PREVIEW_HISTORY_BULK = "--preview-history-bulk"
+
+        /** How often `--preview-live-shots` delivers a shot. */
+        const val PREVIEW_LIVE_SHOT_INTERVAL_MILLIS = 5_000L
+
+        /** The `--preview-history-bulk` session's size: more than the overlay's cap of 200. */
+        const val PREVIEW_BULK_SHOTS = 220
 
         /** Parses process arguments; unknown arguments (Xcode adds its own) are ignored. */
         fun fromArguments(arguments: List<String>): LaunchOptions {
@@ -96,6 +112,8 @@ data class LaunchOptions(
                         ?.takeIf { it.isFinite() }
                         ?.coerceIn(0.0, 1.0),
                 rangeRealityKit = RANGE_REALITYKIT in arguments,
+                previewLiveShots = PREVIEW_LIVE_SHOTS in arguments,
+                previewHistoryBulk = PREVIEW_HISTORY_BULK in arguments,
             )
         }
     }
