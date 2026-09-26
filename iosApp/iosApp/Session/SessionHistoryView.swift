@@ -51,7 +51,10 @@ struct SessionHistoryContent: View {
     @ViewBuilder
     private var detailPane: some View {
         if let selectedSessionId {
+            // Plan F1d: one view (and ViewModel) per session; without the id, picking another
+            // session kept showing the first one's `@StateObject`.
             SessionHistoryDetailView(sessionId: selectedSessionId)
+                .id(selectedSessionId)
         } else {
             ContentUnavailableView {
                 Label("No session selected", systemImage: "clock.arrow.circlepath")
@@ -99,7 +102,12 @@ struct SessionHistoryContent: View {
                             Button {
                                 selectedSessionId = session.id
                             } label: {
+                                // Plan F1d: the whole row is the target. A plain-style button
+                                // otherwise only takes taps on its text, so a tap in the row's
+                                // blank middle (a short row like "18:12, 1 shot") did nothing.
                                 SessionHistoryRowView(session: session)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
                             .accessibilityAddTraits(session.id == selectedSessionId ? [.isSelected, .isButton] : .isButton)

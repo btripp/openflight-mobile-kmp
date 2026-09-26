@@ -90,7 +90,7 @@ final class PreviewPiUITests: XCTestCase {
 
     func testPowerAndLaunchMonitorCardsShowThePisReport() {
         let app = launch()
-        app.tabBars.buttons["Settings"].tap()
+        AppNav.open(.settings, in: app)
 
         // The launch monitor card comes first; the List unloads rows scrolled far off screen.
         let mode = app.staticTexts["Rolling buffer"]
@@ -107,7 +107,7 @@ final class PreviewPiUITests: XCTestCase {
 
     func testStoppingOpenFlightGoesThroughPendingToDone() {
         let app = launch()
-        app.tabBars.buttons["Settings"].tap()
+        AppNav.open(.settings, in: app)
         let stop = app.buttons["settings.shutdown"]
         scroll(app, to: stop)
         XCTAssertTrue(stop.isEnabled)
@@ -133,11 +133,7 @@ final class PreviewPiUITests: XCTestCase {
     // MARK: Helpers
 
     private func launch() -> XCUIApplication {
-        let app = XCUIApplication()
-        app.launchArguments = ["--ui-testing", "--preview-pi"]
-        app.launch()
-        XCTAssertTrue(app.tabBars.buttons["Settings"].waitForExistence(timeout: 10))
-        return app
+        AppNav.launch(["--ui-testing", "--preview-pi"])
     }
 
     private func openProfiles(_ app: XCUIApplication) {
