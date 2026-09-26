@@ -79,5 +79,24 @@ internal class PreviewShotRepository(
                 clubPathDeg = 2.1,
                 spinAxisDeg = -3.4,
             )
+
+        /**
+         * `--preview-live-shots` shot [number] (1-based): [PREVIEW_SHOT] with its own event id (a
+         * UUID ending in [number], as `ShotEvent` requires) and a later timestamp, one second apart,
+         * so each one is a new shot.
+         */
+        fun liveShot(number: Int): ShotEvent =
+            PREVIEW_SHOT.copy(
+                eventId = "00000000-0000-4000-8000-${number.toString().padStart(UUID_TAIL_DIGITS, '0')}",
+                timestamp =
+                    "2026-07-29T20:${twoDigits(number / SECONDS_PER_MINUTE % MINUTES_PER_HOUR)}:" +
+                        twoDigits(number % SECONDS_PER_MINUTE),
+            )
+
+        private const val UUID_TAIL_DIGITS = 12
+        private const val SECONDS_PER_MINUTE = 60
+        private const val MINUTES_PER_HOUR = 60
+
+        private fun twoDigits(value: Int): String = value.toString().padStart(2, '0')
     }
 }

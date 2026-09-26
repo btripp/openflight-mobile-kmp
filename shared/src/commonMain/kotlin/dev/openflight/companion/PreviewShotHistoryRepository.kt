@@ -35,16 +35,21 @@ import kotlinx.coroutines.launch
  * land, so the screens' "storage didn't respond" failure can be seen too.
  *
  * It holds no imported sessions (plan F3): imports, the stats flag and notes are no-ops here.
+ *
+ * With [bulkShots] > 0 (`--preview-history-bulk`, plan F8b) a third, older session,
+ * [BULK_SESSION], holds that many shots across six clubs, for the range overlay's 200-shot
+ * performance check.
  */
 @Suppress("TooManyFunctions") // Mirrors the ShotHistoryRepository surface.
 internal class PreviewShotHistoryRepository(
     private val writeDelayMillis: Long? = DEFAULT_WRITE_DELAY_MILLIS,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
+    bulkShots: Int = 0,
 ) : ShotHistoryRepository {
     override val isPersistent: StateFlow<Boolean> = MutableStateFlow(true)
     override val currentSessionId: StateFlow<String?> = MutableStateFlow(CURRENT_SESSION)
 
-    private val stored = MutableStateFlow(seed())
+    private val stored = MutableStateFlow(seed() + bulkSession(bulkShots))
 
     override fun sessions(includeImported: Boolean): Flow<List<HistorySession>> =
         stored.map { sessions ->
@@ -163,6 +168,10 @@ internal class PreviewShotHistoryRepository(
     companion object {
         const val CURRENT_SESSION = "preview-current"
         const val OLDER_SESSION = "preview-older"
+        const val BULK_SESSION = "preview-bulk"
+
+        /** The bulk session's row ids start here, clear of the other sessions' 1, 2, 3. */
+        private const val BULK_FIRST_ID = 1_000L
 
         /** Long enough for a UI test to see the pending state, short enough not to slow it down. */
         const val DEFAULT_WRITE_DELAY_MILLIS = 2_000L
@@ -210,6 +219,56 @@ internal class PreviewShotHistoryRepository(
                         ),
                 ),
             )
+
+        /** A club's wire value, ball speed (mph) and carry (yards) for the bulk session. */
+        private data class BulkClub(
+            val club: String,
+            val ballSpeedMph: Double,
+            val carryYards: Double,
+        )
+
+        @Suppress("MagicNumber") // Seed data: made-up, plausible numbers per club.
+        private val BULK_CLUBS =
+            listOf(
+                BulkClub("driver", 150.0, 255.0),
+                BulkClub("3-wood", 140.0, 225.0),
+                BulkClub("5-iron", 125.0, 185.0),
+                BulkClub("7-iron", 118.0, 165.0),
+                BulkClub("9-iron", 105.0, 135.0),
+                BulkClub("pitching-wedge", 95.0, 115.0),
+            )
+
+        /** [count] shots, seven seconds apart on 2026-09-19, newest first, with some spread. */
+        @Suppress("MagicNumber") // Seed data.
+        private fun bulkSession(count: Int): List<StoredSession> {
+            if (count <= 0) return emptyList()
+            val shots =
+                (count downTo 1).map { number ->
+                    val club = BULK_CLUBS[number % BULK_CLUBS.size]
+                    val spread = (number * 37 % 21 - 10).toDouble()
+                    val seconds = number * 7
+                    val timestamp =
+                        "2026-09-19T${(9 + seconds / 3_600).toString().padStart(2, '0')}:" +
+                            "${(seconds / 60 % 60).toString().padStart(2, '0')}:" +
+                            "${(seconds % 60).toString().padStart(2, '0')}.000000"
+                    val base =
+                        shot(
+                            BULK_SESSION,
+                            number,
+                            timestamp,
+                            club.club,
+                            club.ballSpeedMph + spread / 4,
+                            club.carryYards + spread,
+                            "ann",
+                            "Ann",
+                        )
+                    base.copy(
+                        id = BULK_FIRST_ID + number,
+                        detail = base.detail.copy(launchAngleHorizontal = spread / 3),
+                    )
+                }
+            return listOf(StoredSession(id = BULK_SESSION, host = null, transport = TransportType.WIFI, shots = shots))
+        }
 
         @Suppress("LongParameterList", "MagicNumber")
         private fun shot(

@@ -25,6 +25,10 @@ import SwiftUI
 /// Canvas, so the shared pixel minimums (tracer width, ball radius) and the style's raw-pixel dash
 /// match Android at the same density. Style sizes in points are scaled up to pixels; labels are
 /// drawn in points.
+///
+/// **Gestures (plan F8b).** With `onViewChanged` set, `RangeGestureLayer` sits over the canvas: pinch,
+/// two-finger pan, one-finger orbit, double-tap reset and, in the overlay, tap-to-select a landing,
+/// all through the shared `ViewTransform` math and this frame's projection.
 struct RangeCanvasView: View {
     let flight: ActiveFlight?
     let cameraMode: RangeCameraMode
@@ -37,6 +41,10 @@ struct RangeCanvasView: View {
     /// Debug (`--range-freeze-progress`): hold every flight at this playback progress.
     var freezeProgress: Double?
     let onFlightCompleted: @MainActor () -> Void
+    /// Plan F8b: a gesture's new transform; `nil` leaves the scene without gestures.
+    var onViewChanged: ((ViewTransform) -> Void)?
+    var onResetView: () -> Void = {}
+    var onSelectLanding: (String) -> Void = { _ in }
 
     @StateObject private var player = RangeCanvasPlayer()
     @Environment(\.displayScale) private var displayScale
@@ -59,10 +67,32 @@ struct RangeCanvasView: View {
                 )
             }
         }
+        .overlay {
+            if let onViewChanged {
+                RangeGestureLayer(
+                    projection: { [player] in player.frame.projection },
+                    view: view,
+                    overlay: overlayMode ? overlay : [],
+                    displayScale: displayScale,
+                    onViewChanged: onViewChanged,
+                    onResetView: onResetView,
+                    onSelectLanding: onSelectLanding
+                )
+            }
+        }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Driving range")
         .accessibilityValue(viewDescription)
         .accessibilityIdentifier(RangeTestTags.shared.SCENE)
+        .overlay {
+            if overlayMode, onViewChanged != nil {
+                RangeLandingMarkers(
+                    markers: player.landingMarkers,
+                    selectedId: selectedOverlayId,
+                    onSelect: onSelectLanding
+                )
+            }
+        }
         .onAppear(perform: syncFlight)
         .onChange(of: flight?.playbackId) { syncFlight() }
         .onChange(of: overlayMode) {
@@ -110,6 +140,12 @@ final class RangeCanvasPlayer: ObservableObject {
     }
 
     @Published private(set) var animating = false
+
+    /// Plan F8b: where the overlay's landing dots were last drawn (points), for the accessible
+    /// landing markers. Published once the redraws settle, not per frame.
+    @Published private(set) var landingMarkers: [RangeLandingMarker] = []
+    private var markersScheduled = false
+    private var markersScale: CGFloat = 1
 
     let rig = RangeCameraRig()
     let style = RangeTheme.day.style
@@ -228,7 +264,11 @@ final class RangeCanvasPlayer: ObservableObject {
             return
         case let .flying(start, duration):
             guard let start else {
-                clock = .flying(start: now, duration: duration)
+                // Plan F8b fix: the first render of a new flight usually comes from the input
+                // change while the `TimelineView` is still paused, whose date is the last frame's,
+                // possibly seconds old; starting from it made the flight "land" at once. Start at
+                // the later of the two instead.
+                clock = .flying(start: max(now, Date()), duration: duration)
                 return
             }
             progress = min(max(now.timeIntervalSince(start) / duration, 0), 1)
@@ -269,6 +309,8 @@ final class RangeCanvasPlayer: ObservableObject {
     // MARK: Drawing
 
     func render(in context: GraphicsContext, size: CGSize, now: Date, displayScale: CGFloat, inputs: Inputs) {
+        let renderStart = CACurrentMediaTime()
+        defer { frameCounter.rendered(start: renderStart, overlayCount: inputs.overlay.count) }
         advance(to: now)
         if case .idle = clock {} else { frameCounter.tick(now) }
         guard size.width > 0, size.height > 0 else { return }
@@ -302,6 +344,7 @@ final class RangeCanvasPlayer: ObservableObject {
         drawLabels(context, scale: scale)
         let overlay = frame.overlay
         if let overlay { drawOverlay(pixels, overlay, scale: scale) }
+        if overlay != nil || !landingMarkers.isEmpty { scheduleLandingMarkers(scale: scale) }
         if frame.geometry == nil {
             if overlay != nil { drawRollOut(pixels, context, rollOut: inputs.rollOut, scale: scale) }
         } else {
@@ -310,6 +353,35 @@ final class RangeCanvasPlayer: ObservableObject {
                 drawRollOut(pixels, context, rollOut: inputs.rollOut, scale: scale)
             }
             drawFlight(pixels)
+        }
+    }
+
+    /// Publishes the overlay's landing points once the redraws pause (posted: `render` must not
+    /// publish, and a gesture redraws every frame).
+    private func scheduleLandingMarkers(scale: CGFloat) {
+        markersScale = scale
+        guard !markersScheduled else { return }
+        markersScheduled = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+            guard let self else { return }
+            self.markersScheduled = false
+            let markers = self.currentLandingMarkers()
+            if markers != self.landingMarkers { self.landingMarkers = markers }
+        }
+    }
+
+    private func currentLandingMarkers() -> [RangeLandingMarker] {
+        guard let overlay = frame.overlay else { return [] }
+        let flights = overlay.flights
+        return flights.enumerated().compactMap { index, flight in
+            let x = overlay.landingXs.get(index: Int32(index))
+            let y = overlay.landingYs.get(index: Int32(index))
+            guard !x.isNaN, !y.isNaN else { return nil }
+            return RangeLandingMarker(
+                shotId: flight.shotId,
+                label: "Landing \(index + 1) of \(flights.count), \(Units.clubLabel(flight.club))",
+                point: CGPoint(x: CGFloat(x) / markersScale, y: CGFloat(y) / markersScale)
+            )
         }
     }
 
@@ -514,12 +586,112 @@ final class RangeCanvasPlayer: ObservableObject {
     }
 }
 
+/// Plan F8b: one overlay landing dot, as an accessibility element.
+struct RangeLandingMarker: Equatable {
+    let shotId: String
+    let label: String
+    let point: CGPoint
+}
+
+/// The overlay's landing dots as accessibility elements (plan F8b): VoiceOver can reach and select
+/// each landing, which a sighted user taps, and UI tests can find where to tap. They don't take
+/// touches themselves: a tap on the scene still goes through `RangeGestureLayer`'s tap-to-select.
+struct RangeLandingMarkers: View {
+    let markers: [RangeLandingMarker]
+    let selectedId: String?
+    let onSelect: (String) -> Void
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            ForEach(Array(markers.enumerated()), id: \.offset) { _, marker in
+                Color.clear
+                    .frame(width: 44, height: 44)
+                    .position(marker.point)
+                    .accessibilityElement()
+                    .accessibilityLabel(marker.label)
+                    .accessibilityAddTraits(marker.shotId == selectedId ? [.isButton, .isSelected] : .isButton)
+                    .accessibilityAction { onSelect(marker.shotId) }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .allowsHitTesting(false)
+    }
+}
+
 /// Counts rendered frames while the range animates and logs the rate (debug builds): once a second
 /// and once per playback, under the `dev.openflight.companion` subsystem, category `RangeCanvas`.
 /// Read it with `log stream --level debug --predicate 'category == "RangeCanvas"'`.
+///
+/// Plan F8b: it also times every `render`, animating or not (a gesture redraws without the
+/// `TimelineView`), and logs each burst of redraws (a pinch, a pan, an orbit): the frames, their
+/// rate, the average and slowest render and the overlay's size, the 200-shot overlay check.
 final class RangeFrameCounter {
     #if DEBUG
     private let logger = Logger(subsystem: "dev.openflight.companion", category: "RangeCanvas")
+    private var burstStart: CFTimeInterval?
+    private var burstLast: CFTimeInterval = 0
+    private var burstFrames = 0
+    private var burstRenderSeconds = 0.0
+    private var burstSlowest = 0.0
+    private var burstOverlay = 0
+    #endif
+
+    /// A redraw more than this long after the previous one starts a new burst.
+    private static let burstGapSeconds: CFTimeInterval = 0.25
+
+    /// One `render` that began at `start` (`CACurrentMediaTime`) has finished.
+    func rendered(start: CFTimeInterval, overlayCount: Int) {
+        #if DEBUG
+        let end = CACurrentMediaTime()
+        if let burstStart, start - burstLast > Self.burstGapSeconds {
+            logBurst(from: burstStart)
+            self.burstStart = nil
+        }
+        if burstStart == nil {
+            burstStart = start
+            burstFrames = 0
+            burstRenderSeconds = 0
+            burstSlowest = 0
+        }
+        burstFrames += 1
+        burstRenderSeconds += end - start
+        burstSlowest = max(burstSlowest, end - start)
+        burstOverlay = overlayCount
+        burstLast = start
+        scheduleFlush()
+        #endif
+    }
+
+    #if DEBUG
+    private func logBurst(from start: CFTimeInterval) {
+        let seconds = burstLast - start
+        guard burstFrames >= 10, seconds > 0 else { return }
+        let fps = Double(burstFrames - 1) / seconds
+        let average = burstRenderSeconds / Double(burstFrames) * 1_000
+        let slowest = burstSlowest * 1_000
+        logger.debug(
+            "range redraws \(self.burstFrames) frames in \(seconds, format: .fixed(precision: 2)) s: \(fps, format: .fixed(precision: 1)) fps, render avg \(average, format: .fixed(precision: 2)) ms, max \(slowest, format: .fixed(precision: 2)) ms, overlay \(self.burstOverlay) shots"
+        )
+    }
+
+    /// Logs the burst once the redraws have stopped (checked after the gap, at most one pending).
+    private func scheduleFlush() {
+        guard !flushScheduled else { return }
+        flushScheduled = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.burstGapSeconds * 2) { [weak self] in
+            guard let self else { return }
+            self.flushScheduled = false
+            guard let start = self.burstStart else { return }
+            if CACurrentMediaTime() - self.burstLast > Self.burstGapSeconds {
+                self.logBurst(from: start)
+                self.burstStart = nil
+            } else {
+                self.scheduleFlush()
+            }
+        }
+    }
+
+    private var flushScheduled = false
     private var runStart: Date?
     private var runFrames = 0
     private var windowStart: Date?
