@@ -61,9 +61,14 @@ struct DrivingRangeContent: View {
     let send: (DrivingRangeEvent) -> Void
     let onExit: () -> Void
 
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
     var body: some View {
         GeometryReader { geometry in
             let isLandscape = geometry.size.width > geometry.size.height
+            // Plan F1c: the overlay docks to the side in regular landscape (an iPad), instead of
+            // spanning the top and bottom of the scene, so more of the flight stays clear.
+            let docksToSide = horizontalSizeClass == .regular && isLandscape
 
             ZStack {
                 RangeSceneView(
@@ -85,6 +90,7 @@ struct DrivingRangeContent: View {
                 RangeMetricsOverlay(
                     state: state,
                     isLandscape: isLandscape,
+                    docksToSide: docksToSide,
                     onSelectClub: { send(DrivingRangeEventClubSelected(club: $0)) }
                 )
 

@@ -60,6 +60,8 @@ struct CameraContent: View {
             }
             .padding(.horizontal, 20)
             .padding(.bottom, 24)
+            // Plan F1c: capped and centered on a regular width, like Settings.
+            .contentWidth()
         }
         .screenBackground()
         .sheet(isPresented: Binding(

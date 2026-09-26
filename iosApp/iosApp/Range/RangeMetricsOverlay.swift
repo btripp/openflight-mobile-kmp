@@ -10,12 +10,23 @@ import SwiftUI
 struct RangeMetricsOverlay: View {
     let state: DrivingRangeUiState
     let isLandscape: Bool
+    /// Plan F1c: true in regular landscape (an iPad), where the metrics dock to one side instead
+    /// of spanning the top and bottom of the scene.
+    var docksToSide: Bool = false
     let onSelectClub: (GolfClub) -> Void
 
     private var shot: ShotEvent? { state.displayedShot }
     private var club: RangeClubState { state.club }
 
     var body: some View {
+        if docksToSide {
+            dockedLayout
+        } else {
+            spanningLayout
+        }
+    }
+
+    private var spanningLayout: some View {
         VStack(spacing: 12) {
             primaryMetrics
             Spacer(minLength: 20)
@@ -24,6 +35,21 @@ struct RangeMetricsOverlay: View {
         .padding(.horizontal, isLandscape ? 28 : 16)
         .padding(.top, isLandscape ? 16 : 72)
         .padding(.bottom, 14)
+    }
+
+    /// A side panel on the trailing edge, so the tee-to-landing area in the middle stays clear.
+    private var dockedLayout: some View {
+        HStack {
+            Spacer(minLength: 0)
+            VStack(spacing: 16) {
+                primaryMetrics
+                secondaryMetrics
+            }
+            .frame(width: 320)
+            .padding(.vertical, 16)
+            .padding(.horizontal, 16)
+            .padding(.top, 44)
+        }
     }
 
     private var primaryMetrics: some View {

@@ -42,6 +42,10 @@ struct SettingsContent: View {
             calloutsSection
             shutdownSection
         }
+        // Plan F1c: capped and centered on a regular width (`core:designsystem`'s
+        // `OfContentWidth`, 840 pt), so the form stays readable on an iPad instead of
+        // stretching edge to edge.
+        .contentWidth()
         .screenBackground()
         .onChange(of: state.shutdown.confirmationRequired, initial: true) { _, required in
             showingShutdown = required

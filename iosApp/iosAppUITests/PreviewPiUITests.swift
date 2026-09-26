@@ -66,8 +66,12 @@ final class PreviewPiUITests: XCTestCase {
         openProfiles(app)
         let cara = app.buttons["dashboard.profile.row.preview-cara"]
         XCTAssertTrue(cara.waitForExistence(timeout: 5))
-        cara.swipeLeft()
-        app.buttons["Remove"].firstMatch.tap()
+        // Plan F1c (R8f leftover): Rename/Remove are visible buttons under the row now, not only
+        // a swipe action, so they're addressed by their own identifiers rather than by the
+        // ambiguous "Remove" label (which several rows now show at once).
+        let removeCara = app.buttons["dashboard.profile.remove.preview-cara"]
+        XCTAssertTrue(removeCara.waitForExistence(timeout: 5))
+        removeCara.tap()
 
         let confirm = app.buttons["dashboard.profile.removeConfirm"]
         XCTAssertTrue(confirm.waitForExistence(timeout: 5))
@@ -75,10 +79,11 @@ final class PreviewPiUITests: XCTestCase {
         confirm.tap()
 
         XCTAssertTrue(cara.waitForNonExistence(timeout: 5))
-        // The active profile never offers Remove.
-        let ann = app.buttons["dashboard.profile.row.preview-ann"]
-        ann.swipeLeft()
-        XCTAssertFalse(app.buttons["Remove"].exists)
+        // The active profile's Remove button is visible but disabled (Android matches: the row
+        // never hides it, it shows why removal is blocked).
+        let removeAnn = app.buttons["dashboard.profile.remove.preview-ann"]
+        XCTAssertTrue(removeAnn.exists)
+        XCTAssertFalse(removeAnn.isEnabled)
     }
 
     // MARK: Settings

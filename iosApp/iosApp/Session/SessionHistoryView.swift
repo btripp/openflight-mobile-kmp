@@ -16,11 +16,52 @@ struct SessionHistoryView: View {
 }
 
 /// The stateless history list.
+///
+/// Plan F1c: on a regular width the row pushes into an inline detail pane instead of a full
+/// navigation push (`AppListDetailPane`), like Mail's sidebar; on a compact width it's the
+/// original `NavigationLink` push, unchanged.
 struct SessionHistoryContent: View {
     let state: SessionHistoryUiState
     let send: (SessionHistoryEvent) -> Void
 
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @State private var selectedSessionId: String?
+
     var body: some View {
+        Group {
+            if horizontalSizeClass == .regular {
+                AppListDetailPane(
+                    hasSelection: selectedSessionId != nil,
+                    list: { listPane },
+                    detail: { detailPane }
+                )
+            } else {
+                listPane
+            }
+        }
+        .screenBackground()
+        .reducingMotion()
+        .sessionActionDialog(
+            state.action,
+            onConfirm: { send(SessionHistoryEventConfirmAction.shared) },
+            onCancel: { send(SessionHistoryEventCancelAction.shared) }
+        )
+    }
+
+    @ViewBuilder
+    private var detailPane: some View {
+        if let selectedSessionId {
+            SessionHistoryDetailView(sessionId: selectedSessionId)
+        } else {
+            ContentUnavailableView {
+                Label("No session selected", systemImage: "clock.arrow.circlepath")
+            } description: {
+                Text("Pick a session from the list to see its shots and stats.")
+            }
+        }
+    }
+
+    private var listPane: some View {
         List {
             if !(state.action is SessionActionStateIdle) && !(state.action is SessionActionStateConfirming) {
                 Section {
@@ -54,12 +95,23 @@ struct SessionHistoryContent: View {
             if !state.sessions.isEmpty {
                 Section {
                     ForEach(state.sessions, id: \.id) { session in
-                        NavigationLink {
-                            SessionHistoryDetailView(sessionId: session.id)
-                        } label: {
-                            SessionHistoryRowView(session: session)
+                        if horizontalSizeClass == .regular {
+                            Button {
+                                selectedSessionId = session.id
+                            } label: {
+                                SessionHistoryRowView(session: session)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityAddTraits(session.id == selectedSessionId ? [.isSelected, .isButton] : .isButton)
+                            .accessibilityIdentifier(SessionHistoryTestTags.shared.session(id: session.id))
+                        } else {
+                            NavigationLink {
+                                SessionHistoryDetailView(sessionId: session.id)
+                            } label: {
+                                SessionHistoryRowView(session: session)
+                            }
+                            .accessibilityIdentifier(SessionHistoryTestTags.shared.session(id: session.id))
                         }
-                        .accessibilityIdentifier(SessionHistoryTestTags.shared.session(id: session.id))
                     }
                     .listRowBackground(Theme.bgCard)
                 }
@@ -79,13 +131,6 @@ struct SessionHistoryContent: View {
         }
         .listStyle(.insetGrouped)
         .accessibilityIdentifier(SessionHistoryTestTags.shared.LIST)
-        .screenBackground()
-        .reducingMotion()
-        .sessionActionDialog(
-            state.action,
-            onConfirm: { send(SessionHistoryEventConfirmAction.shared) },
-            onCancel: { send(SessionHistoryEventCancelAction.shared) }
-        )
     }
 }
 

@@ -24,10 +24,13 @@ final class BagUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-testing", "--preview-shot"]
         app.launch()
+        // iPad (regular width) shows a sidebar instead of a tab bar (plan F1c).
+        let sidebarItem = app.descendants(matching: .any)["app.nav.sidebar.bag"]
         let bag = app.tabBars.buttons["Bag"]
-        // iPad draws its tabs as a floating bar, not a classic `tabBars` element.
         let floatingTab = app.buttons["Bag"].firstMatch
-        if bag.waitForExistence(timeout: 10) {
+        if sidebarItem.waitForExistence(timeout: 5) {
+            sidebarItem.tap()
+        } else if bag.waitForExistence(timeout: 10) {
             bag.tap()
         } else if floatingTab.exists {
             floatingTab.tap()
