@@ -53,6 +53,8 @@ struct CalibrationContent: View {
                     submissionCard
                 }
                 .padding(20)
+                // Plan F1c: capped and centered on a regular width, like Settings.
+                .contentWidth()
             }
         }
         .foregroundStyle(Theme.cream)

@@ -70,6 +70,8 @@ struct SessionContent: View {
     let send: (SessionEvent) -> Void
     let export: CsvExport?
 
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
     private var units: UnitSystem { state.units }
     private var isPi: Bool { state.source == .pi }
     /// Plan R8e: over Bluetooth (a read-and-select link) delete and clear are off, with a reason.
@@ -77,99 +79,16 @@ struct SessionContent: View {
     private var canEdit: Bool { state.canEdit }
 
     var body: some View {
-        List {
-            Section { sourceBadge }
-            if !(state.action is SessionActionStateIdle) && !(state.action is SessionActionStateConfirming) {
-                Section {
-                    SessionActionPanel(
-                        state: state.action,
-                        onRetry: { send(SessionEventRetryAction.shared) },
-                        onDismiss: { send(SessionEventDismissAction.shared) }
-                    )
-                }
-                .listRowBackground(Theme.bgElevated)
-            }
-            if let note = state.staleNote {
-                Section {
-                    Label(note, systemImage: "wifi.slash")
-                        .font(.of(.subheadline))
-                        .foregroundStyle(Theme.warning)
-                        .accessibilityIdentifier(SessionActionTestTags.shared.STALE_NOTE)
-                }
-                .listRowBackground(Theme.bgCard)
-            }
-            if state.showSimulateShot {
-                Section { simulateButton }.listRowBackground(Theme.bgCard)
-            }
-            if state.hasShots {
-                if let dispersion = state.dispersion {
-                    Section {
-                        DispersionChartView(
-                            dispersion: dispersion,
-                            units: units,
-                            selectedId: state.selectedShot?.id,
-                            onSelect: { send(SessionEventSelectShot(id: $0)) }
-                        )
-                    }
-                    .listRowBackground(Theme.bgCard)
-                }
-                Section { SessionClubTabs(state: state) { send(SessionEventSelectClub(club: $0)) } }
-                    .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
-                if let card = state.selectedShot {
-                    Section {
-                        SelectedShotCardView(
-                            card: card,
-                            units: units,
-                            deletable: canEdit,
-                            onClose: { send(SessionEventSelectShot(id: nil)) },
-                            onDelete: { send(SessionEventDeleteShot(id: card.id)) }
-                        )
-                    }
-                    .listRowBackground(Theme.bgElevated)
-                }
-                Section { SessionStatsGrid(state: state) }.listRowBackground(Theme.bgCard)
-                Section { actions }.listRowBackground(Theme.bgCard)
-                Section {
-                    ForEach(state.shots, id: \.id) { row in
-                        let selected = row.id == state.selectedShot?.id
-                        SessionShotRowView(row: row, units: units)
-                            .contentShape(Rectangle())
-                            .onTapGesture { send(SessionEventSelectShot(id: row.id)) }
-                            .accessibilityAddTraits(selected ? [.isSelected, .isButton] : .isButton)
-                            .accessibilityHint("Shows this shot on the chart")
-                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                if canEdit {
-                                    // Not `.destructive`: the row stays until the delete is
-                                    // confirmed (plan R8f), so it must not animate away here.
-                                    Button {
-                                        send(SessionEventDeleteShot(id: row.id))
-                                    } label: {
-                                        Label("Delete", systemImage: "trash")
-                                    }
-                                    .tint(.red)
-                                }
-                            }
-                            .listRowBackground(selected ? Theme.gold.opacity(0.14) : Theme.bgCard)
-                    }
-                } header: {
-                    Text(canEdit ? "SHOTS · swipe left to delete" : "SHOTS")
-                        .font(.ofEyebrow)
-                        .tracking(1.4)
-                        .foregroundStyle(Theme.gold)
-                }
+        Group {
+            // Plan F1c: list-detail on a regular width (the shot list on the left, the dispersion
+            // chart and the selected shot's detail on the right, like Android's F1a/F1b); one
+            // scrolling list, unchanged, on a compact width.
+            if horizontalSizeClass == .regular {
+                regularLayout
             } else {
-                Section {
-                    ContentUnavailableView {
-                        Label("No shots recorded yet", systemImage: "list.bullet.rectangle")
-                    } description: {
-                        Text("Hit a ball and it shows up here with per-club stats.")
-                    }
-                    .accessibilityIdentifier("session.empty")
-                }
+                compactLayout
             }
         }
-        .listStyle(.insetGrouped)
-        .listSectionSpacing(.compact)
         .screenBackground()
         .reducingMotion()
         .sessionActionDialog(
@@ -177,6 +96,195 @@ struct SessionContent: View {
             onConfirm: { send(SessionEventConfirmAction.shared) },
             onCancel: { send(SessionEventCancelAction.shared) }
         )
+    }
+
+    private var compactLayout: some View {
+        List {
+            sourceBadgeSection
+            actionPanelSection
+            staleNoteSection
+            simulateSection
+            if state.hasShots {
+                dispersionSection
+                clubTabsSection
+                selectedShotSection
+                statsSection
+                actionsSection
+                shotsSection
+            } else {
+                emptySection
+            }
+        }
+        .listStyle(.insetGrouped)
+        .listSectionSpacing(.compact)
+    }
+
+    private var regularLayout: some View {
+        AppListDetailPane(hasSelection: true, list: { listPane }, detail: { detailPane })
+    }
+
+    private var listPane: some View {
+        List {
+            sourceBadgeSection
+            actionPanelSection
+            staleNoteSection
+            simulateSection
+            if state.hasShots {
+                clubTabsSection
+                shotsSection
+            } else {
+                emptySection
+            }
+        }
+        .listStyle(.insetGrouped)
+        .listSectionSpacing(.compact)
+    }
+
+    private var detailPane: some View {
+        List {
+            if state.hasShots {
+                dispersionSection
+                selectedShotSection
+                statsSection
+                actionsSection
+            } else {
+                Section {
+                    ContentUnavailableView {
+                        Label("No shots recorded yet", systemImage: "list.bullet.rectangle")
+                    } description: {
+                        Text("Hit a ball and it shows up here with per-club stats.")
+                    }
+                }
+            }
+        }
+        .listStyle(.insetGrouped)
+        .listSectionSpacing(.compact)
+    }
+
+    // MARK: Sections (shared by the compact list and the regular list/detail panes)
+
+    private var sourceBadgeSection: some View {
+        Section { sourceBadge }
+    }
+
+    @ViewBuilder
+    private var actionPanelSection: some View {
+        if !(state.action is SessionActionStateIdle) && !(state.action is SessionActionStateConfirming) {
+            Section {
+                SessionActionPanel(
+                    state: state.action,
+                    onRetry: { send(SessionEventRetryAction.shared) },
+                    onDismiss: { send(SessionEventDismissAction.shared) }
+                )
+            }
+            .listRowBackground(Theme.bgElevated)
+        }
+    }
+
+    @ViewBuilder
+    private var staleNoteSection: some View {
+        if let note = state.staleNote {
+            Section {
+                Label(note, systemImage: "wifi.slash")
+                    .font(.of(.subheadline))
+                    .foregroundStyle(Theme.warning)
+                    .accessibilityIdentifier(SessionActionTestTags.shared.STALE_NOTE)
+            }
+            .listRowBackground(Theme.bgCard)
+        }
+    }
+
+    @ViewBuilder
+    private var simulateSection: some View {
+        if state.showSimulateShot {
+            Section { simulateButton }.listRowBackground(Theme.bgCard)
+        }
+    }
+
+    @ViewBuilder
+    private var dispersionSection: some View {
+        if let dispersion = state.dispersion {
+            Section {
+                DispersionChartView(
+                    dispersion: dispersion,
+                    units: units,
+                    selectedId: state.selectedShot?.id,
+                    onSelect: { send(SessionEventSelectShot(id: $0)) }
+                )
+            }
+            .listRowBackground(Theme.bgCard)
+        }
+    }
+
+    private var clubTabsSection: some View {
+        Section { SessionClubTabs(state: state) { send(SessionEventSelectClub(club: $0)) } }
+            .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
+    }
+
+    @ViewBuilder
+    private var selectedShotSection: some View {
+        if let card = state.selectedShot {
+            Section {
+                SelectedShotCardView(
+                    card: card,
+                    units: units,
+                    deletable: canEdit,
+                    onClose: { send(SessionEventSelectShot(id: nil)) },
+                    onDelete: { send(SessionEventDeleteShot(id: card.id)) }
+                )
+            }
+            .listRowBackground(Theme.bgElevated)
+        }
+    }
+
+    private var statsSection: some View {
+        Section { SessionStatsGrid(state: state) }.listRowBackground(Theme.bgCard)
+    }
+
+    private var actionsSection: some View {
+        Section { actions }.listRowBackground(Theme.bgCard)
+    }
+
+    private var shotsSection: some View {
+        Section {
+            ForEach(state.shots, id: \.id) { row in
+                let selected = row.id == state.selectedShot?.id
+                SessionShotRowView(row: row, units: units)
+                    .contentShape(Rectangle())
+                    .onTapGesture { send(SessionEventSelectShot(id: row.id)) }
+                    .accessibilityAddTraits(selected ? [.isSelected, .isButton] : .isButton)
+                    .accessibilityHint("Shows this shot on the chart")
+                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        if canEdit {
+                            // Not `.destructive`: the row stays until the delete is
+                            // confirmed (plan R8f), so it must not animate away here.
+                            Button {
+                                send(SessionEventDeleteShot(id: row.id))
+                            } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
+                            .tint(.red)
+                        }
+                    }
+                    .listRowBackground(selected ? Theme.gold.opacity(0.14) : Theme.bgCard)
+            }
+        } header: {
+            Text(canEdit ? "SHOTS · swipe left to delete" : "SHOTS")
+                .font(.ofEyebrow)
+                .tracking(1.4)
+                .foregroundStyle(Theme.gold)
+        }
+    }
+
+    private var emptySection: some View {
+        Section {
+            ContentUnavailableView {
+                Label("No shots recorded yet", systemImage: "list.bullet.rectangle")
+            } description: {
+                Text("Hit a ball and it shows up here with per-club stats.")
+            }
+            .accessibilityIdentifier("session.empty")
+        }
     }
 
     // MARK: Source

@@ -186,27 +186,52 @@ private struct ProfileRowView: View {
     let send: (DashboardEvent) -> Void
 
     var body: some View {
-        Button {
-            send(ProfilePickerEventSelect(profileId: row.id))
-        } label: {
-            HStack {
-                Text(row.name)
-                    .font(.of(.body, weight: row.active ? .semibold : .regular))
-                    .foregroundStyle(row.active ? Theme.gold : Theme.cream)
-                Spacer()
-                if row.active {
-                    // A check mark, not only the gold text, marks the active profile.
-                    Image(systemName: "checkmark")
-                        .foregroundStyle(Theme.gold)
-                        .accessibilityHidden(true)
+        VStack(alignment: .leading, spacing: 6) {
+            Button {
+                send(ProfilePickerEventSelect(profileId: row.id))
+            } label: {
+                HStack {
+                    Text(row.name)
+                        .font(.of(.body, weight: row.active ? .semibold : .regular))
+                        .foregroundStyle(row.active ? Theme.gold : Theme.cream)
+                    Spacer()
+                    if row.active {
+                        // A check mark, not only the gold text, marks the active profile.
+                        Image(systemName: "checkmark")
+                            .foregroundStyle(Theme.gold)
+                            .accessibilityHidden(true)
+                    }
                 }
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
             }
-            .frame(minHeight: 44)
-            .contentShape(Rectangle())
+            .buttonStyle(.plain)
+            .accessibilityAddTraits(row.active ? .isSelected : [])
+            .accessibilityIdentifier(DashboardTestTags.shared.profileRow(id: row.id))
+
+            // Plan R8f leftover (F1c): Rename/Remove as visible buttons, not only the swipe
+            // action or the context menu, matching Android's `ProfilePickerUi.kt` row.
+            if editsAvailable {
+                HStack(spacing: 16) {
+                    Button("Rename") { send(ProfilePickerEventStartRename(profileId: row.id)) }
+                        .font(.of(.subheadline, weight: .semibold))
+                        .tint(Theme.gold)
+                        .frame(minHeight: 44)
+                        .accessibilityIdentifier(DashboardTestTags.shared.profileRename(id: row.id))
+                    Button("Remove", role: .destructive) { send(ProfilePickerEventRemove(profileId: row.id)) }
+                        .font(.of(.subheadline, weight: .semibold))
+                        .disabled(row.removeBlockedReason != nil)
+                        .frame(minHeight: 44)
+                        .accessibilityIdentifier(DashboardTestTags.shared.profileRemove(id: row.id))
+                    if let reason = row.removeBlockedReason {
+                        Text(reason)
+                            .font(.of(.caption))
+                            .foregroundStyle(Theme.creamDim)
+                    }
+                }
+                .buttonStyle(.plain)
+            }
         }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(row.active ? .isSelected : [])
-        .accessibilityIdentifier(DashboardTestTags.shared.profileRow(id: row.id))
         .swipeActions(edge: .trailing) {
             if editsAvailable {
                 if row.removeBlockedReason == nil {
@@ -214,15 +239,6 @@ private struct ProfileRowView: View {
                 }
                 Button("Rename") { send(ProfilePickerEventStartRename(profileId: row.id)) }
                     .tint(Theme.gold)
-            }
-        }
-        .contextMenu {
-            if editsAvailable {
-                Button("Rename") { send(ProfilePickerEventStartRename(profileId: row.id)) }
-                    .accessibilityIdentifier(DashboardTestTags.shared.profileRename(id: row.id))
-                Button("Remove", role: .destructive) { send(ProfilePickerEventRemove(profileId: row.id)) }
-                    .disabled(row.removeBlockedReason != nil)
-                    .accessibilityIdentifier(DashboardTestTags.shared.profileRemove(id: row.id))
             }
         }
         .accessibilityActions {

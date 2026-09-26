@@ -32,6 +32,7 @@ struct DashboardContent: View {
     var shotFlashes = 0
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     private var connection: ConnectionPanelState { state.connection }
     private var live: DashboardUiStateLive? { state as? DashboardUiStateLive }
@@ -40,48 +41,87 @@ struct DashboardContent: View {
         ZStack {
             Theme.background.ignoresSafeArea()
 
-            ScrollView {
-                LazyVStack(spacing: 20) {
-                    header
-                    if let processing = state.processing {
-                        // Plan R8f: what the Pi is doing with the swing; the haptic and flash stay on the shot.
-                        // Above the long connection card so it's on screen while swinging.
-                        NoticeRow(
-                            title: processing.title,
-                            detail: processing.detail,
-                            tone: processing.failed ? .problem : .busy
-                        )
-                        .accessibilityIdentifier(DashboardTestTags.shared.PROCESSING)
-                    }
-
-                    connectionCard
-
-                    if let live {
-                        ShotCard(shot: live.latest, units: live.units, enrichment: live.latestEnrichment)
-                            .id(live.latest.eventId)
-                            .overlay { ShotFlash(trigger: shotFlashes) }
-                            .transition(.opacity)
-
-                        if !live.clubChips.isEmpty {
-                            ClubChipsCard(chips: live.clubChips)
-                        }
-
-                        if !live.previous.isEmpty {
-                            ShotHistoryCard(shots: live.previous, units: live.units)
-                                .transition(.opacity)
-                        }
-                    } else {
-                        emptyState
-                    }
-                }
-                .padding(20)
-                .animation(
-                    reduceMotion ? nil : .easeInOut(duration: 0.25),
-                    value: shotIds
-                )
+            // Plan F1c: two columns on a regular width (live metrics on the left, club and
+            // connection on the right, like Android's F1a/F1b two-column dashboard); one scrolling
+            // column, unchanged, on a compact width.
+            if horizontalSizeClass == .regular {
+                regularLayout
+            } else {
+                compactLayout
             }
         }
         .foregroundStyle(Theme.cream)
+    }
+
+    private var compactLayout: some View {
+        ScrollView {
+            LazyVStack(spacing: 20) {
+                header
+                processingNotice
+                connectionCard
+                liveMetrics
+            }
+            .padding(20)
+            .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: shotIds)
+        }
+    }
+
+    private var regularLayout: some View {
+        HStack(alignment: .top, spacing: 20) {
+            ScrollView {
+                LazyVStack(spacing: 20) {
+                    header
+                    processingNotice
+                    liveMetrics
+                }
+                .padding(20)
+                .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: shotIds)
+            }
+            .frame(maxWidth: .infinity)
+
+            ScrollView {
+                VStack(spacing: 20) {
+                    connectionCard
+                }
+                .padding(20)
+            }
+            .frame(width: 380)
+        }
+    }
+
+    @ViewBuilder
+    private var processingNotice: some View {
+        if let processing = state.processing {
+            // Plan R8f: what the Pi is doing with the swing; the haptic and flash stay on the shot.
+            // Above the long connection card so it's on screen while swinging.
+            NoticeRow(
+                title: processing.title,
+                detail: processing.detail,
+                tone: processing.failed ? .problem : .busy
+            )
+            .accessibilityIdentifier(DashboardTestTags.shared.PROCESSING)
+        }
+    }
+
+    @ViewBuilder
+    private var liveMetrics: some View {
+        if let live {
+            ShotCard(shot: live.latest, units: live.units, enrichment: live.latestEnrichment)
+                .id(live.latest.eventId)
+                .overlay { ShotFlash(trigger: shotFlashes) }
+                .transition(.opacity)
+
+            if !live.clubChips.isEmpty {
+                ClubChipsCard(chips: live.clubChips)
+            }
+
+            if !live.previous.isEmpty {
+                ShotHistoryCard(shots: live.previous, units: live.units)
+                    .transition(.opacity)
+            }
+        } else {
+            emptyState
+        }
     }
 
     private var shotIds: [String] {
