@@ -29,6 +29,10 @@
         android:name="android.hardware.bluetooth_le"
         android:required="false" />
 
+    <!-- F6: conditions AUTO mode, for weather/elevation lookup. Prompted only by "Use my
+         location", never on launch (parent plan §0.6). -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
     <application
         android:name=".OpenFlightApplication"
         android:allowBackup="true"

@@ -26,6 +26,10 @@ kotlin {
             implementation(libs.ktor.client.core)
             // F2 (plan A1): conditions-adjusted distances; ConditionsRepository's API is core:model types.
             implementation(projects.core.flight)
+            // F6 (plan §1): AUTO conditions -- device location and Open-Meteo weather/elevation.
+            // LocationResult.Fix is public on ConditionsRepository.lastLocation, so this is api.
+            api(projects.core.location)
+            implementation(projects.core.geodata)
             // dataModule/platformDataModule are public Koin Modules.
             api(project.dependencies.platform(libs.koin.bom))
             api(libs.koin.core)

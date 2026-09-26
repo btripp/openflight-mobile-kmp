@@ -35,14 +35,17 @@ iosApp (SwiftUI, Xcode) ──> Shared.framework = shared, exporting core:model/
 shared ──> feature:dashboard | calibration | range | session | training | camera | settings (KMP, VMs)
              ├──> core:data ──> core:ble / core:network / core:socketio ──> core:protocol ──> core:model
              │            ├──> core:database (Room 3 KMP shot history; internal to core:data)
-             │            └──> core:flight (conditions-adjusted carry, roll; ConditionsRepository)
+             │            ├──> core:flight (conditions-adjusted carry, roll; ConditionsRepository)
+             │            └──> core:location (device fix) + core:geodata (Open-Meteo weather/elevation;
+             │                 outside the Pi's LAN-only EndpointPolicy) -- AUTO conditions (plan F6)
              └──> core:speech (SpeechEngine text-to-speech; no core:* deps of its own)
 feature:range, feature:session ──> core:flight ; feature:calibration ──> core:sensors ; others ──> core:insights
 core:testing → fake repositories shared by VM tests (test-only, no app depends on it directly)
 ```
 
 Current leaf `core:*` modules: `model`, `protocol`, `ble`, `network`, `socketio`, `data`,
-`database`, `flight`, `sensors`, `insights`, `designsystem`, `speech`, `testing`. Current `feature:*` modules:
+`database`, `flight`, `sensors`, `insights`, `designsystem`, `speech`, `location`, `geodata`,
+`testing`. Current `feature:*` modules:
 `dashboard`, `calibration`, `range`, `session`, `training`, `camera`, `settings` (each with a
 matching Android-only `feature:<name>:ui`).
 

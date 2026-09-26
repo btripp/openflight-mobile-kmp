@@ -25,5 +25,8 @@
 	</array>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>OpenFlight connects to your launch monitor over Bluetooth to receive shots and change clubs.</string>
+	<!-- F6: conditions AUTO mode. Requested only by "Use my location", never on launch. -->
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>OpenFlight uses your location to look up local weather and elevation, so it can adjust shot distances for conditions.</string>
 </dict>
 </plist>
