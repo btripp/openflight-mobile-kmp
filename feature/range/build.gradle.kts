@@ -16,5 +16,9 @@ kotlin {
             api(libs.koin.core)
             implementation(libs.koin.core.viewmodel)
         }
+        commonTest.dependencies {
+            // Plan F8a1: replay/overlay tests read stored sessions through the shared fakes.
+            implementation(projects.core.testing)
+        }
     }
 }

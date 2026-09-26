@@ -17,6 +17,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -31,13 +35,16 @@ import dev.openflight.companion.core.data.RangeCameraMode
 import dev.openflight.companion.core.designsystem.OfColorTokens
 import dev.openflight.companion.core.designsystem.OfIcon
 import dev.openflight.companion.core.designsystem.OfIcons
+import dev.openflight.companion.core.designsystem.OfListDetailPane
 import dev.openflight.companion.core.designsystem.OfOutlinedButton
 import dev.openflight.companion.core.designsystem.OfSpacing
 import dev.openflight.companion.core.designsystem.OfStatusChip
 import dev.openflight.companion.core.designsystem.OfText
 import dev.openflight.companion.core.designsystem.OfTextRole
 import dev.openflight.companion.core.designsystem.OfTheme
+import dev.openflight.companion.core.designsystem.OfWindowClass
 import dev.openflight.companion.core.designsystem.StatusTone
+import dev.openflight.companion.core.designsystem.rememberOfWindowClass
 import dev.openflight.companion.core.model.ShotEvent
 
 /**
@@ -53,7 +60,41 @@ fun DrivingRangeScreen(
     onEvent: (DrivingRangeEvent) -> Unit,
     onExit: () -> Unit,
     modifier: Modifier = Modifier,
+    windowClass: OfWindowClass = rememberOfWindowClass(),
 ) {
+    var showSessions by rememberSaveable { mutableStateOf(false) }
+    val browse = uiState.browse
+    if (windowClass == OfWindowClass.EXPANDED && !browse.isLive) {
+        // Plan F8a1: on a tablet, the replay/overlay shots sit in a side pane; a tap selects one.
+        OfListDetailPane(
+            hasSelection = true,
+            windowClass = windowClass,
+            listFraction = SHOT_LIST_FRACTION,
+            modifier = modifier,
+            list = { RangeShotList(browse, onSelect = { onEvent(DrivingRangeEvent.SelectShot(it)) }) },
+            detail = {
+                RangeStage(uiState, reduceMotion, onEvent, onExit, onOpenSessions = { showSessions = true })
+            },
+        )
+    } else {
+        RangeStage(uiState, reduceMotion, onEvent, onExit, onOpenSessions = { showSessions = true }, modifier)
+    }
+    if (showSessions) {
+        RangeSessionSheet(sessions = browse.sessions, onEvent = onEvent, onDismiss = { showSessions = false })
+    }
+}
+
+/** The scene with its overlays: everything but the tablet side pane. */
+@Composable
+private fun RangeStage(
+    uiState: DrivingRangeUiState,
+    reduceMotion: Boolean,
+    onEvent: (DrivingRangeEvent) -> Unit,
+    onExit: () -> Unit,
+    onOpenSessions: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val browse = uiState.browse
     BoxWithConstraints(modifier = modifier.fillMaxSize().background(OfColorTokens.BgDeep)) {
         val isLandscape = maxWidth > maxHeight
         RangeCanvas(
@@ -62,6 +103,14 @@ fun DrivingRangeScreen(
             reduceMotion = reduceMotion,
             onFlightCompleted = { onEvent(DrivingRangeEvent.FlightCompleted) },
             modifier = Modifier.fillMaxSize(),
+            view = browse.view,
+            rollOut = uiState.rollOut,
+            overlay = browse.overlayFlights,
+            overlayMode = browse.mode is RangeMode.Overlay,
+            selectedOverlayId = if (browse.mode is RangeMode.Overlay) browse.selectedShotId else null,
+            onViewChanged = { onEvent(DrivingRangeEvent.ViewChanged(it)) },
+            onResetView = { onEvent(DrivingRangeEvent.ResetView) },
+            onSelectLanding = { onEvent(DrivingRangeEvent.SelectShot(it)) },
         )
         Box(modifier = Modifier.fillMaxSize().background(Shade))
         Box(modifier = Modifier.fillMaxSize().safeDrawingPadding()) {
@@ -75,17 +124,26 @@ fun DrivingRangeScreen(
                     uiState = uiState,
                     onReplay = { onEvent(DrivingRangeEvent.Replay) },
                     onToggleCamera = { onEvent(DrivingRangeEvent.ToggleCameraMode) },
+                    onOpenSessions = onOpenSessions,
                     onExit = onExit,
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
                 )
+                BrowseChips(uiState, onEvent, Modifier.padding(horizontal = 14.dp))
                 RangeMetricsOverlay(
                     uiState = uiState,
                     isLandscape = isLandscape,
                     onSelectClub = { onEvent(DrivingRangeEvent.ClubSelected(it)) },
                     modifier = Modifier.weight(1f),
                 )
+                if (!browse.isLive) {
+                    RangeBrowseBar(
+                        browse = browse,
+                        onEvent = onEvent,
+                        modifier = Modifier.padding(start = 14.dp, end = 14.dp, bottom = 10.dp),
+                    )
+                }
             }
-            if (uiState is DrivingRangeUiState.Ready) {
+            if (uiState is DrivingRangeUiState.Ready && browse.isLive) {
                 ReadyCard(modifier = Modifier.align(Alignment.Center))
             }
         }
@@ -97,6 +155,7 @@ private fun Controls(
     uiState: DrivingRangeUiState,
     onReplay: () -> Unit,
     onToggleCamera: () -> Unit,
+    onOpenSessions: () -> Unit,
     onExit: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -126,6 +185,12 @@ private fun Controls(
             mode = uiState.cameraMode,
             locked = uiState.cameraModeLocked,
             onToggle = onToggleCamera,
+        )
+        OfOutlinedButton(
+            text = "History",
+            onClick = onOpenSessions,
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+            modifier = Modifier.background(ControlBackground, PillShape).testTag(RangeTestTags.HISTORY),
         )
         if (uiState.canReplay) {
             OfOutlinedButton(
@@ -217,6 +282,7 @@ private val Shade =
 private val ControlBackground = Color.Black.copy(alpha = 0.6f)
 private val PillShape = RoundedCornerShape(percent = 50)
 private val ReadyShape = RoundedCornerShape(22.dp)
+private const val SHOT_LIST_FRACTION = 0.3f
 
 @Preview
 @Composable
@@ -251,6 +317,48 @@ private fun DrivingRangeShotPreview() {
             reduceMotion = false,
             onEvent = {},
             onExit = {},
+        )
+    }
+}
+
+private val previewReplay =
+    RangeBrowseState(
+        mode = RangeMode.Replay(sessionId = "s1", index = 1),
+        shots =
+            listOf(
+                RangeShotItem("1", 1, "driver", "Driver", 262.0, 150.1, "2026-09-25T10:03:00", flyable = true),
+                RangeShotItem("2", 2, "7-iron", "7-Iron", 171.0, 118.4, "2026-09-25T10:04:00", flyable = true),
+                RangeShotItem("3", 3, "pw", "Pitching Wedge", 128.0, 96.0, "2026-09-25T10:05:00", flyable = true),
+            ),
+        selectedShotId = "2",
+        playing = true,
+        newLiveShot = true,
+    )
+
+@Preview
+@Composable
+private fun DrivingRangeReplayPreview() {
+    OfTheme {
+        DrivingRangeScreen(
+            uiState = DrivingRangeUiState.Ready(browse = previewReplay),
+            reduceMotion = false,
+            onEvent = {},
+            onExit = {},
+            windowClass = OfWindowClass.COMPACT,
+        )
+    }
+}
+
+@Preview(widthDp = 1280, heightDp = 800)
+@Composable
+private fun DrivingRangeReplayTabletPreview() {
+    OfTheme {
+        DrivingRangeScreen(
+            uiState = DrivingRangeUiState.Ready(browse = previewReplay),
+            reduceMotion = false,
+            onEvent = {},
+            onExit = {},
+            windowClass = OfWindowClass.EXPANDED,
         )
     }
 }

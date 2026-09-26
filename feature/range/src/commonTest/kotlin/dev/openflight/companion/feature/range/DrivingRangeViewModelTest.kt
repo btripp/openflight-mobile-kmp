@@ -14,6 +14,8 @@ import assertk.assertions.isTrue
 import dev.openflight.companion.core.data.RangeCameraMode
 import dev.openflight.companion.core.model.ConnectionState
 import dev.openflight.companion.core.model.GolfClub
+import dev.openflight.companion.core.testing.FakeConditionsRepository
+import dev.openflight.companion.core.testing.FakeShotHistoryRepository
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -56,6 +58,8 @@ class DrivingRangeViewModelTest {
         DrivingRangeViewModel(
             shots = shots,
             settings = settings,
+            history = FakeShotHistoryRepository(),
+            conditions = FakeConditionsRepository(),
             simulation = ::makeTestTrajectory,
             computeDispatcher = computeDispatcher,
         )
