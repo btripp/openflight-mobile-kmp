@@ -23,6 +23,9 @@ import dev.openflight.companion.core.designsystem.OfIcons
 import dev.openflight.companion.core.designsystem.OfNavigationItem
 import dev.openflight.companion.core.designsystem.OfWindowClass
 import dev.openflight.companion.core.designsystem.rememberOfWindowClass
+import dev.openflight.companion.feature.bag.BagRoute
+import dev.openflight.companion.feature.bag.ClubAnalysisRoute
+import dev.openflight.companion.feature.bag.ClubDetailRoute
 import dev.openflight.companion.feature.calibration.CalibrationRoute
 import dev.openflight.companion.feature.camera.CameraRoute
 import dev.openflight.companion.feature.dashboard.DashboardRoute
@@ -73,6 +76,20 @@ data object Camera
 @Serializable
 data object Settings
 
+/** My Bag: the active bag, its gapping and the conditions card (plan F5). */
+@Serializable
+data object Bag
+
+/** Club Analysis: the bag's clubs ranked, with the gapping insights (plan F5). */
+@Serializable
+data object BagAnalysis
+
+/** One club's distances, pushed from Club Analysis (plan F5). */
+@Serializable
+data class BagClubDetail(
+    val wireValue: String,
+)
+
 /**
  * The top-level destinations, in bar/rail order (plan F1a): the dashboard plus the four screens its
  * bottom bar used to reach (plans R5b/R6c). They show the app's navigation (a bottom bar on phones,
@@ -90,6 +107,7 @@ internal enum class TopLevelDestination(
     TRAINING("Training", OfIcons.Training, Training, AppNavTags.TRAINING),
     CAMERA("Camera", OfIcons.Camera, Camera, AppNavTags.CAMERA),
     SETTINGS("Settings", OfIcons.Settings, Settings, AppNavTags.SETTINGS),
+    BAG("Bag", OfIcons.Bag, Bag, AppNavTags.BAG),
     ;
 
     companion object {
@@ -106,6 +124,7 @@ object AppNavTags {
     const val TRAINING = "app.nav.training"
     const val CAMERA = "app.nav.camera"
     const val SETTINGS = "app.nav.settings"
+    const val BAG = "app.nav.bag"
 }
 
 /**
@@ -215,5 +234,12 @@ private fun AppGraph(
         composable<Training> { TrainingRoute(onBack = onBack) }
         composable<Camera> { CameraRoute(onBack = onBack) }
         composable<Settings> { SettingsRoute(onBack = onBack) }
+        composable<Bag> { BagRoute(onBack = onBack, onOpenAnalysis = { navController.navigate(BagAnalysis) }) }
+        composable<BagAnalysis> {
+            ClubAnalysisRoute(onBack = onBack, onOpenClub = { navController.navigate(BagClubDetail(it)) })
+        }
+        composable<BagClubDetail> { entry ->
+            ClubDetailRoute(wireValue = entry.toRoute<BagClubDetail>().wireValue, onBack = onBack)
+        }
     }
 }

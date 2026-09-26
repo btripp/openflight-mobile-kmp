@@ -27,6 +27,7 @@ kotlin {
             export(projects.feature.training)
             export(projects.feature.camera)
             export(projects.feature.settings)
+            export(projects.feature.bag)
         }
     }
 
@@ -47,6 +48,8 @@ kotlin {
             api(projects.feature.training)
             api(projects.feature.camera)
             api(projects.feature.settings)
+            // Plan F5: My Bag, club analysis and gapping.
+            api(projects.feature.bag)
             // Plan F4: core:speech's speechModule joins the app's Koin graph below. Not exported
             // to Swift yet — no UI touches SpeechEngine directly until F7.
             implementation(projects.core.speech)

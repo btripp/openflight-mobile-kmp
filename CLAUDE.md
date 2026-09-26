@@ -27,23 +27,23 @@ details from memory.
 ```
 androidApp (Jetpack NavHost, permissions, launch extras, Koin start, app icon)
     ├──> feature:dashboard:ui | feature:calibration:ui | feature:range:ui
-    │        feature:session:ui | feature:training:ui | feature:camera:ui | feature:settings:ui
+    │        feature:session:ui | feature:training:ui | feature:camera:ui | feature:settings:ui | feature:bag:ui
     │        └──> its own feature:<name> + core:designsystem + core:* (never another feature)
     └──> shared (KMP: initKoin, LaunchOptions, PreviewShotRepository)
 iosApp (SwiftUI, Xcode) ──> Shared.framework = shared, exporting core:model/data/insights/flight
                              + feature:* + KoinHelper/NativeViewModels bridge; AppIcon asset catalog
-shared ──> feature:dashboard | calibration | range | session | training | camera | settings (KMP, VMs)
+shared ──> feature:dashboard | calibration | range | session | training | camera | settings | bag (KMP, VMs)
              ├──> core:data ──> core:ble / core:network / core:socketio ──> core:protocol ──> core:model
              │            ├──> core:database (Room 3 KMP shot history; internal to core:data)
              │            └──> core:flight (conditions-adjusted carry, roll; ConditionsRepository)
              └──> core:speech (SpeechEngine text-to-speech; no core:* deps of its own)
-feature:range, feature:session ──> core:flight ; feature:calibration ──> core:sensors ; others ──> core:insights
+feature:range, feature:session, feature:bag ──> core:flight ; core:insights ──> core:flight (offline distance) ; feature:calibration ──> core:sensors ; others ──> core:insights
 core:testing → fake repositories shared by VM tests (test-only, no app depends on it directly)
 ```
 
 Current leaf `core:*` modules: `model`, `protocol`, `ble`, `network`, `socketio`, `data`,
 `database`, `flight`, `sensors`, `insights`, `designsystem`, `speech`, `testing`. Current `feature:*` modules:
-`dashboard`, `calibration`, `range`, `session`, `training`, `camera`, `settings` (each with a
+`dashboard`, `calibration`, `range`, `session`, `training`, `camera`, `settings`, `bag` (each with a
 matching Android-only `feature:<name>:ui`).
 
 ## Adding a module

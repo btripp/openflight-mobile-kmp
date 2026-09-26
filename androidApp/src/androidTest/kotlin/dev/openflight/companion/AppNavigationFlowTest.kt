@@ -16,9 +16,11 @@ import androidx.compose.ui.test.performClick
 import androidx.core.content.IntentCompat
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import dev.openflight.companion.core.data.ConditionsRepository
 import dev.openflight.companion.core.data.SettingsRepository
 import dev.openflight.companion.core.designsystem.OfAdaptiveScaffoldTags
 import dev.openflight.companion.core.designsystem.OfWindowClass
+import dev.openflight.companion.feature.bag.BagTestTags
 import dev.openflight.companion.feature.camera.CameraTestTags
 import dev.openflight.companion.feature.dashboard.DashboardTestTags
 import dev.openflight.companion.feature.range.RangeTestTags
@@ -68,7 +70,15 @@ class AppNavigationFlowTest {
         stopKoin()
         val context = InstrumentationRegistry.getInstrumentation().targetContext.applicationContext
         val koin =
-            initKoin(extraModules = listOf(module { single<SettingsRepository> { InMemorySettingsRepository() } })) {
+            initKoin(
+                extraModules =
+                    listOf(
+                        module {
+                            single<SettingsRepository> { InMemorySettingsRepository() }
+                            single<ConditionsRepository> { InMemoryConditionsRepository() }
+                        },
+                    ),
+            ) {
                 androidContext(context)
             }
         runBlocking { koin.applyLaunchOptions(options) }
@@ -113,6 +123,9 @@ class AppNavigationFlowTest {
         openAndReturn(AppNavTags.SETTINGS, SettingsTestTags.DONE) {
             composeRule.onNodeWithTag(SettingsTestTags.UNITS).assertIsDisplayed()
         }
+        openAndReturn(AppNavTags.BAG, BagTestTags.DONE) {
+            composeRule.onNodeWithTag(BagTestTags.CONDITIONS_CARD).assertIsDisplayed()
+        }
     }
 
     @Test
@@ -143,6 +156,7 @@ class AppNavigationFlowTest {
             AppNavTags.TRAINING to TrainingTestTags.DONE,
             AppNavTags.CAMERA to CameraTestTags.DONE,
             AppNavTags.SETTINGS to SettingsTestTags.DONE,
+            AppNavTags.BAG to BagTestTags.DONE,
         )) {
             composeRule.onNodeWithTag(entry).performClick()
             composeRule.onNodeWithTag(screen).assertIsDisplayed()

@@ -3,6 +3,13 @@ package dev.openflight.companion
 
 import com.rickclephas.kmp.nativecoroutines.NativeCoroutines
 import com.rickclephas.kmp.nativecoroutines.NativeCoroutinesState
+import dev.openflight.companion.feature.bag.BagEffect
+import dev.openflight.companion.feature.bag.BagUiState
+import dev.openflight.companion.feature.bag.BagViewModel
+import dev.openflight.companion.feature.bag.ClubAnalysisUiState
+import dev.openflight.companion.feature.bag.ClubAnalysisViewModel
+import dev.openflight.companion.feature.bag.ClubDetailUiState
+import dev.openflight.companion.feature.bag.ClubDetailViewModel
 import dev.openflight.companion.feature.calibration.CalibrationUiState
 import dev.openflight.companion.feature.calibration.CalibrationViewModel
 import dev.openflight.companion.feature.camera.CameraEffect
@@ -118,6 +125,23 @@ val SettingsViewModel.state: StateFlow<SettingsUiState>
 @NativeCoroutines
 val SettingsViewModel.sideEffects: Flow<SettingsEffect>
     get() = effects
+
+/** Plan F5: My Bag, whose effect closes the conditions editor. */
+@NativeCoroutinesState
+val BagViewModel.state: StateFlow<BagUiState>
+    get() = uiState
+
+@NativeCoroutines
+val BagViewModel.sideEffects: Flow<BagEffect>
+    get() = effects
+
+@NativeCoroutinesState
+val ClubAnalysisViewModel.state: StateFlow<ClubAnalysisUiState>
+    get() = uiState
+
+@NativeCoroutinesState
+val ClubDetailViewModel.state: StateFlow<ClubDetailUiState>
+    get() = uiState
 
 @OptIn(ExperimentalForeignApi::class, BetaInteropApi::class)
 private fun ByteArray.toNSData(): NSData =

@@ -34,6 +34,7 @@ dependencies {
     implementation(projects.feature.training.ui)
     implementation(projects.feature.camera.ui)
     implementation(projects.feature.settings.ui)
+    implementation(projects.feature.bag.ui)
     implementation(projects.core.designsystem)
     // requiredBluetoothPermissions for the runtime permission prompt.
     implementation(projects.core.ble)
