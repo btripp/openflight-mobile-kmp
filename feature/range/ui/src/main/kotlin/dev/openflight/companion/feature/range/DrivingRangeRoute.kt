@@ -4,8 +4,13 @@ package dev.openflight.companion.feature.range
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.openflight.companion.core.designsystem.OfWindowClass
+import dev.openflight.companion.core.designsystem.rememberOfWindowClass
 import org.koin.androidx.compose.koinViewModel
 
 /**
@@ -17,6 +22,9 @@ import org.koin.androidx.compose.koinViewModel
  * @param autoplay fly the displayed shot when the range opens: the `--preview-flight` launch hook.
  * @param reduceMotion the platform's reduced-motion setting, which also fixes the camera. A
  *   parameter so device tests don't depend on the emulator's animation scale.
+ * @param replaySessionId plan F8a1: open straight into a replay of this stored session (Session
+ *   history detail → "Replay on range"); once, not again after a configuration change.
+ * @param windowClass injectable so device tests can force the phone or the tablet layout.
  */
 @Composable
 fun DrivingRangeRoute(
@@ -24,6 +32,8 @@ fun DrivingRangeRoute(
     autoplay: Boolean = false,
     viewModel: DrivingRangeViewModel = koinViewModel(),
     reduceMotion: Boolean = rememberReduceMotionEnabled(),
+    replaySessionId: String? = null,
+    windowClass: OfWindowClass = rememberOfWindowClass(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     LifecycleResumeEffect(viewModel) {
@@ -35,6 +45,13 @@ fun DrivingRangeRoute(
     LaunchedEffect(viewModel, autoplay) {
         if (autoplay) viewModel.onEvent(DrivingRangeEvent.Replay)
     }
+    var replayStarted by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(viewModel, replaySessionId) {
+        if (replaySessionId != null && !replayStarted) {
+            replayStarted = true
+            viewModel.onEvent(DrivingRangeEvent.StartReplay(replaySessionId))
+        }
+    }
     DrivingRangeScreen(
         uiState = uiState,
         reduceMotion = reduceMotion,
@@ -43,5 +60,6 @@ fun DrivingRangeRoute(
             viewModel.suspend()
             onExit()
         },
+        windowClass = windowClass,
     )
 }

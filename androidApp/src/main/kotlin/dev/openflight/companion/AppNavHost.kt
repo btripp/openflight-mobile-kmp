@@ -210,10 +210,24 @@ private fun AppGraph(
                 sessionId = entry.toRoute<SessionHistoryDetail>().sessionId,
                 onBack = onBack,
                 onShareCsv = rememberCsvSharer(),
+                onReplayOnRange = {
+                    navController.navigate(
+                        RangeReplay(entry.toRoute<SessionHistoryDetail>().sessionId),
+                    )
+                },
             )
         }
         composable<Training> { TrainingRoute(onBack = onBack) }
         composable<Camera> { CameraRoute(onBack = onBack) }
         composable<Settings> { SettingsRoute(onBack = onBack) }
+        composable<RangeReplay> { entry ->
+            DrivingRangeRoute(onExit = onBack, replaySessionId = entry.toRoute<RangeReplay>().sessionId)
+        }
     }
 }
+
+/** Plan F8a1: the driving range replaying stored session [sessionId] (Session history detail). */
+@Serializable
+data class RangeReplay(
+    val sessionId: String,
+)

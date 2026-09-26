@@ -48,6 +48,8 @@ sealed interface RangePhase {
 data class ActiveFlight(
     val trajectory: FlightTrajectory,
     val playbackId: Long,
+    /** Replay speed (plan F8a1): the animation takes [playbackSeconds] / [speed]. 1 for live shots. */
+    val speed: Double = 1.0,
 )
 
 /**
@@ -85,6 +87,14 @@ sealed interface DrivingRangeUiState {
     val club: RangeClubState
     val camera: RangeCameraState
 
+    /** Replay, overlay and the user's view (plan F8a1); [RangeMode.Live] by default. */
+    val browse: RangeBrowseState
+
+    /** The displayed shot's estimated roll-out (plan F2/F8a1), once computed. */
+    val rollOut: RangeRollOut?
+
+    val mode: RangeMode get() = browse.mode
+
     /** The camera to render with; see [RangeCameraState.mode]. */
     val cameraMode: RangeCameraMode get() = camera.mode
 
@@ -95,7 +105,9 @@ sealed interface DrivingRangeUiState {
     data class Ready(
         override val club: RangeClubState = RangeClubState(),
         override val camera: RangeCameraState = RangeCameraState(),
+        override val browse: RangeBrowseState = RangeBrowseState(),
     ) : DrivingRangeUiState {
+        override val rollOut: RangeRollOut? get() = null
         override val phase: RangePhase get() = RangePhase.Waiting
         override val displayedShot: ShotEvent? get() = null
         override val activeFlight: ActiveFlight? get() = null
@@ -108,6 +120,8 @@ sealed interface DrivingRangeUiState {
         override val activeFlight: ActiveFlight?,
         override val club: RangeClubState = RangeClubState(),
         override val camera: RangeCameraState = RangeCameraState(),
+        override val browse: RangeBrowseState = RangeBrowseState(),
+        override val rollOut: RangeRollOut? = null,
     ) : DrivingRangeUiState {
         override val displayedShot: ShotEvent get() = shot
     }

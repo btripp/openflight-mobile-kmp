@@ -35,12 +35,16 @@ import org.koin.core.parameter.parametersOf
 /**
  * One stored session (plan R8h): owns its [SessionHistoryDetailViewModel] and hands CSV exports to
  * the platform share sheet, like [SessionRoute].
+ *
+ * @param onReplayOnRange plan F8a1: opens the driving range replaying this session; `null` hides
+ *   the button.
  */
 @Composable
 fun SessionHistoryDetailRoute(
     sessionId: String,
     onBack: () -> Unit,
     onShareCsv: (csv: String, filename: String) -> Unit,
+    onReplayOnRange: (() -> Unit)? = null,
     viewModel: SessionHistoryDetailViewModel = koinViewModel(key = "history:$sessionId") { parametersOf(sessionId) },
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -50,7 +54,12 @@ fun SessionHistoryDetailRoute(
             if (effect is SessionEffect.CsvReady) share(effect.csv, effect.filename)
         }
     }
-    SessionHistoryDetailScreen(uiState = uiState, onEvent = viewModel::onEvent, onBack = onBack)
+    SessionHistoryDetailScreen(
+        uiState = uiState,
+        onEvent = viewModel::onEvent,
+        onBack = onBack,
+        onReplayOnRange = onReplayOnRange,
+    )
 }
 
 /**
@@ -63,6 +72,7 @@ fun SessionHistoryDetailScreen(
     onEvent: (SessionHistoryDetailEvent) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    onReplayOnRange: (() -> Unit)? = null,
 ) {
     val session = uiState.session
     val reduceMotion = rememberReduceMotionEnabled()
@@ -112,6 +122,16 @@ fun SessionHistoryDetailScreen(
                         onClick = { onEvent(SessionHistoryDetailEvent.ExportCsv) },
                         modifier = Modifier.fillMaxWidth().testTag(SessionHistoryTestTags.DETAIL_EXPORT),
                     )
+                }
+                if (onReplayOnRange != null) {
+                    item(key = "replayOnRange") {
+                        OfOutlinedButton(
+                            text = "Replay on range",
+                            onClick = onReplayOnRange,
+                            modifier =
+                                Modifier.fillMaxWidth().testTag(SessionHistoryTestTags.DETAIL_REPLAY_ON_RANGE),
+                        )
+                    }
                 }
                 item(key = "shotsHeader") {
                     OfText(

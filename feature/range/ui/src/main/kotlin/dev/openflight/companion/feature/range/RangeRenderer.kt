@@ -5,12 +5,19 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.drawText
+import androidx.compose.ui.unit.dp
+import dev.openflight.companion.core.flight.FlightTrajectory
 import dev.openflight.companion.core.flight.RangeCameraPose
 import dev.openflight.companion.core.flight.RangeTracerStyle
+import dev.openflight.companion.core.flight.Vec3
 
 /**
  * Draws [scene] and the shown flight for one camera pose per frame (plan R7a). Holds the one
@@ -18,6 +25,7 @@ import dev.openflight.companion.core.flight.RangeTracerStyle
  * re-projects only when the pose or the canvas size changed since the last
  * frame. Nothing in [draw] allocates.
  */
+@Suppress("TooManyFunctions") // Small, allocation-free draw steps, one per layer.
 internal class RangeRenderer(
     val scene: RangeScene,
 ) {
@@ -33,6 +41,20 @@ internal class RangeRenderer(
     var labelFontPixels = 1f
 
     private val tracer = TracerRibbon()
+
+    /** Plan F8a1: the overlay's static trajectories, when overlaying. */
+    private var overlay: OverlayGeometry? = null
+    private var overlayFor: List<OverlayFlight>? = null
+
+    /** Plan F8a1: the estimated roll-out, from the carry landing to the total dot, in scene space. */
+    private var rollOutFor: Pair<RangeRollOut, FlightTrajectory>? = null
+    private var rollOutStart: Vec3? = null
+    private var rollOutEnd: Vec3? = null
+    private val rollOutScreen = FloatArray(4)
+    private var rollOutVisible = false
+
+    /** The camera of the last drawn frame: gestures pan along the ground and taps select through it. */
+    val currentProjection: RangeProjection? get() = projection
 
     fun resize(
         width: Float,
@@ -62,12 +84,46 @@ internal class RangeRenderer(
         dirty = true
     }
 
+    /** Plan F8a1: the overlay to draw (built once per list of flights) and its highlighted shot. */
+    fun setOverlay(
+        flights: List<OverlayFlight>,
+        selectedId: String?,
+    ) {
+        if (flights !== overlayFor) {
+            overlayFor = flights
+            overlay = if (flights.isEmpty()) null else OverlayGeometry(flights)
+            dirty = true
+        }
+        if (overlay?.select(selectedId) == true) dirty = true
+    }
+
+    /** Plan F8a1: the roll-out marker for [rollOut], continuing [trajectory]'s landing. */
+    fun setRollOut(
+        rollOut: RangeRollOut?,
+        trajectory: FlightTrajectory?,
+    ) {
+        val key = if (rollOut != null && trajectory != null) rollOut to trajectory else null
+        if (key == rollOutFor) return
+        rollOutFor = key
+        val landingPoint = trajectory?.points?.lastOrNull()?.positionMeters
+        rollOutStart = landingPoint?.let { RangeProjection.flightToScene(it).copy(y = 0.0) }
+        rollOutEnd =
+            if (rollOut != null && trajectory != null) {
+                RangeProjection.flightToScene(rollOutEnd(trajectory, rollOut.rollYards)).copy(y = 0.0)
+            } else {
+                null
+            }
+        dirty = true
+    }
+
+    @Suppress("LongParameterList") // One frame's camera, playback and label inputs.
     fun draw(
         drawScope: DrawScope,
         pose: RangeCameraPose,
         progress: Float,
         labelHeightMeters: Float,
         minLabelPixels: Float,
+        rollOutLabel: TextLayoutResult? = null,
     ) {
         val projection = projection ?: return
         if (dirty || pose != projectedPose) {
@@ -75,7 +131,9 @@ internal class RangeRenderer(
             projectedPose = pose
             scene.project(projection)
             geometry?.reproject(projection)
+            overlay?.reproject(projection)
             for (index in landing.indices) landing[index].project(projection, scene.scratch)
+            projectRollOut(projection)
             dirty = false
         }
         with(drawScope) {
@@ -83,9 +141,77 @@ internal class RangeRenderer(
             drawPolygons(scene.polygons)
             drawTrees()
             drawLabels(labelHeightMeters, minLabelPixels)
-            val geometry = geometry ?: return
-            if (progress >= 1f) drawPolygons(landing)
+            overlay?.let { drawOverlay(it) }
+            val geometry = geometry
+            if (geometry == null) {
+                if (overlay != null) drawRollOut(rollOutLabel)
+                return
+            }
+            if (progress >= 1f) {
+                drawPolygons(landing)
+                drawRollOut(rollOutLabel)
+            }
             drawFlight(geometry, geometry.sampleAt(progress))
+        }
+    }
+
+    private fun projectRollOut(projection: RangeProjection) {
+        val start = rollOutStart
+        val end = rollOutEnd
+        rollOutVisible =
+            start != null &&
+            end != null &&
+            projection.projectInto(start.x, start.y, start.z, rollOutScreen, START_X) &&
+            projection.projectInto(end.x, end.y, end.z, rollOutScreen, END_X)
+    }
+
+    /** Strokes for the overlay, rebuilt only when the density changes (so a frame allocates nothing). */
+    private var overlayStroke = Stroke()
+    private var selectedStroke = Stroke()
+
+    private fun DrawScope.drawOverlay(overlay: OverlayGeometry) {
+        val width = OVERLAY_STROKE_DP.dp.toPx()
+        if (overlayStroke.width != width) {
+            overlayStroke = Stroke(width = width, cap = StrokeCap.Round, join = StrokeJoin.Round)
+            selectedStroke =
+                Stroke(width = SELECTED_STROKE_DP.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+        }
+        val stroke = overlayStroke
+        for (index in overlay.groupPaths.indices) {
+            drawPath(overlay.groupPaths[index], overlay.groupColors[index], style = stroke)
+        }
+        val dotRadius = OVERLAY_DOT_DP.dp.toPx()
+        for (index in overlay.flights.indices) {
+            val x = overlay.landingXs[index]
+            if (x.isNaN()) continue
+            drawCircle(overlay.landingColors[index], radius = dotRadius, center = Offset(x, overlay.landingYs[index]))
+        }
+        val selected = overlay.selectedIndex
+        if (selected >= 0) {
+            drawPath(overlay.selectedPath, SelectedColor, style = selectedStroke)
+            val x = overlay.landingXs[selected]
+            if (!x.isNaN()) {
+                drawCircle(SelectedColor, radius = dotRadius * 2, center = Offset(x, overlay.landingYs[selected]))
+            }
+        }
+    }
+
+    /** The carry → total segment, the total dot and its "est." label (plan F2/F8a1). */
+    private fun DrawScope.drawRollOut(label: TextLayoutResult?) {
+        if (!rollOutVisible) return
+        val start = Offset(rollOutScreen[START_X], rollOutScreen[START_Y])
+        val end = Offset(rollOutScreen[END_X], rollOutScreen[END_Y])
+        drawLine(RollOutColor, start, end, strokeWidth = ROLL_OUT_STROKE_DP.dp.toPx(), pathEffect = RollOutDash)
+        drawCircle(RollOutColor, radius = ROLL_OUT_DOT_DP.dp.toPx(), center = end)
+        if (label != null) {
+            drawText(
+                label,
+                topLeft =
+                    Offset(
+                        end.x - label.size.width / 2f,
+                        end.y - label.size.height - ROLL_OUT_DOT_DP.dp.toPx() * 2,
+                    ),
+            )
         }
     }
 
@@ -189,3 +315,19 @@ private val TracerColor =
         )
     }
 private val ShadowColor = Color.Black.copy(alpha = 0.28f)
+private val SelectedColor = Color(0xFFD4AF37)
+private val RollOutColor = Color.White.copy(alpha = 0.9f)
+private val RollOutDash = PathEffect.dashPathEffect(floatArrayOf(ROLL_OUT_DASH_PX, ROLL_OUT_GAP_PX))
+private const val OVERLAY_STROKE_DP = 2f
+private const val SELECTED_STROKE_DP = 4f
+private const val OVERLAY_DOT_DP = 3f
+private const val ROLL_OUT_STROKE_DP = 2.5f
+private const val ROLL_OUT_DOT_DP = 5f
+private const val ROLL_OUT_DASH_PX = 10f
+
+/** Indices into the roll-out's projected start and end points. */
+private const val START_X = 0
+private const val START_Y = 1
+private const val END_X = 2
+private const val END_Y = 3
+private const val ROLL_OUT_GAP_PX = 8f

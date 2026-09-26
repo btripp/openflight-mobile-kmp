@@ -25,4 +25,51 @@ sealed interface DrivingRangeEvent {
     data class ReduceMotionChanged(
         val enabled: Boolean,
     ) : DrivingRangeEvent
+
+    // region Plan F8a1: replay, overlay and view controls.
+
+    /** Replay session [sessionId] from shot [index] (0 = its first shot), playing. */
+    data class StartReplay(
+        val sessionId: String,
+        val index: Int = 0,
+    ) : DrivingRangeEvent
+
+    /** Overlay session [sessionId]'s shots, or every session's when `null`, optionally only [club]'s. */
+    data class StartOverlay(
+        val sessionId: String?,
+        val club: String? = null,
+    ) : DrivingRangeEvent
+
+    /** Filter the overlay to [club] (a wire value), or show every club with `null`. */
+    data class SetOverlayClub(
+        val club: String?,
+    ) : DrivingRangeEvent
+
+    /** Back to the live range: the "New shot. Return to live" chip, or the Live button. */
+    data object ReturnToLive : DrivingRangeEvent
+
+    data object PlayPause : DrivingRangeEvent
+
+    data object NextShot : DrivingRangeEvent
+
+    data object PreviousShot : DrivingRangeEvent
+
+    data class SetSpeed(
+        val speed: ReplaySpeed,
+    ) : DrivingRangeEvent
+
+    /** A row in the shot list, or a tapped landing: replay jumps to it, overlay highlights it. */
+    data class SelectShot(
+        val shotId: String,
+    ) : DrivingRangeEvent
+
+    /** A gesture changed the view: the new transform, already clamped ([ViewTransform]). */
+    data class ViewChanged(
+        val view: ViewTransform,
+    ) : DrivingRangeEvent
+
+    /** Double tap: back to the default view, which resumes the follow camera. */
+    data object ResetView : DrivingRangeEvent
+
+    // endregion
 }

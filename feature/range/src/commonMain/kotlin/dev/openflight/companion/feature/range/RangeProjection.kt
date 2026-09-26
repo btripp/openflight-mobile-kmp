@@ -5,6 +5,7 @@ import dev.openflight.companion.core.flight.FlightTrajectory
 import dev.openflight.companion.core.flight.RangeCameraPose
 import dev.openflight.companion.core.flight.Vec3
 import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.sqrt
 import kotlin.math.tan
 
@@ -161,6 +162,30 @@ class RangeProjection(
         meters: Double,
         depth: Double,
     ): Float = (focalLengthPixels * meters / depth).toFloat()
+
+    /**
+     * The inverse of [project] for the ground: the scene point at height [groundY] seen at canvas
+     * pixel ([screenX], [screenY]), or `null` when that pixel's ray never reaches it (at or above
+     * the horizon). Used for tap-to-select and for panning along the ground.
+     */
+    fun unprojectToGround(
+        screenX: Float,
+        screenY: Float,
+        groundY: Double = 0.0,
+    ): Vec3? {
+        val offsetX = (screenX - centerX) / focalLengthPixels
+        val offsetY = -(screenY - centerY) / focalLengthPixels
+        val directionX = forwardX + rightX * offsetX + upX * offsetY
+        val directionY = forwardY + rightY * offsetX + upY * offsetY
+        val directionZ = forwardZ + rightZ * offsetX + upZ * offsetY
+        // Parallel to the ground, or pointing away from it: no intersection in front of the camera.
+        val distance = if (abs(directionY) < MIN_HORIZONTAL_LENGTH) Double.NaN else (groundY - originY) / directionY
+        return if (distance.isFinite() && distance > 0.0) {
+            Vec3(originX + directionX * distance, groundY, originZ + directionZ * distance)
+        } else {
+            null
+        }
+    }
 
     /** A camera-space point (x right, y up, z depth) back in scene space; used to clip polygons at the near plane. */
     fun sceneFromCamera(
