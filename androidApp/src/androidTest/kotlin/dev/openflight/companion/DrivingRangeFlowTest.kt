@@ -11,6 +11,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import dev.openflight.companion.core.data.ConditionsRepository
 import dev.openflight.companion.core.data.SettingsRepository
+import dev.openflight.companion.core.testing.FakeConditionsRepository
 import dev.openflight.companion.feature.dashboard.DashboardTestTags
 import dev.openflight.companion.feature.range.RangeTestTags
 import kotlinx.coroutines.runBlocking
@@ -60,7 +61,7 @@ class DrivingRangeFlowTest {
                     listOf(
                         module {
                             single<SettingsRepository> { InMemorySettingsRepository() }
-                            single<ConditionsRepository> { InMemoryConditionsRepository() }
+                            single<ConditionsRepository> { FakeConditionsRepository() }
                         },
                     ),
             ) {

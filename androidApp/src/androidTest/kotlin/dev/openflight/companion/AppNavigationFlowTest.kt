@@ -28,6 +28,7 @@ import dev.openflight.companion.core.data.ConditionsRepository
 import dev.openflight.companion.core.data.SettingsRepository
 import dev.openflight.companion.core.designsystem.OfAdaptiveScaffoldTags
 import dev.openflight.companion.core.designsystem.OfWindowClass
+import dev.openflight.companion.core.testing.FakeConditionsRepository
 import dev.openflight.companion.feature.bag.BagTestTags
 import dev.openflight.companion.feature.camera.CameraTestTags
 import dev.openflight.companion.feature.dashboard.DashboardTestTags
@@ -86,7 +87,7 @@ class AppNavigationFlowTest {
                     listOf(
                         module {
                             single<SettingsRepository> { InMemorySettingsRepository() }
-                            single<ConditionsRepository> { InMemoryConditionsRepository() }
+                            single<ConditionsRepository> { FakeConditionsRepository() }
                         },
                     ),
             ) {
