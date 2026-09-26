@@ -27,7 +27,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.semantics
@@ -376,12 +375,10 @@ private fun RangePhase.tone(): StatusTone =
         is RangePhase.Unavailable -> StatusTone.Negative
     }
 
+/** The scrim over the scene that keeps the controls readable (plan F8c1: shared with iOS). */
 private val Shade =
-    Brush.verticalGradient(
-        0f to Color.Black.copy(alpha = 0.38f),
-        0.5f to Color.Transparent,
-        1f to Color.Black.copy(alpha = 0.60f),
-    )
+    RangeTheme.DAY.style.shade
+        .toVerticalBrush()
 private val ControlBackground = Color.Black.copy(alpha = 0.6f)
 private val PillShape = RoundedCornerShape(percent = 50)
 private val ReadyShape = RoundedCornerShape(22.dp)

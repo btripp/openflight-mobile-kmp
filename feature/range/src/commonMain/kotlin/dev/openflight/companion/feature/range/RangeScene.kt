@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 package dev.openflight.companion.feature.range
 
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
 import dev.openflight.companion.core.flight.RangeSceneDescription
 import dev.openflight.companion.core.flight.Vec3
 import kotlin.math.PI
@@ -10,18 +8,18 @@ import kotlin.math.cos
 import kotlin.math.sin
 
 /**
- * A convex, flat shape of the scene in world (scene) space, with the one [Path] it is drawn with.
+ * A convex, flat shape of the scene in world (scene) space, with the one [path] it is drawn with.
  * [project] rewrites that path for the current camera, clipping at the near plane
- * (Sutherland–Hodgman against one plane) so parts behind the camera don't wrap around. It
- * allocates nothing: the clip buffers are the scene's shared scratch arrays.
+ * (Sutherland–Hodgman against one plane, at twice [RangeProjection.NEAR_PLANE_METERS]) so parts
+ * behind the camera don't wrap around. It allocates nothing: the clip buffers are the scene's
+ * shared scratch arrays. The platform fills [path] with [color] while [visible].
  */
-internal class WorldPolygon(
+class WorldPolygon<P : PathSink>(
     /** x, y, z triples. */
     val vertices: DoubleArray,
-    val color: Color,
+    val color: RangeColor,
+    val path: P,
 ) {
-    val path = Path()
-
     /** False when nothing of it is in front of the camera; [path] is empty then. */
     var visible = false
         private set
@@ -65,13 +63,13 @@ internal class WorldPolygon(
     }
 }
 
-/** A sphere drawn as a circle of its projected radius (a tree crown). */
-internal class WorldSphere(
+/** A sphere drawn as a circle of its projected radius (a tree crown): a flat disc, no shading. */
+class WorldSphere(
     val x: Double,
     val y: Double,
     val z: Double,
     val radius: Double,
-    val color: Color,
+    val color: RangeColor,
 ) {
     var screenX = 0f
         private set
@@ -96,9 +94,9 @@ internal class WorldSphere(
     }
 }
 
-/** A tree: a trunk and two crowns, drawn together in back-to-front order. */
-internal class WorldTree(
-    val trunk: WorldPolygon,
+/** A tree: a trunk and two crowns, drawn together (trunk, [crown], [crownTop]) in back-to-front order. */
+class WorldTree<P : PathSink>(
+    val trunk: WorldPolygon<P>,
     val crown: WorldSphere,
     val crownTop: WorldSphere,
     private val x: Double,
@@ -118,8 +116,12 @@ internal class WorldTree(
     }
 }
 
-/** A yardage label anchored above a marker; [scale] is the pixels one metre spans there. */
-internal class WorldLabel(
+/**
+ * A yardage label anchored above a marker; [scale] is the pixels one metre spans there. The
+ * platform lays out [text] at [RangeVisualStyle.maxLabelSize], bottom-centres it on ([anchorX],
+ * [anchorY]) and scales it about that anchor to [fontPixels].
+ */
+class WorldLabel(
     val text: String,
     private val x: Double,
     private val y: Double,
@@ -149,10 +151,20 @@ internal class WorldLabel(
         scale = projection.pixels(1.0, depth)
         visible = scale >= projection.height * MIN_LABEL_PIXELS_PER_METER_FRACTION
     }
+
+    /**
+     * The label's font size in pixels: [heightMeters] in the world at its depth, clamped to
+     * [minPixels]..[maxPixels] (the style's `labelHeightMeters`, `minLabelSize`, `maxLabelSize`).
+     */
+    fun fontPixels(
+        heightMeters: Float,
+        minPixels: Float,
+        maxPixels: Float,
+    ): Float = (scale * heightMeters).coerceIn(minPixels, maxPixels)
 }
 
 /** Reusable buffers for projecting the scene without allocating. */
-internal class SceneScratch(
+class SceneScratch(
     capacity: Int,
 ) {
     val xs = DoubleArray(capacity)
@@ -176,28 +188,36 @@ internal class SceneScratch(
 /**
  * The range scene (ground, fairway stripes, target line, yardage targets, tee box, trees) in world
  * space, built once, and re-projected through [project] whenever the camera moves: every frame
- * under the follow camera (plan R7a), once per canvas size under the fixed one. Colours and
- * dimensions are the reference's (RangeSceneController.swift
- * `addGround`/`addTeeBox`/`addTargets`/`addTrees`).
+ * under the follow camera (plan R7a), once per canvas size under the fixed one. Dimensions are the
+ * reference's (RangeSceneController.swift `addGround`/`addTeeBox`/`addTargets`/`addTrees`); colours
+ * come from [style].
+ *
+ * Shared by both renderers (plan F8c1). [newPath] makes each shape's platform [PathSink], once, at
+ * construction (and in [landingMarker], once per flight). Draw order, back to front: the backdrop
+ * ([backdropHorizon]), [polygons], then the trees in [treeOrder] (trunk, crown, crown top), then
+ * the visible [labels].
  */
-internal class RangeScene(
+class RangeScene<P : PathSink>(
     description: RangeSceneDescription,
+    val style: RangeVisualStyle,
+    private val newPath: () -> P,
 ) {
     /** Ground-level shapes in drawing order (back to front along the range). */
-    val polygons: List<WorldPolygon>
+    val polygons: List<WorldPolygon<P>>
     val labels: List<WorldLabel>
-    val trees: List<WorldTree>
+    val trees: List<WorldTree<P>>
 
     /** [trees] indices, far to near for the current camera, so nearer crowns overlap farther ones. */
     val treeOrder: IntArray
 
     val scratch = SceneScratch(capacity = DISC_SEGMENTS + 2)
 
+    /** The horizon's canvas y at the last [project]; may lie off the canvas (±infinity looking straight down or up). */
     var horizonY = 0f
         private set
 
     init {
-        val builder = Builder()
+        val builder = Builder(style, newPath)
         builder.ground(description)
         builder.targetLine(description)
         builder.targets(description)
@@ -213,7 +233,8 @@ internal class RangeScene(
                     trunk =
                         WorldPolygon(
                             verticalQuad(tree.xMeters, z, TRUNK_HALF_WIDTH * s, 0.0, TRUNK_HEIGHT * s),
-                            Trunk,
+                            style.trunk,
+                            newPath(),
                         ),
                     crown =
                         WorldSphere(
@@ -221,7 +242,7 @@ internal class RangeScene(
                             CROWN_Y * s,
                             z,
                             CROWN_RADIUS * s,
-                            if (dark) CrownDark else CrownLight,
+                            if (dark) style.crownDark else style.crownLight,
                         ),
                     crownTop =
                         WorldSphere(
@@ -229,7 +250,7 @@ internal class RangeScene(
                             CROWN_TOP_Y * s,
                             z + CROWN_TOP_Z * s,
                             CROWN_RADIUS * CROWN_TOP_SCALE * s,
-                            if (dark) CrownLight else CrownDark,
+                            if (dark) style.crownLight else style.crownDark,
                         ),
                     x = tree.xMeters,
                     z = z,
@@ -247,6 +268,20 @@ internal class RangeScene(
         horizonY = projection.horizonY()
     }
 
+    /**
+     * The sky / distant-ground split on a [height]-pixel canvas: [horizonY] clamped to the canvas.
+     * The sky gradient ([RangeVisualStyle.skyTop] → [RangeVisualStyle.skyHorizon]) spans 0 to it,
+     * and [RangeVisualStyle.ground] fills it to [height] (the ground plane is finite).
+     */
+    fun backdropHorizon(height: Float): Float = horizonY.coerceIn(0f, height)
+
+    /** The landing marker's two discs (RangeSceneController.swift `buildLandingMarker`), built once per flight. */
+    fun landingMarker(landing: Vec3): List<WorldPolygon<P>> =
+        listOf(
+            disc(landing, LANDING_OUTER_RADIUS_METERS, LANDING_OUTER_HEIGHT_METERS, style.landingOuter, newPath()),
+            disc(landing, LANDING_INNER_RADIUS_METERS, LANDING_INNER_HEIGHT_METERS, style.landingInner, newPath()),
+        )
+
     /** Insertion sort (the order barely changes between frames, and it doesn't allocate). */
     private fun sortTreesFarToNear() {
         for (i in 1 until treeOrder.size) {
@@ -261,8 +296,11 @@ internal class RangeScene(
         }
     }
 
-    private class Builder {
-        val polygons = mutableListOf<WorldPolygon>()
+    private class Builder<P : PathSink>(
+        val style: RangeVisualStyle,
+        val newPath: () -> P,
+    ) {
+        val polygons = mutableListOf<WorldPolygon<P>>()
         val labels = mutableListOf<WorldLabel>()
 
         fun ground(description: RangeSceneDescription) {
@@ -271,7 +309,11 @@ internal class RangeScene(
             val groundCenter = -(depth - GROUND_BACK_MARGIN_METERS) / 2
             val groundHalfLength = (depth + GROUND_EXTRA_LENGTH_METERS) / 2
             polygons +=
-                WorldPolygon(rectangle(0.0, groundCenter, GROUND_WIDTH_METERS / 2, groundHalfLength, 0.0), Ground)
+                WorldPolygon(
+                    rectangle(0.0, groundCenter, GROUND_WIDTH_METERS / 2, groundHalfLength, 0.0),
+                    style.ground,
+                    newPath(),
+                )
             // Fairway: fairway width x depth, centred at z = -depth / 2 + 8.
             polygons +=
                 WorldPolygon(
@@ -282,14 +324,16 @@ internal class RangeScene(
                         depth / 2,
                         0.0,
                     ),
-                    Fairway,
+                    style.fairway,
+                    newPath(),
                 )
             for (index in 0 until STRIPE_COUNT) {
                 val center = -(index * STRIPE_SPACING_METERS + STRIPE_OFFSET_METERS)
                 polygons +=
                     WorldPolygon(
                         rectangle(0.0, center, description.fairwayWidthMeters / 2, STRIPE_LENGTH_METERS / 2, 0.0),
-                        Stripe,
+                        style.stripe,
+                        newPath(),
                     )
             }
         }
@@ -297,44 +341,55 @@ internal class RangeScene(
         /** The target line down the middle of the fairway, out to the last marker. */
         fun targetLine(description: RangeSceneDescription) {
             val end = (description.markers.maxOfOrNull { it.yards } ?: 0) * RangeSceneDescription.YARDS_TO_METERS
-            polygons += WorldPolygon(rectangle(0.0, -end / 2, TARGET_LINE_HALF_WIDTH_METERS, end / 2, 0.0), TargetLine)
+            polygons +=
+                WorldPolygon(
+                    rectangle(0.0, -end / 2, TARGET_LINE_HALF_WIDTH_METERS, end / 2, 0.0),
+                    style.targetLine,
+                    newPath(),
+                )
         }
 
         fun targets(description: RangeSceneDescription) {
             description.markers.forEachIndexed { index, marker ->
                 val center = description.markerScenePositions[index]
-                polygons += disc(center, marker.radiusMeters, 0.0, MarkerOuter)
+                polygons += disc(center, marker.radiusMeters, 0.0, style.markerOuter, newPath())
                 polygons +=
                     disc(
                         center,
                         marker.radiusMeters * MARKER_INNER_FRACTION,
                         0.0,
-                        if (index % 2 == 0) MarkerRed else MarkerYellow,
+                        if (index % 2 == 0) style.markerRed else style.markerYellow,
+                        newPath(),
                     )
                 labels += WorldLabel(marker.yards.toString(), center.x, MARKER_LABEL_HEIGHT_METERS, center.z)
             }
         }
 
         fun teeBox() {
-            polygons += WorldPolygon(rectangle(0.0, TEE_CENTER_Z, TEE_HALF_WIDTH, TEE_HALF_LENGTH, TEE_HEIGHT), Tee)
+            polygons +=
+                WorldPolygon(
+                    rectangle(0.0, TEE_CENTER_Z, TEE_HALF_WIDTH, TEE_HALF_LENGTH, TEE_HEIGHT),
+                    style.tee,
+                    newPath(),
+                )
             for (x in listOf(-TEE_MARKER_X, TEE_MARKER_X)) {
-                polygons += disc(Vec3(x, 0.0, 0.0), TEE_MARKER_RADIUS, TEE_HEIGHT + TEE_MARKER_LIFT_METERS, Color.White)
+                polygons +=
+                    disc(
+                        Vec3(x, 0.0, 0.0),
+                        TEE_MARKER_RADIUS,
+                        TEE_HEIGHT + TEE_MARKER_LIFT_METERS,
+                        style.teeMarker,
+                        newPath(),
+                    )
             }
         }
     }
 
-    companion object {
-        /** The landing marker's two discs (RangeSceneController.swift `buildLandingMarker`), built once per flight. */
-        fun landingMarker(landing: Vec3): List<WorldPolygon> =
-            listOf(
-                disc(landing, LANDING_OUTER_RADIUS_METERS, LANDING_OUTER_HEIGHT_METERS, LandingOuter),
-                disc(landing, LANDING_INNER_RADIUS_METERS, LANDING_INNER_HEIGHT_METERS, LandingInner),
-            )
-
-        private const val LANDING_OUTER_RADIUS_METERS = 2.2
-        private const val LANDING_INNER_RADIUS_METERS = 1.35
-        private const val LANDING_OUTER_HEIGHT_METERS = 0.065
-        private const val LANDING_INNER_HEIGHT_METERS = 0.09
+    private companion object {
+        const val LANDING_OUTER_RADIUS_METERS = 2.2
+        const val LANDING_INNER_RADIUS_METERS = 1.35
+        const val LANDING_OUTER_HEIGHT_METERS = 0.065
+        const val LANDING_INNER_HEIGHT_METERS = 0.09
     }
 }
 
@@ -362,12 +417,13 @@ private fun rectangle(
     )
 
 /** A flat disc on the ground (a flattened sphere in the reference). */
-private fun disc(
+private fun <P : PathSink> disc(
     center: Vec3,
     radius: Double,
     y: Double,
-    color: Color,
-): WorldPolygon =
+    color: RangeColor,
+    path: P,
+): WorldPolygon<P> =
     WorldPolygon(
         DoubleArray(DISC_SEGMENTS * STRIDE) { component ->
             val angle = 2 * PI * (component / STRIDE) / DISC_SEGMENTS
@@ -378,6 +434,7 @@ private fun disc(
             }
         },
         color,
+        path,
     )
 
 /** A rectangle standing on the ground across the range (a tree trunk), as vertices. */
@@ -426,19 +483,3 @@ private const val CROWN_TOP_SCALE = 0.68
 private const val CROWN_TOP_X = 0.7
 private const val CROWN_TOP_Y = 8.2
 private const val CROWN_TOP_Z = -0.3
-
-internal val Sky = Color(red = 0.34f, green = 0.63f, blue = 0.88f)
-internal val SkyHorizon = Color(red = 0.68f, green = 0.84f, blue = 0.95f)
-internal val Ground = Color(red = 0.08f, green = 0.30f, blue = 0.14f)
-private val Fairway = Color(red = 0.20f, green = 0.52f, blue = 0.22f)
-private val Stripe = Color(red = 0.25f, green = 0.59f, blue = 0.27f)
-private val TargetLine = Color.White.copy(alpha = 0.35f)
-private val Tee = Color(red = 0.16f, green = 0.47f, blue = 0.20f)
-private val MarkerOuter = Color.White.copy(alpha = 0.88f)
-private val MarkerRed = Color(red = 0.90f, green = 0.18f, blue = 0.15f)
-private val MarkerYellow = Color(red = 0.96f, green = 0.72f, blue = 0.08f)
-private val Trunk = Color(red = 0.29f, green = 0.16f, blue = 0.08f)
-private val CrownDark = Color(red = 0.05f, green = 0.26f, blue = 0.10f)
-private val CrownLight = Color(red = 0.07f, green = 0.34f, blue = 0.13f)
-private val LandingOuter = Color.White.copy(alpha = 0.85f)
-private val LandingInner = Color(red = 1f, green = 0.72f, blue = 0.06f, alpha = 0.95f)

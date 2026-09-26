@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 package dev.openflight.companion.feature.range
 
-import androidx.compose.ui.graphics.Path
 import kotlin.math.sqrt
 
 /**
@@ -9,12 +8,13 @@ import kotlin.math.sqrt
  * the per-sample perspective widths of [FlightGeometry]. Where the flight passes behind the camera
  * (the follow camera sits behind the ball, so the tee end usually does) the ribbon is cut at the
  * near plane rather than dropped, so the visible part stays one line running to the screen edge.
+ * The platform fills [path] with [RangeVisualStyle.tracer] and draws the ball at ([tipX], [tipY]).
  *
  * [build] rewrites the same [path] and scratch arrays every frame; it allocates nothing.
  */
-internal class TracerRibbon {
-    val path = Path()
-
+class TracerRibbon<P : PathSink>(
+    val path: P,
+) {
     /** The tracer's tip, where the ball is drawn; NaN when it is behind the camera. */
     var tipX = Float.NaN
         private set
