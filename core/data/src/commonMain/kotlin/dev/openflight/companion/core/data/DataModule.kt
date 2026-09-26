@@ -19,7 +19,10 @@ import org.koin.dsl.module
  * - the single `BleShotTransport` (Android builds it from `androidContext()`, so Android must
  *   start Koin with `androidContext(...)`);
  * - the settings `DataStore<Preferences>` at the platform's file path (`Context.filesDir` on
- *   Android, `NSDocumentDirectory` on iOS).
+ *   Android, `NSDocumentDirectory` on iOS);
+ * - F6: a `LocationProvider` (Android's needs `androidContext()`) and a `WeatherClient` (its
+ *   Okio disk cache needs a platform cache directory, resolved the same way as the DataStore
+ *   file above).
  */
 expect val platformDataModule: Module
 
@@ -75,12 +78,13 @@ val dataModule: Module =
         // F3 (A2): the running game for the call-outs, and final shots as events.
         single<ActiveGameRepository> { DefaultActiveGameRepository() }
         single<FinalShotStream> { DefaultFinalShotStream(get<ShotRepository>().history) }
-        // F2 (plan A2): manual playing conditions, in the settings DataStore.
+        // F2 (plan A2), extended by F6: manual and AUTO playing conditions, in the settings DataStore.
         single<ConditionsRepository> {
             DataStoreConditionsRepository(
                 dataStore = get(),
-                scope =
-                    CoroutineScope(SupervisorJob() + Dispatchers.Default),
+                scope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
+                locationProvider = get(),
+                weatherClient = get(),
             )
         }
     }
