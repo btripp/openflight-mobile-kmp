@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 package dev.openflight.companion.core.data
 
+import dev.openflight.companion.core.model.EnrichmentProgress
 import dev.openflight.companion.core.model.ShotEvent
 import dev.openflight.companion.core.model.pi.CameraCaptureSettings
 import dev.openflight.companion.core.model.pi.CameraPreview
@@ -215,6 +216,15 @@ interface PiSessionRepository {
     /** `simulate_shot`: works only on a `--mock` Pi; a real Pi ignores it. */
     suspend fun simulateShot()
 
+    /**
+     * Plan R8j: `set_club {club}` (a [GolfClub][dev.openflight.companion.core.model.GolfClub] wire
+     * value). The Pi broadcasts `club_changed`, which updates [club]; it ignores an unknown club
+     * without replying. [ShotRepository.setClub] uses this on a backend without `/api/club`.
+     * Defaults to "not connected" so fakes stay source-compatible.
+     */
+    suspend fun setClub(club: String): Unit =
+        throw WifiOnlyFeatureException(WifiOnlyFeatureException.Reason.NOT_CONNECTED)
+
     /** `set_training_implement` (a [TrainingImplement.KNOWN] key) → `training_implement_changed`. */
     suspend fun setTrainingImplement(implement: String)
 
@@ -264,10 +274,17 @@ interface PiSessionRepository {
  *
  * @property rawJson the `shot` object exactly as the Pi sent it, unknown keys included, or `null`
  *   if it couldn't be kept.
+ * @property isUpdate plan R8j: a `shot_update` (the final version of a shot already sent).
+ * @property provisional plan R8j: a `shot` whose `pending` hardware is still enriching it; its
+ *   `shot_update` follows.
+ * @property enrichment a `shot_update`'s `enrichment` (e.g. `skipped`), when present.
  */
 data class PiLiveShot(
     val detail: ShotDetail,
     val rawJson: String?,
+    val isUpdate: Boolean = false,
+    val provisional: Boolean = false,
+    val enrichment: EnrichmentProgress? = null,
 )
 
 /** A Wi-Fi-only (Socket.IO) feature was used on Bluetooth, or while the link to the Pi is down. */

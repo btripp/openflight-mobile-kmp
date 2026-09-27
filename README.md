@@ -16,7 +16,8 @@ Multiplatform ViewModels, repositories and transports
 
 - **Live shots over Wi-Fi or Bluetooth LE.** On Wi-Fi the app keeps one Socket.IO connection to
   the Pi (the API the Pi's own web UI uses) and, on backends that serve it, the SSE shot stream
-  (`/api/shots/stream?schema=2`). Both reconnect on their own with capped exponential backoff
+  (`/api/shots/stream?schema=2`); without that stream the Socket.IO `shot`/`shot_update` events
+  feed the live shots instead. Both reconnect on their own with capped exponential backoff
   (Socket.IO 0.5 s → 5 s, SSE 1 s → 15 s). An automatic reconnect doesn't re-add the shot the
   Pi replays on connect; an explicit Retry does, so a fresh install shows the latest shot at
   once. Over Bluetooth the app negotiates schema v2 when the Pi offers it and falls back to v1
@@ -41,7 +42,8 @@ Multiplatform ViewModels, repositories and transports
   dashboard, Session and stats show the active profile's shots. Over Bluetooth v2 the picker is
   select-only.
 - **Club selection**, synced both ways: pick a club on the phone and it round-trips to the Pi
-  (`POST /api/club` on Wi-Fi, see [Backend compatibility](#backend-compatibility)); change it on
+  (`POST /api/club` on Wi-Fi, or Socket.IO `set_club` on a Pi without that route, see
+  [Backend compatibility](#backend-compatibility)); change it on
   the kiosk or a simulator and the phone follows the Pi's `club_changed`. The phone never shows
   a club the Pi hasn't confirmed, and asks once per launch, after the first connect, whether the
   Pi's club is the right one. Per-club shot chips with counts sit on the dashboard.
@@ -100,11 +102,11 @@ runs:
 | | Upstream `main` ([open-flight/openflight](https://github.com/open-flight/openflight)) | Fork branch `feat/phone-connectivity` ([btripp/openflight](https://github.com/btripp/openflight/tree/feat/phone-connectivity)) |
 |---|---|---|
 | Socket.IO session: snapshot, profiles, Session screen, server-confirmed delete/clear, stats, stored history, device cards, power, camera, training, shutdown | Yes | Yes |
-| SSE shot stream (`/api/shots/stream`) | No: 404, which the connection chip shows as an error. Live shots still reach Session and the stored history over Socket.IO, but not the dashboard's latest-shot card or the range | Yes, with schema v2 (`?schema=2`) |
-| Change the club from the phone over Wi-Fi (`/api/club`) | No: the request fails. Change it on the kiosk | Yes |
+| Live shots on the dashboard's latest-shot card and the range | Yes, over Socket.IO: there's no SSE stream (`/api/shots/stream` answers 404), so the app feeds the live feed from the Pi's `shot`/`shot_update` and shows Connected while the Socket.IO link is up. It probes SSE once per connection, not on a retry loop | Yes, over the SSE stream with schema v2 (`?schema=2`); Socket.IO only enriches it |
+| Change the club from the phone over Wi-Fi | Yes, over Socket.IO `set_club` (there's no `/api/club`); the phone shows the club once the Pi's `club_changed` confirms it | Yes, `POST /api/club` |
 | Phone calibration (`/api/calibration/iwr6843/orientation`) | No | Yes |
 | Bluetooth LE | None | Schema v1 and v2 |
-| `MockServerIT` (pinned in CI) | `7ca4b40`: 22 steps pass, 4 skipped (the SSE and `/api/club` steps) | `07d5313`: all 26 pass |
+| `MockServerIT` (pinned in CI) | `7ca4b40`: all 26 pass (asserting the Socket.IO fallbacks) | `07d5313`: all 26 pass |
 
 The fork branch is upstream `main` plus the phone transport from
 [`jake-fishtech/openflight@feat/iOS-ble`](https://github.com/jake-fishtech/openflight/tree/feat/iOS-ble)
@@ -307,8 +309,9 @@ walks: connect → snapshot (`session_state`, `profiles`, `trigger_status`, debu
 → add, rename, select and remove a profile → server-confirmed `delete_shot` (and
 `delete_shot_error`) → `clear_session` for the active profile → debug, radar, training and
 camera commands → disconnect and reconnect → `POST /api/shutdown` and the expected link drop.
-Steps a backend can't support (SSE and `/api/club` on upstream `main`) are reported as skipped,
-and the log ends with a PASS/SKIP summary. The server is killed on every path. CI runs it on
+On upstream `main`, which has no SSE or `/api/club`, the same steps assert the Socket.IO
+fallbacks instead (the shot reaches the live feed once, the club changes over `set_club`, and
+the status is Connected despite the SSE 404). The log ends with a PASS/SKIP summary. The server is killed on every path. CI runs it on
 Linux against both pinned backends (`.github/workflows/mock-server-it.yml`) when app code
 changes.
 
@@ -477,10 +480,6 @@ Adapted from the reference iOS app's own troubleshooting guide
   panel, cloud upload and Pi shutdown still need the Pi's Socket.IO API, which is Wi-Fi only;
   a v1 Pi carries only shots and the club. Over BLE the UI disables these with an explanation
   instead of hiding them.
-- **On upstream `main` the dashboard gets no live shots over Wi-Fi.** Its latest-shot card and
-  the range read the SSE/BLE shot stream, which upstream doesn't serve, so they stay empty and
-  the connection chip shows the 404; Session and the stored history still fill over Socket.IO.
-  See [Backend compatibility](#backend-compatibility).
 - **A specific Raspberry Pi kernel regresses BLE.** Kernel `6.18.34+rpt-rpi-2712` is known to
   break BLE advertising/GATT on the Pi side. If BLE rows in
   [`docs/hardware-test-matrix.md`](docs/hardware-test-matrix.md) fail, check `uname -r` on the

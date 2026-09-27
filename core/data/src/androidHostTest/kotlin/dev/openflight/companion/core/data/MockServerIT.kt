@@ -56,10 +56,11 @@ import kotlin.test.Test
  * since the run never selects it.
  *
  * Backend features differ: stock upstream `main` has no SSE `/api/shots/stream` and no
- * `/api/club`, while the `feat/phone-connectivity` fork has both. Each step that needs one is
- * reported as skipped (with the reason) on a backend without it, instead of failing; everything
- * Socket.IO must pass on both. The run ends with `POST /api/shutdown`, which exits the server,
- * and the server is killed in every other path.
+ * `/api/club`, while the `feat/phone-connectivity` fork has both. Plan R8j: every step asserts on
+ * both. On the fork it takes the SSE / `/api/club` path; on stock `main` it asserts the Socket.IO
+ * fallbacks instead (live shots into `ShotRepository.history`, `set_club`, the club from
+ * `session_state`, and a Connected status despite the SSE 404). The run ends with
+ * `POST /api/shutdown`, which exits the server, and the server is killed in every other path.
  */
 class MockServerIT {
     private val steps = StepLog()
@@ -162,26 +163,23 @@ class MockServerIT {
             await("Socket.IO link") { pi.linkState.value == PiLinkState.Connected }
             steps.pass("connect: Socket.IO", "link Connected to ${server.host}")
 
-            // The SSE stream either connects (fork) or answers 404 (stock main): both are final.
-            await("SSE outcome") {
-                shots.connectionState.value.let { it == ConnectionState.Connected || it is ConnectionState.Error }
-            }
-            when (val state = shots.connectionState.value) {
-                ConnectionState.Connected -> {
-                    hasSse = true
-                    steps.pass("connect: SSE /api/shots/stream?schema=2", "Connected")
-                }
-
-                is ConnectionState.Error -> {
-                    assertThat(state.description).contains("404")
-                    steps.skip("connect: SSE /api/shots/stream", "backend has no SSE route (${state.description})")
-                }
-
-                else -> {
-                    error("unexpected SSE state $state")
-                }
+            // The SSE stream either connects (fork) or answers 404 (stock main). Plan R8j: on stock
+            // main the Socket.IO link then carries the live shots and the status stays Connected.
+            await("live shot source") { shots.liveShotSource.value != LiveShotSource.NONE }
+            hasSse = shots.liveShotSource.value == LiveShotSource.SSE
+            assertThat(shots.connectionState.value).isEqualTo(ConnectionState.Connected)
+            if (hasSse) {
+                steps.pass("connect: SSE /api/shots/stream?schema=2", "Connected")
+            } else {
+                assertThat(server.status(WifiShotTransport.STREAM_PATH)).isEqualTo(HTTP_NOT_FOUND)
+                steps.pass(
+                    "connect: SSE 404 -> Socket.IO live shots",
+                    "no SSE route; status Connected over the Socket.IO link, not an error",
+                )
             }
             hasClubApi = server.status("/api/club") == HTTP_OK
+            // Our fallbacks key on each route's absence; the two backends have both or neither.
+            assertThat(hasClubApi).isEqualTo(hasSse)
         }
 
         private suspend fun snapshot() {
@@ -211,7 +209,15 @@ class MockServerIT {
                 assertThat(settings.selectedClub.first()).isEqualTo(current.club)
                 steps.pass("connect: club sync (GET /api/club)", "selected=${current.club.wireValue}")
             } else {
-                steps.skip("connect: club sync (GET /api/club)", "backend has no /api/club")
+                // Plan R8j: the club follows session_state.club; the explicit read gets 404 from
+                // /api/club and answers from the Socket.IO session instead.
+                val piClub = checkNotNull(pi.club.value?.let(GolfClub::fromWireValue))
+                await("club from session_state") { settings.selectedClub.first() == piClub }
+                assertThat(shots.currentClub().club).isEqualTo(piClub)
+                steps.pass(
+                    "connect: club sync (session_state.club; /api/club 404)",
+                    "selected=${piClub.wireValue}",
+                )
             }
         }
 
@@ -238,30 +244,44 @@ class MockServerIT {
                 val sseShot = checkNotNull(shots.latestShot.value)
                 assertThat(pi.detailFor(sseShot)).isNotNull()
                 assertThat(shots.history.value.map { it.timestamp }).contains(shot.timestamp)
+                // R8j maps a stock Pi's Socket.IO shot to the same id the fork's v2 stream uses.
+                if (sseShot.schemaVersion >= 2) {
+                    assertThat(sseShot.eventId).isEqualTo(stableShotEventId(shot.timestamp, shot.shotNumber))
+                }
                 steps.pass(
                     "SSE shot enriched by timestamp",
                     "schema=${sseShot.schemaVersion} event=${sseShot.eventId}",
                 )
             } else {
-                // Without SSE nothing feeds ShotRepository.history, the dashboard's live feed: the
-                // shot reaches only the Pi session and the stored history. Recorded, not asserted.
+                // Plan R8j: without SSE the Pi's Socket.IO shot feeds ShotRepository.history (the
+                // dashboard's and the range's live feed) as a final v2 shot, once.
+                await("Socket.IO shot in ShotRepository.history") {
+                    shots.latestShot.value?.timestamp == shot.timestamp
+                }
+                val liveShot = checkNotNull(shots.latestShot.value)
+                assertThat(liveShot.shotNumber).isEqualTo(shot.shotNumber)
+                assertThat(liveShot.final).isEqualTo(true)
+                assertThat(liveShot.eventId).isEqualTo(stableShotEventId(shot.timestamp, shot.shotNumber))
                 delay(NO_SSE_SETTLE_MILLIS)
-                val reached = shots.history.value.any { it.timestamp == shot.timestamp }
-                steps.skip("SSE shot", "backend has no SSE route; ShotRepository.history got the shot: $reached")
+                assertThat(shots.history.value.count { it.timestamp == shot.timestamp }).isEqualTo(1)
+                assertThat(
+                    history.shots(sessionId).first().count { it.detail.timestamp == shot.timestamp },
+                ).isEqualTo(1)
+                steps.pass(
+                    "Socket.IO shot -> ShotRepository.history (no SSE)",
+                    "event=${liveShot.eventId}; one row in history and in Room",
+                )
             }
         }
 
         private suspend fun club() {
-            if (!hasClubApi) {
-                // The app changes clubs over Wi-Fi only through POST /api/club, which stock main lacks.
-                assertFailure { shots.setClub(GolfClub.IRON_7) }
-                steps.skip("set_club -> club_changed", "backend has no /api/club (the app's Wi-Fi club path)")
-                return
-            }
+            // Fork: POST /api/club. Stock main (plan R8j): /api/club 404s, so Socket.IO set_club,
+            // confirmed by the club_changed broadcast.
             val selection = shots.setClub(GolfClub.IRON_7)
             assertThat(selection.club).isEqualTo(GolfClub.IRON_7)
             await("club_changed over Socket.IO") { pi.club.value == GolfClub.IRON_7.wireValue }
-            if (hasSse) await("club_changed over SSE") { shots.activeClub.value == GolfClub.IRON_7 }
+            // SSE's club_changed on the fork; the Socket.IO one stands in on stock main.
+            await("activeClub follows club_changed") { shots.activeClub.value == GolfClub.IRON_7 }
             assertThat(settings.selectedClub.first()).isEqualTo(GolfClub.IRON_7)
 
             val before = pi.sessionShots.value.size
@@ -272,7 +292,12 @@ class MockServerIT {
                     .first()
                     .club,
             ).isEqualTo(GolfClub.IRON_7.wireValue)
-            steps.pass("set_club -> club_changed", "POST /api/club 7-iron; next shot filed as 7-iron")
+            // Either source (SSE or the Socket.IO fallback) brings that shot to the live feed.
+            val filed = pi.sessionShots.value.first()
+            await("live feed shows the 7-iron shot") { shots.latestShot.value?.timestamp == filed.timestamp }
+            assertThat(shots.latestShot.value?.club).isEqualTo(GolfClub.IRON_7.wireValue)
+            val route = if (hasClubApi) "POST /api/club" else "Socket.IO set_club (/api/club 404)"
+            steps.pass("set_club -> club_changed", "$route 7-iron; next shot filed as 7-iron")
         }
 
         private suspend fun profiles() {
@@ -387,7 +412,12 @@ class MockServerIT {
             }
             shots.start()
             await("reconnected") { pi.linkState.value == PiLinkState.Connected }
-            if (hasSse) await("SSE reconnected") { shots.connectionState.value == ConnectionState.Connected }
+            // Plan R8j: a fresh start probes SSE again; on stock main it 404s once more and the
+            // status follows the Socket.IO link.
+            await("status Connected") { shots.connectionState.value == ConnectionState.Connected }
+            assertThat(
+                shots.liveShotSource.value,
+            ).isEqualTo(if (hasSse) LiveShotSource.SSE else LiveShotSource.SOCKET_IO)
             pi.refreshSession()
             await("snapshot after reconnect") { pi.profiles.value.loaded && pi.stats.value != null }
             steps.pass("disconnect -> reconnect", "link and snapshot restored")
@@ -399,7 +429,8 @@ class MockServerIT {
             await("link drops", SHUTDOWN_TIMEOUT_MILLIS) { pi.linkState.value is PiLinkState.Reconnecting }
             val exitCode = server.awaitExit(SHUTDOWN_TIMEOUT_MILLIS)
             assertThat(exitCode).isNotNull()
-            if (hasSse) await("SSE drops") { shots.connectionState.value != ConnectionState.Connected }
+            // On stock main the status is the Socket.IO link's, which just dropped.
+            await("status drops") { shots.connectionState.value != ConnectionState.Connected }
             steps.pass("shutdown -> expected link drop", "link=${pi.linkState.value}; server exited ($exitCode)")
         }
 
@@ -457,6 +488,7 @@ class MockServerIT {
 
     private companion object {
         const val HTTP_OK = 200
+        const val HTTP_NOT_FOUND = 404
         const val READY_TIMEOUT_MILLIS = 120_000L
         const val RUN_TIMEOUT_MILLIS = 240_000L
         const val STEP_TIMEOUT_MILLIS = 15_000L

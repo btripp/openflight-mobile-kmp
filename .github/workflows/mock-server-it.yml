@@ -7,7 +7,7 @@
 # a pin: run the IT locally against the new commit
 # (`OPENFLIGHT_BACKEND_DIR=<checkout> ./gradlew mockServerIT`), then update `ref` below.
 # - upstream main: open-flight/openflight main at 7ca4b40 (2026-09-23). No SSE and no /api/club,
-#   so those steps are reported as skipped; every Socket.IO step must pass.
+#   so those steps assert the app's Socket.IO fallbacks instead (plan R8j); all 26 must pass.
 # - phone-connectivity fork: btripp/openflight feat/phone-connectivity at 07d5313 (SSE with
 #   ?schema=2, /api/club, BLE v1/v2). Every step must pass.
 name: Mock server IT

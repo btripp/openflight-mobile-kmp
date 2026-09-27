@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 package dev.openflight.companion.core.data
 
+import dev.openflight.companion.core.model.EnrichmentProgress
 import dev.openflight.companion.core.model.pi.CameraCaptureSettings
 import dev.openflight.companion.core.model.pi.CloudUploadStatus
 import dev.openflight.companion.core.model.pi.DebugReading
@@ -51,18 +52,27 @@ internal val PiJson: Json =
 
 /** One decoded server event (server.py `socketio.emit(...)` names). */
 internal sealed interface PiEvent {
-    /** @property raw the `shot` object exactly as received, for the persistent history (R8h). */
+    /**
+     * @property raw the `shot` object exactly as received, for the persistent history (R8h).
+     * @property provisional plan R8j: the payload's `pending` names hardware still enriching this
+     *   shot, so a `shot_update` with its final version follows.
+     */
     data class Shot(
         val detail: ShotDetail,
         val stats: SessionStats?,
         val raw: JsonElement? = null,
+        val provisional: Boolean = false,
     ) : PiEvent
 
-    /** `shot_update`: the enriched (or enrichment-skipped) final version of a shot already sent. */
+    /**
+     * `shot_update`: the enriched (or enrichment-skipped) final version of a shot already sent.
+     * [enrichment] is the payload's `enrichment` (`skipped` with a reason), when present.
+     */
     data class ShotUpdate(
         val detail: ShotDetail,
         val stats: SessionStats?,
         val raw: JsonElement? = null,
+        val enrichment: EnrichmentProgress? = null,
     ) : PiEvent
 
     data class Processing(
@@ -164,11 +174,17 @@ internal sealed interface PiEvent {
     ) : PiEvent
 }
 
-/** `shot` and `shot_update` (server.py:3260, 3398, 3426); `pending`/`enrichment` aren't read. */
+/**
+ * `shot` and `shot_update` (server.py:3260, 3398, 3426). `pending` is `{iwr6843?, camera?}` on an
+ * OPS-only `shot` still waiting for enrichment (empty or absent otherwise); `enrichment` is only on
+ * a skipped `shot_update` (server.py:3418-3437).
+ */
 @Serializable
 private data class ShotPayload(
     val shot: ShotDetail,
     val stats: SessionStats? = null,
+    val pending: JsonObject? = null,
+    val enrichment: EnrichmentProgress? = null,
 )
 
 @Serializable
@@ -231,10 +247,14 @@ private fun JsonElement.rawShot(): JsonElement? = (this as? JsonObject)?.get("sh
 private val PI_EVENT_DECODERS: Map<String, (JsonElement) -> PiEvent> =
     mapOf(
         "shot" to { data ->
-            data.decode(ShotPayload.serializer()).let { PiEvent.Shot(it.shot, it.stats, data.rawShot()) }
+            data.decode(ShotPayload.serializer()).let {
+                PiEvent.Shot(it.shot, it.stats, data.rawShot(), provisional = !it.pending.isNullOrEmpty())
+            }
         },
         "shot_update" to { data ->
-            data.decode(ShotPayload.serializer()).let { PiEvent.ShotUpdate(it.shot, it.stats, data.rawShot()) }
+            data.decode(ShotPayload.serializer()).let {
+                PiEvent.ShotUpdate(it.shot, it.stats, data.rawShot(), it.enrichment)
+            }
         },
         "shot_processing" to { data -> PiEvent.Processing(data.decode(ProcessingPayload.serializer()).state) },
         "swing_speed" to

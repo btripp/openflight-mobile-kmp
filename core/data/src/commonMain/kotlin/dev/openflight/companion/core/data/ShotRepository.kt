@@ -117,5 +117,11 @@ interface ShotRepository {
 /** A control call was made while no transport is active (the repository is stopped). */
 class NoActiveTransportException : IllegalStateException("Not connected to OpenFlight.")
 
+/**
+ * Plan R8j: a club change sent over Socket.IO (`set_club`, a backend without `/api/club`) got no
+ * matching `club_changed` in time. Nothing was persisted.
+ */
+class ClubChangeNotConfirmedException : IllegalStateException("The Pi didn't confirm the club change.")
+
 /** [ShotRepository.shutdownPi] was called while the active transport isn't Wi-Fi. */
 class PiShutdownUnsupportedException : IllegalStateException("Pi shutdown needs the Wi-Fi transport.")

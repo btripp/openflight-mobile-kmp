@@ -222,6 +222,8 @@ internal class DefaultPiSessionRepository(
 
     override suspend fun simulateShot() = command("simulate_shot")
 
+    override suspend fun setClub(club: String) = command("set_club", buildJsonObject { put("club", club) })
+
     override suspend fun setTrainingImplement(implement: String) =
         command("set_training_implement", buildJsonObject { put("implement", implement) })
 
