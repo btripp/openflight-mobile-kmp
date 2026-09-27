@@ -8,5 +8,5 @@ import org.koin.dsl.module
 /** Koin bindings for this feature. Needs `core:data`'s `dataModule` in the same graph. */
 val cameraModule: Module =
     module {
-        viewModel { CameraViewModel(get()) }
+        viewModel { CameraViewModel(piSession = get(), demoMode = get()) }
     }

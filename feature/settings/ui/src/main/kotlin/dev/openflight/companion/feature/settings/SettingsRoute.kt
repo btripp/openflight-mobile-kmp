@@ -106,4 +106,15 @@ object SettingsTestTags {
     const val SHOT_TRAIL_KEEP = "settings.shotTrail.keepLast"
     const val LANDING_EFFECT = "settings.shotTrail.landingEffect"
     const val SHOT_TRAIL_PREVIEW = "settings.shotTrail.preview"
+
+    // Plan F14: Demo mode (Device group), added at the end to keep this file's diff mergeable.
+    const val DEMO_CARD = "settings.demo.card"
+    const val DEMO_SWITCH = "settings.demo.switch"
+    const val DEMO_AUTO_FIRE = "settings.demo.autoFire"
+    const val DEMO_CLEAR = "settings.demo.clear"
+    const val DEMO_CLEAR_CONFIRM = "settings.demo.clear.confirm"
+    const val DEMO_CLEAR_CANCEL = "settings.demo.clear.cancel"
+
+    /** An automatic-shot interval chip, by its seconds (0 is Off). */
+    fun demoAutoFire(seconds: Int): String = "settings.demo.autoFire.$seconds"
 }

@@ -21,5 +21,5 @@ expect val platformCalibrationModule: Module
 val calibrationModule: Module =
     module {
         includes(platformCalibrationModule)
-        viewModel { CalibrationViewModel(shots = get(), settings = get(), gravitySensor = get()) }
+        viewModel { CalibrationViewModel(shots = get(), settings = get(), gravitySensor = get(), demoMode = get()) }
     }

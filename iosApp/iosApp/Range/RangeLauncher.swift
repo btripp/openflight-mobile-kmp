@@ -65,6 +65,8 @@ enum RangeEntryTags {
 /// the tab bar on an iPhone and the sidebar on an iPad (plan F1d), and Exit returns to that screen.
 private struct RangePresenter: ViewModifier {
     @State private var action = OpenRangeAction()
+    /// Plan F14: the Demo badge covers the full-screen range too.
+    @StateObject private var demoMode = DemoModeObserver()
 
     func body(content: Content) -> some View {
         @Bindable var action = action
@@ -72,6 +74,7 @@ private struct RangePresenter: ViewModifier {
             .environment(\.openRange, action)
             .fullScreenCover(item: $action.target) { target in
                 DrivingRangeView(autoplay: false, launch: target.launch)
+                    .demoBanner(demoMode.enabled)
                     .tint(Theme.gold)
                     .font(.of(.body))
                     .preferredColorScheme(.dark)

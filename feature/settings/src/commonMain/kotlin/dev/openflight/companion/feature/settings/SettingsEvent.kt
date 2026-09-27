@@ -100,6 +100,23 @@ sealed interface SettingsEvent {
     data class SetLandingEffect(
         val effect: LandingEffect,
     ) : SettingsEvent
+
+    /** Plan F14: the Demo mode switch; takes effect at once, no relaunch. */
+    data class SetDemoMode(
+        val enabled: Boolean,
+    ) : SettingsEvent
+
+    /** Plan F14: seconds between automatic demo shots, one of the offered options (0 is off). */
+    data class SetDemoAutoFire(
+        val seconds: Int,
+    ) : SettingsEvent
+
+    /** Plan F14: "Clear demo data" asks for confirmation first. */
+    data object RequestClearDemoData : SettingsEvent
+
+    data object ConfirmClearDemoData : SettingsEvent
+
+    data object CancelClearDemoData : SettingsEvent
 }
 
 /** One-shot signals from [SettingsViewModel]. */

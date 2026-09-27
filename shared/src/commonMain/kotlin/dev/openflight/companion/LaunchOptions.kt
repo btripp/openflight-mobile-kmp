@@ -56,6 +56,10 @@ import dev.openflight.companion.core.data.TransportType
  *   `ShotTrailStyle.storageValue`, for deterministic captures of each style.
  * @property rangeTheme plan F8a2a: persisted as the range theme before the UI starts (a settings
  *   seed like [transport]). `--range-theme day|dusk|night|links` (Android `--es range_theme night`).
+ * @property demoMode plan F14: `--demo-mode on|off` (Android `--es demo_mode on`) turns Demo mode on
+ *   or off before the UI starts. Any scripted launch without it starts with Demo mode off.
+ * @property calloutProbe plan F14: `--callout-probe` turns call-outs on and writes each one down
+ *   ([CalloutProbeSpeechEngine]) instead of speaking it, for the iOS UI tests.
  */
 data class LaunchOptions(
     val uiTesting: Boolean = false,
@@ -76,6 +80,8 @@ data class LaunchOptions(
     val previewPiMock: Boolean = false,
     val rangeTheme: RangeThemeSetting? = null,
     val shotTrail: ShotTrailStyle? = null,
+    val demoMode: Boolean? = null,
+    val calloutProbe: Boolean = false,
 ) {
     val usesFakeRepository: Boolean
         get() = uiTesting || previewShot || previewPi || previewPiMock
@@ -99,6 +105,16 @@ data class LaunchOptions(
         const val PREVIEW_PI_MOCK = "--preview-pi-mock"
         const val RANGE_THEME = "--range-theme"
         const val SHOT_TRAIL = "--shot-trail"
+        const val DEMO_MODE = "--demo-mode"
+        const val CALLOUT_PROBE = "--callout-probe"
+
+        /** `on`/`off` (also `true`/`false`) as [LaunchOptions.demoMode]; anything else is `null`. */
+        fun demoModeFromValue(value: String?): Boolean? =
+            when (value?.lowercase()) {
+                "on", "true" -> true
+                "off", "false" -> false
+                else -> null
+            }
 
         /** How often `--preview-live-shots` delivers a shot. */
         const val PREVIEW_LIVE_SHOT_INTERVAL_MILLIS = 5_000L
@@ -135,6 +151,8 @@ data class LaunchOptions(
                 previewPiMock = PREVIEW_PI_MOCK in arguments,
                 rangeTheme = valueAfter(RANGE_THEME)?.let(RangeThemeSetting::fromStorageValue),
                 shotTrail = valueAfter(SHOT_TRAIL)?.let(ShotTrailStyle::fromStorageValue),
+                demoMode = demoModeFromValue(valueAfter(DEMO_MODE)),
+                calloutProbe = CALLOUT_PROBE in arguments,
             )
         }
     }

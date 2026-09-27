@@ -32,6 +32,8 @@ struct ShotCard: View {
     var enrichment: ShotEnrichment?
     /// Plan F8d-B: "View on range" (flies this shot on the range, paused on it); hidden if nil.
     var onViewOnRange: (() -> Void)?
+    /// Plan F14: a Demo mode shot, tagged "Demo" so it's never taken for a measurement.
+    var demo = false
 
     private static let spinAdjusted = "spin-adjusted"
 
@@ -39,7 +41,13 @@ struct ShotCard: View {
         VStack(alignment: .leading, spacing: 20) {
             HStack {
                 VStack(alignment: .leading, spacing: 3) {
-                    Eyebrow("LATEST SHOT")
+                    HStack(spacing: 8) {
+                        Eyebrow("LATEST SHOT")
+                        if demo {
+                            DemoTag()
+                                .accessibilityIdentifier(DashboardTestTags.shared.DEMO_SHOT_TAG)
+                        }
+                    }
                     Text(shot.displayClub)
                         .font(.ofDisplay(.title))
                         .accessibilityIdentifier("dashboard.latestShot.club")

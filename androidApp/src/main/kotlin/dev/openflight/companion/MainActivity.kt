@@ -68,6 +68,8 @@ class MainActivity : ComponentActivity() {
             rangeTheme = RangeThemeSetting.fromStorageValue(getStringExtra(EXTRA_RANGE_THEME)),
             // Plan F8a2t: screenshots of each shot trail style (iOS's --shot-trail).
             shotTrail = ShotTrailStyle.fromStorageValue(getStringExtra(EXTRA_SHOT_TRAIL)),
+            // Plan F14: `--es demo_mode on` (iOS's --demo-mode).
+            demoMode = LaunchOptions.demoModeFromValue(getStringExtra(EXTRA_DEMO_MODE)),
         )
 
     private companion object {
@@ -85,6 +87,7 @@ class MainActivity : ComponentActivity() {
         const val EXTRA_RANGE_FREEZE_PROGRESS = "range_freeze_progress"
         const val EXTRA_RANGE_THEME = "range_theme"
         const val EXTRA_SHOT_TRAIL = "shot_trail"
+        const val EXTRA_DEMO_MODE = "demo_mode"
 
         var launchOptionsApplied = false
     }

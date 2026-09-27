@@ -167,6 +167,29 @@ class CalibrationViewModelTest {
             cancelAndIgnoreRemainingEvents()
         }
 
+    /** Plan F14: Demo mode has no radar, so calibration explains that and never applies. */
+    @Test
+    fun demoModeSaysCalibrationNeedsHardwareAndDisablesApply() =
+        runTest {
+            val demo = FakeDemoModeRepository(enabled = true)
+            val vm =
+                CalibrationViewModel(
+                    shots,
+                    settings,
+                    FakeGravitySensor(flow = stableSamples()),
+                    deviceModelProvider = { "Pixel 9" },
+                    demoMode = demo,
+                )
+            vm.uiState.testIgnoringRest {
+                val state = awaitUntil { (it.sensor as? SensorUiState.Sampling)?.measurement?.isReadyToSend == true }
+                assertThat(state.needsHardware).isEqualTo(CalibrationUiState.DEMO_NEEDS_HARDWARE)
+                assertThat(state.applyEnabled).isFalse()
+
+                demo.setEnabled(false)
+                assertThat(awaitUntil { it.needsHardware == null }.applyEnabled).isTrue()
+            }
+        }
+
     private suspend fun <T> ReceiveTurbine<T>.awaitUntil(predicate: (T) -> Boolean): T {
         while (true) {
             val item = awaitItem()

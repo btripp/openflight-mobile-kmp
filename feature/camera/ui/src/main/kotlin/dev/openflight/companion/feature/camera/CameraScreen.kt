@@ -87,9 +87,15 @@ fun CameraScreen(
                         .padding(horizontal = OfSpacing.Xl, vertical = OfSpacing.Sm),
                 verticalArrangement = Arrangement.spacedBy(OfSpacing.Lg),
             ) {
-                Feed(uiState, frame)
-                CaptureCard(uiState, onEvent)
-                ReplaysCard(uiState, onEvent)
+                val demoPlaceholder = uiState.demoPlaceholder
+                if (demoPlaceholder != null) {
+                    // Plan F14: Demo mode has no camera to show.
+                    DemoPlaceholder(demoPlaceholder)
+                } else {
+                    Feed(uiState, frame)
+                    CaptureCard(uiState, onEvent)
+                    ReplaysCard(uiState, onEvent)
+                }
             }
         }
     }
@@ -127,6 +133,35 @@ private fun Feed(
             else -> {
                 PhaseMessage(uiState)
             }
+        }
+    }
+}
+
+/** Plan F14: where the preview would be, a note that Demo mode has no camera. */
+@Composable
+private fun DemoPlaceholder(message: String) {
+    Box(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .aspectRatio(FEED_ASPECT)
+                .clip(RoundedCornerShape(20.dp))
+                .background(OfColorTokens.BgElevated)
+                .testTag(CameraTestTags.DEMO_PLACEHOLDER),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            modifier = Modifier.padding(OfSpacing.Xl),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(OfSpacing.Sm),
+        ) {
+            OfText(text = "No Camera in Demo Mode", role = OfTextRole.Title, textAlign = TextAlign.Center)
+            OfText(
+                text = message,
+                role = OfTextRole.BodySmall,
+                color = OfColorTokens.CreamDim,
+                textAlign = TextAlign.Center,
+            )
         }
     }
 }

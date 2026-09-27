@@ -3,6 +3,7 @@ package dev.openflight.companion.feature.settings
 
 import dev.openflight.companion.core.data.CalloutTrigger
 import dev.openflight.companion.core.data.DEFAULT_SHOT_TRAIL_KEEP_LAST
+import dev.openflight.companion.core.data.DemoModeRepository
 import dev.openflight.companion.core.data.LandingEffect
 import dev.openflight.companion.core.data.RangeThemeSetting
 import dev.openflight.companion.core.data.SHOT_TRAIL_KEEP_OPTIONS
@@ -58,6 +59,8 @@ data class SettingsUiState(
     val rangeTheme: RangeThemeUiState = RangeThemeUiState(),
     // Plan F8a2t: the shot trail, added at the end to keep this file's diff mergeable (§4a A7).
     val shotTrail: ShotTrailUiState = ShotTrailUiState(),
+    // Plan F14: Demo mode, added at the end to keep this file's diff mergeable (§4a A7).
+    val demo: DemoSettingsUiState = DemoSettingsUiState(),
 )
 
 /** A simulator connector's severity bucket (`SimStatus.tsx`'s `severity`). */
@@ -335,5 +338,36 @@ data class LandingEffectOption(
                 LandingEffectOption(LandingEffect.RING, "Ring"),
                 LandingEffectOption(LandingEffect.BURST, "Burst"),
             )
+    }
+}
+
+/**
+ * Plan F14: Settings › Device › Demo mode: the switch, the automatic-shot interval and "Clear demo
+ * data" (confirmed first, like every destructive action).
+ *
+ * @property confirmingClear the "Clear demo data?" confirmation is showing.
+ */
+data class DemoSettingsUiState(
+    val enabled: Boolean = false,
+    val autoFireSeconds: Int = DemoModeRepository.DEFAULT_AUTO_FIRE_SECONDS,
+    val autoFireOptions: List<Int> = DemoModeRepository.AUTO_FIRE_OPTIONS,
+    val confirmingClear: Boolean = false,
+) {
+    companion object {
+        const val TITLE = "Demo mode"
+        const val SUMMARY =
+            "Try every screen with a pretend Pi and made-up shots. No hardware needed. " +
+                "Demo sessions are kept apart from your own."
+        const val AUTO_FIRE_LABEL = "Automatic shots"
+        const val CLEAR_LABEL = "Clear demo data"
+        const val CLEAR_CONFIRM_TITLE = "Clear demo data?"
+        const val CLEAR_CONFIRM_MESSAGE =
+            "This deletes every demo session and shot. Your own sessions stay. The sample sessions " +
+                "come back the next time you turn Demo mode on."
+        const val CLEAR_CONFIRM_ACTION = "Clear"
+        const val CLEARED_MESSAGE = "Demo data cleared."
+
+        /** "Off" or "Every 10 s". */
+        fun autoFireLabel(seconds: Int): String = if (seconds <= 0) "Off" else "Every $seconds s"
     }
 }

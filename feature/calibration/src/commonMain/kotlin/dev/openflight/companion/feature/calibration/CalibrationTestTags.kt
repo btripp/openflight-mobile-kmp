@@ -15,4 +15,7 @@ object CalibrationTestTags {
 
     /** Plan F1d: the pushed screen's Done (iOS already used this identifier). */
     const val DONE = "calibration.done"
+
+    /** Plan F14: "needs a real Pi" in Demo mode. */
+    const val NEEDS_HARDWARE = "calibration.needsHardware"
 }

@@ -98,6 +98,8 @@ fun SettingsScreen(
             ) {
                 GroupHeader("Device", SettingsTestTags.GROUP_DEVICE)
                 ConnectionCard(uiState)
+                // Plan F14: try the app without a Pi.
+                DemoModeCard(uiState.demo, onEvent)
                 if (onOpenCalibration != null || onOpenCamera != null) {
                     DeviceToolsCard(onOpenCalibration, onOpenCamera)
                 }
@@ -225,8 +227,15 @@ private fun RangeThemeCard(
 private fun ConnectionCard(uiState: SettingsUiState) {
     OfCard(modifier = Modifier.fillMaxWidth().testTag(SettingsTestTags.CONNECTION), contentSpacing = OfSpacing.Md) {
         SectionTitle("CONNECTION")
-        InfoRow("Transport", if (uiState.transport == TransportType.WIFI) "Wi-Fi" else "Bluetooth")
-        if (uiState.transport == TransportType.WIFI) InfoRow("Host", uiState.host)
+        // Plan F14: Demo mode's pretend Pi is on Wi-Fi, whatever transport the real Pi uses.
+        val transport =
+            when {
+                uiState.demo.enabled -> DEMO_TRANSPORT
+                uiState.transport == TransportType.WIFI -> "Wi-Fi"
+                else -> "Bluetooth"
+            }
+        InfoRow("Transport", transport)
+        if (uiState.transport == TransportType.WIFI && !uiState.demo.enabled) InfoRow("Host", uiState.host)
         InfoRow("Shot stream", uiState.connectionState.description)
         Row(verticalAlignment = Alignment.CenterVertically) {
             OfText(
@@ -269,6 +278,9 @@ internal fun InfoRow(
         )
     }
 }
+
+/** Plan F14: the connection card's transport while Demo mode is on. */
+private const val DEMO_TRANSPORT = "Demo Pi (Wi-Fi)"
 
 private fun PiLinkState.tone(): StatusTone =
     when (this) {

@@ -166,6 +166,20 @@ interface SettingsRepository {
 
     /** Default no-op, see [calloutsEnabled]. */
     suspend fun setLandingEffect(effect: LandingEffect) {}
+
+    // Plan F14: Demo mode, added at the end to keep this file's diff mergeable (§4a A7).
+
+    /** Whether Demo mode (a pretend Pi, no hardware) was left on. Off by default. */
+    val demoMode: Flow<Boolean> get() = flowOf(false)
+
+    /** Default no-op, see [calloutsEnabled]. */
+    suspend fun setDemoMode(enabled: Boolean) {}
+
+    /** Seconds between Demo mode's automatic shots; 0 (the default) is off. */
+    val demoAutoFireSeconds: Flow<Int> get() = flowOf(DemoModeRepository.DEFAULT_AUTO_FIRE_SECONDS)
+
+    /** Default no-op, see [calloutsEnabled]. */
+    suspend fun setDemoAutoFireSeconds(seconds: Int) {}
 }
 
 /** Plan F8a2t: "Keep last shots" offers none or three faded earlier trails. */

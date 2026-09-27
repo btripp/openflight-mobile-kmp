@@ -369,6 +369,21 @@ class SessionViewModelTest {
             assertThat(shots.clearHistoryCalls).isEqualTo(0)
         }
 
+    /**
+     * Plan F14: a connected Socket.IO link is a Wi-Fi link, whatever transport was last picked:
+     * Demo mode's pretend Pi is one even when the player's saved transport is Bluetooth.
+     */
+    @Test
+    fun aConnectedPiLinkAllowsDeleteAndClearWhateverTransportWasSaved() =
+        runTest {
+            settings.transport.value = TransportType.BLUETOOTH
+            piSession.linkState.value = PiLinkState.Connected
+
+            viewModel.uiState.testIgnoringRest {
+                assertThat(awaitUntil { true }.editAvailability).isEqualTo(PiFeatureAvailability.Available)
+            }
+        }
+
     @Test
     fun onWifiDeleteAndClearStayAvailable() =
         runTest {

@@ -59,4 +59,16 @@ object DashboardTestTags {
 
     /** Plan F8d: the latest shot's "View on range". */
     const val VIEW_ON_RANGE = "dashboard.viewOnRange"
+
+    /** Plan F14: "Try without a Pi" on the connection card. */
+    const val TRY_DEMO = "dashboard.tryDemo"
+
+    /** Plan F14: the card's "Exit demo". */
+    const val EXIT_DEMO = "dashboard.exitDemo"
+
+    /** Plan F14: "Hit a shot" in Demo mode. */
+    const val HIT_SHOT = "dashboard.hitShot"
+
+    /** Plan F14: the "Demo" tag on the latest shot. */
+    const val DEMO_SHOT_TAG = "dashboard.demoShotTag"
 }

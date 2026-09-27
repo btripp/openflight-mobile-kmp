@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 package dev.openflight.companion.feature.calibration
 
+import dev.openflight.companion.core.data.DemoModeRepository
 import dev.openflight.companion.core.data.SettingsRepository
 import dev.openflight.companion.core.data.ShotRepository
 import dev.openflight.companion.core.data.TransportType
@@ -116,3 +117,21 @@ internal fun alternatingSamples(
     b: GravitySample,
     count: Int = 120,
 ): Flow<GravitySample> = List(count) { if (it % 2 == 0) a else b }.asFlow()
+
+/** Plan F14: a Demo mode that is only a switch. */
+class FakeDemoModeRepository(
+    enabled: Boolean = false,
+) : DemoModeRepository {
+    override val enabled = MutableStateFlow(enabled)
+    override val autoFireSeconds = MutableStateFlow(0)
+
+    override suspend fun setEnabled(enabled: Boolean) {
+        this.enabled.value = enabled
+    }
+
+    override suspend fun setAutoFireSeconds(seconds: Int) = Unit
+
+    override suspend fun hitShot() = Unit
+
+    override suspend fun clearDemoData() = Unit
+}

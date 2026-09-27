@@ -118,7 +118,8 @@ struct DashboardContent: View {
                 shot: live.latest,
                 units: live.units,
                 enrichment: live.latestEnrichment,
-                onViewOnRange: openRange.map { open in { open(.liveShot(live.latest.eventId)) } }
+                onViewOnRange: openRange.map { open in { open(.liveShot(live.latest.eventId)) } },
+                demo: connection.demo
             )
                 .id(live.latest.eventId)
                 .overlay { ShotFlash(trigger: shotFlashes) }
@@ -209,15 +210,26 @@ struct DashboardContent: View {
 
     private var connectionCard: some View {
         VStack(spacing: 14) {
-            Picker("Transport", selection: transportBinding) {
-                ForEach(TransportType.entries, id: \.self) { option in
-                    Text(option.label_).tag(option)
+            // Plan F14: Demo mode's pretend Pi needs no transport or address.
+            if !connection.demo {
+                Picker("Transport", selection: transportBinding) {
+                    ForEach(TransportType.entries, id: \.self) { option in
+                        Text(option.label_).tag(option)
+                    }
                 }
+                .pickerStyle(.segmented)
+                .accessibilityIdentifier("dashboard.transport")
             }
-            .pickerStyle(.segmented)
-            .accessibilityIdentifier("dashboard.transport")
 
             statusRow
+
+            if connection.demo {
+                demoControls
+            }
+
+            if connection.showTryDemo {
+                tryDemo
+            }
 
             if let problem = connection.visibleProblem {
                 // Plan R8f: why the Pi can't be reached, in words, not only the red dot.
@@ -278,6 +290,56 @@ struct DashboardContent: View {
         }
         .padding(16)
         .background(Theme.cream.opacity(0.07), in: RoundedRectangle(cornerRadius: 18))
+    }
+
+    /// Plan F14: what Demo mode is, "Hit a shot" and the way back to a real Pi.
+    private var demoControls: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(ConnectionPanelState.companion.DEMO_NOTE)
+                .font(.of(.caption))
+                .foregroundStyle(Theme.creamDim)
+            HStack(spacing: 10) {
+                Button {
+                    send(DashboardEventHitDemoShot.shared)
+                } label: {
+                    Label(ConnectionPanelState.companion.HIT_SHOT_LABEL, systemImage: "figure.golf")
+                        .font(.of(.callout, weight: .bold))
+                        .frame(maxWidth: .infinity, minHeight: 36)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(Theme.gold)
+                .accessibilityIdentifier(DashboardTestTags.shared.HIT_SHOT)
+                Button {
+                    send(DashboardEventExitDemo.shared)
+                } label: {
+                    Text(ConnectionPanelState.companion.EXIT_DEMO_LABEL)
+                        .font(.of(.callout, weight: .bold))
+                        .frame(maxWidth: .infinity, minHeight: 36)
+                }
+                .buttonStyle(.bordered)
+                .tint(Theme.gold)
+                .accessibilityIdentifier(DashboardTestTags.shared.EXIT_DEMO)
+            }
+        }
+    }
+
+    /// Plan F14: the entry to Demo mode, while no Pi is connected.
+    private var tryDemo: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Button {
+                send(DashboardEventTryDemo.shared)
+            } label: {
+                Label(ConnectionPanelState.companion.TRY_DEMO_LABEL, systemImage: "sparkles")
+                    .font(.of(.callout, weight: .bold))
+                    .frame(maxWidth: .infinity, minHeight: 36)
+            }
+            .buttonStyle(.bordered)
+            .tint(Theme.gold)
+            .accessibilityIdentifier(DashboardTestTags.shared.TRY_DEMO)
+            Text(ConnectionPanelState.companion.TRY_DEMO_NOTE)
+                .font(.of(.caption))
+                .foregroundStyle(Theme.creamDim)
+        }
     }
 
     private func problemDetail(_ problem: ConnectionProblem) -> String {
@@ -454,7 +516,7 @@ struct DashboardContent: View {
         ContentUnavailableView {
             Label("Waiting for a shot", systemImage: "dot.radiowaves.left.and.right")
         } description: {
-            Text("Connect to your OpenFlight Pi, then hit a ball.")
+            Text(connection.demo ? ConnectionPanelState.companion.DEMO_EMPTY_NOTE : "Connect to your OpenFlight Pi, then hit a ball.")
         }
         .frame(minHeight: 300)
         .accessibilityIdentifier(DashboardTestTags.shared.EMPTY_STATE)

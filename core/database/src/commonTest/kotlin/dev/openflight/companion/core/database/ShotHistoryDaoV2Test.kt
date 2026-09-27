@@ -246,6 +246,66 @@ class ShotHistoryDaoV2Test {
             assertThat(activities.observeActivities().first()).isEmpty()
         }
 
+    // Plan F14: Demo mode's sessions live in the same tables, tagged source = 'DEMO', and never mix
+    // with the player's own history, imports or stats.
+
+    @Test
+    fun demoSessionsAreListedOnlyInTheDemoWorld() =
+        runTest {
+            dao.upsert(local("mine"), shot(1, T1))
+            dao.insertSessionWithShots(imported("theirs"), listOf(shot(1, T2)))
+            dao.upsert(demo("pretend"), shot(1, T3))
+
+            assertThat(dao.observeSessions().first().map { it.id }).containsExactly("mine")
+            assertThat(
+                dao.observeSessions(includeImported = true).first().map { it.id },
+            ).containsExactly("theirs", "mine")
+            val demo = dao.observeSessionsOf(SessionEntity.SOURCE_DEMO, includeImported = false).first()
+            assertThat(demo.map { it.id }).containsExactly("pretend")
+            assertThat(demo.single().source).isEqualTo(SessionEntity.SOURCE_DEMO)
+        }
+
+    @Test
+    fun demoShotsNeverCountInTheRealStatsAndRealShotsNeverInTheDemoOnes() =
+        runTest {
+            dao.upsert(local("mine"), shot(1, T1, club = "7-iron"))
+            dao.upsert(demo("pretend", startedAt = 9_000L), shot(1, T2, club = "7-iron"))
+
+            val real = dao.observeShotsForClub("7-iron", null, Long.MIN_VALUE, -1).first()
+            assertThat(real.map { it.sessionId }).containsExactly("mine")
+            val demo = dao.observeShotsForClubIn("7-iron", null, Long.MIN_VALUE, -1, demo = true).first()
+            assertThat(demo.map { it.sessionId }).containsExactly("pretend")
+        }
+
+    @Test
+    fun aPiDeleteAndClearAllLeaveDemoSessionsAlone() =
+        runTest {
+            dao.upsert(local("mine"), shot(1, T1))
+            dao.upsert(demo("pretend"), shot(1, T1))
+
+            dao.deleteByTimestamps(listOf(T1))
+            dao.clearAll()
+
+            assertThat(dao.observeShots("pretend").first().map { it.timestamp }).containsExactly(T1)
+            assertThat(dao.sessionCountOf(SessionEntity.SOURCE_DEMO)).isEqualTo(1)
+        }
+
+    @Test
+    fun aDemoDeleteAndClearDemoTouchOnlyDemoSessions() =
+        runTest {
+            dao.upsert(local("mine"), shot(1, T1))
+            dao.upsert(demo("pretend"), shot(1, T1))
+            dao.upsert(demo("pretend"), shot(2, T2))
+
+            dao.deleteByTimestampsIn(listOf(T1), SessionEntity.SOURCE_DEMO)
+            assertThat(dao.observeShots("pretend").first().map { it.timestamp }).containsExactly(T2)
+            assertThat(dao.observeShots("mine").first().map { it.timestamp }).containsExactly(T1)
+
+            dao.clearDemo()
+            assertThat(dao.sessionCountOf(SessionEntity.SOURCE_DEMO)).isEqualTo(0)
+            assertThat(dao.observeSessions().first().map { it.id }).containsExactly("mine")
+        }
+
     private companion object {
         const val T1 = "2026-09-14T10:00:00"
         const val T2 = "2026-09-14T10:05:00"
@@ -256,6 +316,17 @@ class ShotHistoryDaoV2Test {
             id: String,
             startedAt: Long = 1_000L,
         ) = SessionEntity(id = id, startedAtEpochMillis = startedAt, host = "pi.local:8080", transport = "WIFI")
+
+        fun demo(
+            id: String,
+            startedAt: Long = 2_000L,
+        ) = SessionEntity(
+            id = id,
+            startedAtEpochMillis = startedAt,
+            host = null,
+            transport = "WIFI",
+            source = SessionEntity.SOURCE_DEMO,
+        )
 
         fun imported(
             id: String,

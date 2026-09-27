@@ -3,6 +3,7 @@ package dev.openflight.companion.core.testing
 
 import dev.openflight.companion.core.data.CalloutTrigger
 import dev.openflight.companion.core.data.DEFAULT_SHOT_TRAIL_KEEP_LAST
+import dev.openflight.companion.core.data.DemoModeRepository
 import dev.openflight.companion.core.data.LandingEffect
 import dev.openflight.companion.core.data.RangeThemeSetting
 import dev.openflight.companion.core.data.SHOT_TRAIL_KEEP_OPTIONS
@@ -103,6 +104,20 @@ class FakeSettingsRepository(
 
     override suspend fun setLandingEffect(effect: LandingEffect) {
         landingEffect.value = effect
+    }
+
+    // Plan F14: Demo mode, added at the end to keep this file's diff mergeable (§4a A7).
+
+    override val demoMode = MutableStateFlow(false)
+
+    override suspend fun setDemoMode(enabled: Boolean) {
+        demoMode.value = enabled
+    }
+
+    override val demoAutoFireSeconds = MutableStateFlow(DemoModeRepository.DEFAULT_AUTO_FIRE_SECONDS)
+
+    override suspend fun setDemoAutoFireSeconds(seconds: Int) {
+        if (seconds in DemoModeRepository.AUTO_FIRE_OPTIONS) demoAutoFireSeconds.value = seconds
     }
 }
 

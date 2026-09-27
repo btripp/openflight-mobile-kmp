@@ -6,6 +6,8 @@ import androidx.lifecycle.viewModelScope
 import dev.openflight.companion.core.data.AppLifecycle
 import dev.openflight.companion.core.data.AppLifecycleState
 import dev.openflight.companion.core.data.CalloutTrigger
+import dev.openflight.companion.core.data.DemoModeOff
+import dev.openflight.companion.core.data.DemoModeRepository
 import dev.openflight.companion.core.data.PiSessionRepository
 import dev.openflight.companion.core.data.SettingsRepository
 import dev.openflight.companion.core.data.ShotRepository
@@ -69,6 +71,8 @@ class SettingsViewModel(
     // Plan F7: audio call-outs, added at the end to keep this constructor's diff mergeable (§4a A7).
     private val speechEngine: SpeechEngine,
     private val screenReader: ScreenReaderMonitor,
+    // Plan F14: Demo mode, added at the end to keep this constructor's diff mergeable (§4a A7).
+    private val demoMode: DemoModeRepository = DemoModeOff,
 ) : ViewModel() {
     private val shutdownPhase = MutableStateFlow<ShutdownPhase>(ShutdownPhase.Idle)
     private var shutdownJob: Job? = null
@@ -125,10 +129,23 @@ class SettingsViewModel(
             ShotTrailUiState(selected = style, keepLast = keepLast, landingEffect = effect)
         }
 
+    // Plan F14: Settings › Device › Demo mode.
+    private val demoClearConfirming = MutableStateFlow(false)
+    private val demoSettings =
+        combine(demoMode.enabled, demoMode.autoFireSeconds, demoClearConfirming) { enabled, seconds, confirming ->
+            DemoSettingsUiState(enabled = enabled, autoFireSeconds = seconds, confirmingClear = confirming)
+        }
+
     val uiState: StateFlow<SettingsUiState> =
-        combine(baseState, callout, settings.rangeTheme, shotTrail) { base, calloutState, theme, trail ->
+        combine(
+            baseState,
+            callout,
+            settings.rangeTheme,
+            shotTrail,
+            demoSettings,
+        ) { base, calloutState, theme, trail, demo ->
             buildState(base.phone, base.link, base.device, base.radar, base.phase, calloutState)
-                .copy(rangeTheme = RangeThemeUiState(selected = theme), shotTrail = trail)
+                .copy(rangeTheme = RangeThemeUiState(selected = theme), shotTrail = trail, demo = demo)
         }.stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
@@ -231,6 +248,49 @@ class SettingsViewModel(
 
             is SettingsEvent.SetLandingEffect -> {
                 viewModelScope.launch { settings.setLandingEffect(event.effect) }
+            }
+
+            is SettingsEvent.SetDemoMode,
+            is SettingsEvent.SetDemoAutoFire,
+            SettingsEvent.RequestClearDemoData,
+            SettingsEvent.ConfirmClearDemoData,
+            SettingsEvent.CancelClearDemoData,
+            -> {
+                onDemoEvent(event)
+            }
+        }
+    }
+
+    // Plan F14: Demo mode, added here (not at the file's end) to sit beside onEvent's other handlers.
+    private fun onDemoEvent(event: SettingsEvent) {
+        when (event) {
+            is SettingsEvent.SetDemoMode -> {
+                viewModelScope.launch { demoMode.setEnabled(event.enabled) }
+            }
+
+            is SettingsEvent.SetDemoAutoFire -> {
+                viewModelScope.launch { demoMode.setAutoFireSeconds(event.seconds) }
+            }
+
+            SettingsEvent.RequestClearDemoData -> {
+                demoClearConfirming.value = true
+            }
+
+            SettingsEvent.CancelClearDemoData -> {
+                demoClearConfirming.value = false
+            }
+
+            SettingsEvent.ConfirmClearDemoData -> {
+                if (!demoClearConfirming.value) return
+                demoClearConfirming.value = false
+                viewModelScope.launch {
+                    demoMode.clearDemoData()
+                    settingsEffects.send(SettingsEffect.Message(DemoSettingsUiState.CLEARED_MESSAGE))
+                }
+            }
+
+            else -> {
+                // Every other SettingsEvent is dispatched by onEvent's own when, never reaches here.
             }
         }
     }

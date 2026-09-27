@@ -118,8 +118,12 @@ class SessionViewModel(
                         SessionUiState.SIMULATE_SHOT
                     },
                 simulateAvailability = PiFeatureAvailability.of(pi.link),
+                // A connected Socket.IO link means Wi-Fi (the real one is never up over Bluetooth);
+                // plan F14's Demo mode Pi is one, whatever transport the player last picked.
                 editAvailability =
-                    PiFeatureAvailability.forDeleteAndClear(overBluetooth = flags.transport == TransportType.BLUETOOTH),
+                    PiFeatureAvailability.forDeleteAndClear(
+                        overBluetooth = flags.transport == TransportType.BLUETOOTH && !pi.connected,
+                    ),
                 action = control.action.forDisplay(pi),
                 profileName = if (pi.connected) pi.profiles.activeProfile?.name else null,
                 staleNote =
@@ -228,7 +232,7 @@ class SessionViewModel(
         transport: TransportType,
     ): Boolean {
         val profileId = (target as? SessionAction.ClearSession)?.profileId
-        return transport == TransportType.BLUETOOTH ||
+        return (transport == TransportType.BLUETOOTH && link != PiLinkState.Connected) ||
             (profileId != null && (link != PiLinkState.Connected || profiles.activeProfileId != profileId))
     }
 

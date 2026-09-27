@@ -79,4 +79,7 @@ object CameraTestTags {
     const val REPLAY_ERROR = "camera.replayError"
 
     fun replay(replayId: String): String = "camera.replay.$replayId"
+
+    /** Plan F14: the placeholder shown in Demo mode. */
+    const val DEMO_PLACEHOLDER = "camera.demoPlaceholder"
 }

@@ -63,6 +63,10 @@ internal fun List<ShotDetail>.toImportedEntities(): List<ShotEntity> {
     }
 }
 
+/** Plan F14: Demo mode's seeded shots as rows, keeping their (demo) profiles. */
+internal fun List<ShotDetail>.toDemoEntities(): List<ShotEntity> =
+    map { shot -> shot.toEntity(eventId = null, rawJson = HistoryJson.encodeToString(ShotDetail.serializer(), shot)) }
+
 private fun ShotDetail.toEntity(
     eventId: String?,
     rawJson: String,
@@ -153,7 +157,12 @@ internal fun SessionSummaryRow.toHistorySession(): HistorySession =
         shotCount = shotCount,
         firstShotAt = firstShotAt,
         lastShotAt = lastShotAt,
-        source = if (source == SessionEntity.SOURCE_IMPORTED) SessionSource.IMPORTED else SessionSource.LOCAL,
+        source =
+            when (source) {
+                SessionEntity.SOURCE_IMPORTED -> SessionSource.IMPORTED
+                SessionEntity.SOURCE_DEMO -> SessionSource.DEMO
+                else -> SessionSource.LOCAL
+            },
         ownerName = ownerName,
         title = title,
         includeInStats = includeInStats,
