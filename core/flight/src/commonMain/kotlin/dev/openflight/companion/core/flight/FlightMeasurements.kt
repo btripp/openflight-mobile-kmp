@@ -12,6 +12,10 @@ import dev.openflight.companion.core.model.pi.ShotDetail
  * [carryYards] is the server's table carry (`estimated_carry_yards`); [carrySpinAdjustedYards]
  * is the server's ballistic carry (`carry_spin_adjusted`, Socket.IO/history rows only), which
  * [ShotDistanceEstimator] prefers as its anchor when present.
+ *
+ * [spinSource] is the wire's `spin_source` (`"measured"`, `"calculated"`, `"club_typical"` or
+ * `null` on v1 shots). A calculated or club-typical spin is an estimate, not a measurement, and
+ * [FlightInputResolver] records it as one (plan F2b).
  */
 data class FlightMeasurements(
     val id: String,
@@ -23,6 +27,7 @@ data class FlightMeasurements(
     val spinRpm: Double? = null,
     val spinAxisDeg: Double? = null,
     val carrySpinAdjustedYards: Double? = null,
+    val spinSource: String? = null,
 )
 
 /** This shot's measurements, keyed by its `event_id`. */
@@ -36,6 +41,7 @@ fun ShotEvent.toFlightMeasurements(): FlightMeasurements =
         launchAngleHorizontal = launchAngleHorizontal,
         spinRpm = spinRpm,
         spinAxisDeg = spinAxisDeg,
+        spinSource = spinSource,
     )
 
 /**
@@ -57,5 +63,6 @@ fun ShotDetail.toFlightMeasurements(): FlightMeasurements? {
         spinRpm = spinRpm,
         spinAxisDeg = spinAxisDeg,
         carrySpinAdjustedYards = carrySpinAdjusted,
+        spinSource = spinSource,
     )
 }

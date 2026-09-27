@@ -21,8 +21,8 @@ data class OfflineDistance(
 
 /**
  * Offline distance for a shot. Nothing on the wire reports it: it's the landing point of
- * `core:flight`'s simulated trajectory, scaled to the reported carry (the simulator's default
- * `constrainToTargetCarry`). Missing launch or spin is filled per club by [FlightInputResolver].
+ * `core:flight`'s simulated trajectory, fitted to the reported carry (the simulator's default
+ * drag-scale fit, plan F2b). Missing launch or spin is filled per club by [FlightInputResolver].
  *
  * Hoisted from the Session dispersion chart (plan F5, A13) so the bag's club detail and the games
  * (F9) share one definition. Stateless; callers cache per shot if they fly the same shot again.

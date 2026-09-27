@@ -18,6 +18,10 @@ import kotlin.math.abs
  * @property landing the unconstrained conditions run's landing point, **unscaled** (scaling
  *   would distort the descent angle); the input to [RollEstimator].
  * @property landingSpinRpm the conditions run's spin at landing, after spin decay.
+ * @property run the whole unconstrained conditions run (every integration step); plan F2b's
+ *   renderer starts its drag fit from it instead of integrating the same flight again.
+ * @property windMetersPerSecond the wind [run] flew in, in the simulator frame (zero unless
+ *   [windApplied]).
  */
 data class AdjustedCarry(
     val carryYards: Double,
@@ -28,6 +32,8 @@ data class AdjustedCarry(
     val windApplied: Boolean,
     val landing: FlightPoint,
     val landingSpinRpm: Double,
+    val run: FlightTrajectory,
+    val windMetersPerSecond: Vec3,
 )
 
 /**
@@ -46,7 +52,10 @@ class ConditionsAdjuster(
 ) {
     private val isaSimulator =
         BallFlightSimulator(
-            baseConfiguration.copy(airDensity = AirDensity.ISA_SEA_LEVEL, constrainToTargetCarry = false),
+            baseConfiguration.copy(
+                airDensity = AirDensity.ISA_SEA_LEVEL,
+                carryConstraint = BallFlightSimulator.CarryConstraint.NONE,
+            ),
         )
 
     fun adjust(
@@ -61,12 +70,17 @@ class ConditionsAdjuster(
 
         val calm = input.copy(windMetersPerSecond = Vec3.ZERO)
         val baseline = isaSimulator.simulate(calm)
+        val reuseBaseline = !windApplied && abs(density - AirDensity.ISA_SEA_LEVEL) < SAME_DENSITY_TOLERANCE
         val adjusted =
-            if (!windApplied && abs(density - AirDensity.ISA_SEA_LEVEL) < SAME_DENSITY_TOLERANCE) {
+            if (reuseBaseline) {
                 baseline
             } else {
-                BallFlightSimulator(baseConfiguration.copy(airDensity = density, constrainToTargetCarry = false))
-                    .simulate(calm.copy(windMetersPerSecond = wind))
+                BallFlightSimulator(
+                    baseConfiguration.copy(
+                        airDensity = density,
+                        carryConstraint = BallFlightSimulator.CarryConstraint.NONE,
+                    ),
+                ).simulate(calm.copy(windMetersPerSecond = wind))
             }
 
         val ratio = if (baseline.carryMeters > 0) adjusted.carryMeters / baseline.carryMeters else 1.0
@@ -80,6 +94,8 @@ class ConditionsAdjuster(
             windApplied = windApplied,
             landing = landing,
             landingSpinRpm = adjusted.landingSpinRpm ?: input.spinRpm,
+            run = adjusted,
+            windMetersPerSecond = if (reuseBaseline) Vec3.ZERO else wind,
         )
     }
 

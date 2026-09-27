@@ -10,14 +10,14 @@ import dev.openflight.companion.core.data.RangeCameraMode
 import dev.openflight.companion.core.data.SettingsRepository
 import dev.openflight.companion.core.data.ShotHistoryRepository
 import dev.openflight.companion.core.data.ShotRepository
-import dev.openflight.companion.core.flight.BallFlightSimulator
-import dev.openflight.companion.core.flight.FlightInput
 import dev.openflight.companion.core.flight.FlightInputResolutionError
 import dev.openflight.companion.core.flight.FlightInputResolver
 import dev.openflight.companion.core.flight.FlightMeasurements
 import dev.openflight.companion.core.flight.FlightTrajectory
+import dev.openflight.companion.core.flight.PlannedShot
 import dev.openflight.companion.core.flight.ShotDistanceEstimate
 import dev.openflight.companion.core.flight.ShotDistanceEstimator
+import dev.openflight.companion.core.flight.ShotFlightPlanner
 import dev.openflight.companion.core.flight.toFlightMeasurements
 import dev.openflight.companion.core.model.Conditions
 import dev.openflight.companion.core.model.ConnectionState
@@ -72,7 +72,8 @@ class DrivingRangeViewModel(
     private val conditions: ConditionsRepository,
     private val piSession: PiSessionRepository,
     private val resolver: FlightInputResolver = FlightInputResolver(),
-    private val simulation: (FlightInput) -> FlightTrajectory = BallFlightSimulator()::simulate,
+    private val flightPlan: (FlightMeasurements, Conditions, TargetBearing?) -> PlannedShot? =
+        ShotFlightPlanner()::plan,
     private val computeDispatcher: CoroutineDispatcher = Dispatchers.Default,
     private val distanceEstimate: (FlightMeasurements, Conditions, TargetBearing?) -> ShotDistanceEstimate? =
         ShotDistanceEstimator()::estimate,
@@ -237,35 +238,36 @@ class DrivingRangeViewModel(
         landingJob?.cancel()
         landingJob = null
 
-        val input =
-            try {
-                resolver.resolve(shot)
-            } catch (error: FlightInputResolutionError) {
-                generation++
-                flight.value = FlightState(RangePhase.Unavailable(error.message.orEmpty()), shot, activeFlight = null)
-                return
-            }
+        val measurements = measurementsFor(shot)
+        try {
+            resolver.resolve(measurements)
+        } catch (error: FlightInputResolutionError) {
+            generation++
+            flight.value = FlightState(RangePhase.Unavailable(error.message.orEmpty()), shot, activeFlight = null)
+            return
+        }
 
         flight.value = FlightState(RangePhase.Preparing, shot, activeFlight = null)
         val current = ++generation
         val speed = playbackSpeed()
-        val measurements = measurementsFor(shot)
         val air = conditions.conditions.value
         val bearing = conditions.targetBearing.value
         preparationJob =
             viewModelScope.launch {
-                // The roll-out estimate lands with the trajectory, so a flight is one state change.
-                val (trajectory, rollOut) =
-                    withContext(computeDispatcher) {
-                        simulation(input) to distanceEstimate(measurements, air, bearing)?.toRollOut()
-                    }
+                // Plan F2b: one plan gives the roll-out estimate and the flight drawn to land at its
+                // carry, so a flight is one state change and the conditions run isn't flown twice.
+                val plan = withContext(computeDispatcher) { flightPlan(measurements, air, bearing) }
                 if (generation != current) return@launch
                 flight.value =
-                    flight.value.copy(
-                        phase = RangePhase.Flying,
-                        activeFlight = ActiveFlight(trajectory, current, speed),
-                        rollOut = rollOut,
-                    )
+                    if (plan == null) {
+                        FlightState(RangePhase.Unavailable(FLIGHT_UNAVAILABLE), shot, activeFlight = null)
+                    } else {
+                        flight.value.copy(
+                            phase = RangePhase.Flying,
+                            activeFlight = ActiveFlight(plan.trajectory, current, speed),
+                            rollOut = plan.estimate.toRollOut(),
+                        )
+                    }
                 preparationJob = null
             }
     }
@@ -469,8 +471,12 @@ class DrivingRangeViewModel(
                 val capped = matching.take(RangeBrowseState.OVERLAY_CAP)
                 val missing = capped.filter { it.id !in overlayCache }
                 if (missing.isNotEmpty()) {
+                    val air = conditions.conditions.value
+                    val bearing = conditions.targetBearing.value
                     val computed =
-                        withContext(computeDispatcher) { missing.associate { it.id to overlayTrajectory(it) } }
+                        withContext(computeDispatcher) {
+                            missing.associate { it.id to overlayTrajectory(it, air, bearing) }
+                        }
                     overlayCache.putAll(computed)
                 }
                 val flights =
@@ -513,17 +519,20 @@ class DrivingRangeViewModel(
         return collected
     }
 
-    /** Runs on [computeDispatcher]: touches no view-model state. */
-    private fun overlayTrajectory(stored: HistoryShot): FlightTrajectory? {
-        val input =
-            stored.toRangeShotEvent()?.let { shot ->
-                try {
-                    resolver.resolve(shot)
-                } catch (_: FlightInputResolutionError) {
-                    null
-                }
-            }
-        return input?.let { simulation(it).downsampled(RangeBrowseState.OVERLAY_TRAJECTORY_POINTS) }
+    /**
+     * Runs on [computeDispatcher]: touches no view-model state. Plan F2b: planned like a live
+     * flight (from the stored Pi detail, so each landing matches its carry), then downsampled.
+     */
+    private fun overlayTrajectory(
+        stored: HistoryShot,
+        air: Conditions,
+        bearing: TargetBearing?,
+    ): FlightTrajectory? {
+        val shot = stored.toRangeShotEvent() ?: return null
+        val measurements = (stored.detail.toFlightMeasurements() ?: shot.toFlightMeasurements()).copy(id = shot.eventId)
+        return flightPlan(measurements, air, bearing)
+            ?.trajectory
+            ?.downsampled(RangeBrowseState.OVERLAY_TRAJECTORY_POINTS)
     }
 
     private fun setOverlayClub(club: String?) {
@@ -620,9 +629,12 @@ class DrivingRangeViewModel(
         initialShot?.let { DrivingRangeUiState.Showing(it, RangePhase.Waiting, activeFlight = null) }
             ?: DrivingRangeUiState.Ready()
 
-    /** The stored shot's Pi detail when it has one (its spin-adjusted carry anchors the estimate). */
+    /**
+     * The stored shot's Pi detail when it has one (its spin-adjusted carry anchors the estimate),
+     * keyed by the event id the shot flies under.
+     */
     private fun measurementsFor(shot: ShotEvent): FlightMeasurements =
-        historyDetails[shot.eventId]?.toFlightMeasurements() ?: shot.toFlightMeasurements()
+        (historyDetails[shot.eventId]?.toFlightMeasurements() ?: shot.toFlightMeasurements()).copy(id = shot.eventId)
 
     /**
      * @property rollOut the displayed shot's estimated roll-out: computed with each flight, and for
@@ -650,6 +662,7 @@ class DrivingRangeViewModel(
         const val LANDING_DWELL_MILLIS = 1_250L
         const val CLUB_CHANGE_FAILED = "Couldn't change the club."
         const val SIMULATE_FAILED = "Couldn't simulate a shot."
+        const val FLIGHT_UNAVAILABLE = "This shot can't be flown."
         private const val STOP_TIMEOUT_MILLIS = 5_000L
     }
 }

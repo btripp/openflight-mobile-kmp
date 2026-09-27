@@ -62,7 +62,7 @@ class DrivingRangeViewModelTest {
             history = FakeShotHistoryRepository(),
             conditions = FakeConditionsRepository(),
             piSession = FakePiSessionRepository(),
-            simulation = ::makeTestTrajectory,
+            flightPlan = { m, c, b -> testFlightPlan(m, c, b) },
             computeDispatcher = computeDispatcher,
         )
 
