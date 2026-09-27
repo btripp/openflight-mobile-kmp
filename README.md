@@ -297,20 +297,36 @@ environment.
 ### iOS signing
 
 The checked-in project has no team configured, so a fresh checkout will show "no account for
-team" or a provisioning error. Fix it once per machine:
+team" or a provisioning error on a device. Set it once per machine, **outside version control**:
 
 1. In Xcode, **Xcode > Settings > Accounts**, add your Apple ID.
-2. Select the **iosApp** project, then the **iosApp** target, then **Signing & Capabilities**.
-3. Leave **Automatically manage signing** on and pick your own team.
-4. Our bundle ID is `dev.openflight.companion`; if it's taken, use a unique reverse-DNS ID
-   (e.g. `com.yourname.openflight`) instead.
-5. If you'll run tests on a physical device, apply the same team to the `iosAppTests` and
-   `iosAppUITests` targets too.
-6. Xcode writes your team and bundle-ID changes into `iosApp/iosApp.xcodeproj/project.pbxproj`.
-   Check `git diff` before committing and keep personal signing values out of unrelated
-   commits.
+2. Copy `iosApp/Configuration/Local.xcconfig.example` to `iosApp/Configuration/Local.xcconfig`
+   (gitignored) and set `TEAM_ID` to your team ID. `Config.xcconfig` includes it last, so it
+   also takes a `PRODUCT_BUNDLE_IDENTIFIER` override if `dev.openflight.companion` isn't yours
+   to use, and a `CURRENT_PROJECT_VERSION` for an upload.
+3. Leave **Automatically manage signing** on. Don't pick the team in **Signing & Capabilities**:
+   Xcode would write it into `project.pbxproj`, which is committed. `git diff` on that file
+   should still show `DEVELOPMENT_TEAM = "${TEAM_ID}"`.
 
 Running on the simulator (`CODE_SIGNING_ALLOWED=NO`) needs none of this.
+
+### TestFlight
+
+1. An Apple Developer Program membership, and an app record in App Store Connect for your
+   bundle ID.
+2. Bump `CURRENT_PROJECT_VERSION` for every upload (in `Local.xcconfig`, or in
+   `Config.xcconfig` for a release): App Store Connect rejects a build number it has seen.
+3. In Xcode, pick **Any iOS Device**, **Product > Archive**, then in the Organizer **Distribute
+   App > App Store Connect > Upload**. Signing certificates stay in your Keychain.
+4. Internal testers can install once the build has processed; external testers need Beta App
+   Review first.
+
+The app ships a privacy manifest (`iosApp/iosApp/PrivacyInfo.xcprivacy`, whose API reasons
+match a scan of the Release binary; re-scan with `nm -u` after adding a dependency) and declares
+`ITSAppUsesNonExemptEncryption = NO` (only the OS's own TLS), so uploads don't stop at export
+compliance. Keep every credential out of the repo: `.gitignore` covers `Local.xcconfig`,
+`*.p12`, `*.p8` (App Store Connect API keys), `*.cer`, provisioning profiles and
+`ExportOptions.plist`.
 
 ### Test commands
 
