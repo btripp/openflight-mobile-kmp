@@ -116,4 +116,8 @@ data class SessionShotRow(
     val durationMs: Double?,
     val implementLabel: String?,
     val enrichment: ShotEnrichment?,
-)
+) {
+    /** The range can fly this row (plan F8d): a ball shot with ball speed and carry. */
+    val canFly: Boolean
+        get() = !isSwingSpeed && ballSpeedMph != null && carryYards != null
+}

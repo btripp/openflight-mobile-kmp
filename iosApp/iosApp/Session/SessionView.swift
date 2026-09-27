@@ -71,6 +71,8 @@ struct SessionContent: View {
     let export: CsvExport?
 
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    /// Plan F8d-B: the rows' and the selected card's "View on range" (the live session's shots).
+    @Environment(\.openRange) private var openRange
 
     private var units: UnitSystem { state.units }
     private var isPi: Bool { state.source == .pi }
@@ -230,7 +232,8 @@ struct SessionContent: View {
                     units: units,
                     deletable: canEdit,
                     onClose: { send(SessionEventSelectShot(id: nil)) },
-                    onDelete: { send(SessionEventDeleteShot(id: card.id)) }
+                    onDelete: { send(SessionEventDeleteShot(id: card.id)) },
+                    onViewOnRange: openRange.map { open in { open(.liveShot(card.id)) } }
                 )
             }
             .listRowBackground(Theme.bgElevated)
@@ -249,24 +252,32 @@ struct SessionContent: View {
         Section {
             ForEach(state.shots, id: \.id) { row in
                 let selected = row.id == state.selectedShot?.id
-                SessionShotRowView(row: row, units: units)
-                    .contentShape(Rectangle())
-                    .onTapGesture { send(SessionEventSelectShot(id: row.id)) }
-                    .accessibilityAddTraits(selected ? [.isSelected, .isButton] : .isButton)
-                    .accessibilityHint("Shows this shot on the chart")
-                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                        if canEdit {
-                            // Not `.destructive`: the row stays until the delete is
-                            // confirmed (plan R8f), so it must not animate away here.
-                            Button {
-                                send(SessionEventDeleteShot(id: row.id))
-                            } label: {
-                                Label("Delete", systemImage: "trash")
-                            }
-                            .tint(.red)
+                HStack(spacing: 4) {
+                    SessionShotRowView(row: row, units: units)
+                        .contentShape(Rectangle())
+                        .onTapGesture { send(SessionEventSelectShot(id: row.id)) }
+                        .accessibilityAddTraits(selected ? [.isSelected, .isButton] : .isButton)
+                        .accessibilityHint("Shows this shot on the chart")
+                    // Plan F8d-B: fly this shot on the range, paused on it.
+                    if let openRange, row.canFly {
+                        ViewOnRangeButton(iconOnly: true, identifier: RangeEntryTags.sessionShot(row.id)) {
+                            openRange(.liveShot(row.id))
                         }
                     }
-                    .listRowBackground(selected ? Theme.gold.opacity(0.14) : Theme.bgCard)
+                }
+                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                    if canEdit {
+                        // Not `.destructive`: the row stays until the delete is
+                        // confirmed (plan R8f), so it must not animate away here.
+                        Button {
+                            send(SessionEventDeleteShot(id: row.id))
+                        } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
+                        .tint(.red)
+                    }
+                }
+                .listRowBackground(selected ? Theme.gold.opacity(0.14) : Theme.bgCard)
             }
         } header: {
             Text(canEdit ? "SHOTS · swipe left to delete" : "SHOTS")

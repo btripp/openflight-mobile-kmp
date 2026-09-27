@@ -13,10 +13,14 @@ extension DrivingRangeViewModel: SharedViewModel {}
 /// suspends before leaving.
 ///
 /// - Parameter autoplay: fly the displayed shot when the range opens (the `--preview-flight` hook).
+/// - Parameter launch: plan F8d-B ("View on range"): open replaying this stored session, paused on
+///   its shot when it names one (the shared `DrivingRangeEvent.Launch`). Sent once per screen.
 struct DrivingRangeView: View {
     let autoplay: Bool
+    var launch: RangeLaunch?
 
     @StateObject private var host = ViewModelHost(KoinHelper().drivingRangeViewModel())
+    @State private var launched = false
     /// Debug launch hooks (plan F8c2): `--range-realitykit`, `--range-freeze-progress`.
     private let launchOptions = KoinHelper().launchOptions()
     @Environment(\.dismiss) private var dismiss
@@ -39,7 +43,10 @@ struct DrivingRangeView: View {
         .onAppear {
             // Reduced motion fixes the camera and locks its toggle (plan R7a/R7b).
             host.send(DrivingRangeEventReduceMotionChanged(enabled: reduceMotion))
-            if autoplay {
+            if let launch, !launched {
+                launched = true
+                host.send(DrivingRangeEventLaunch(launch: launch))
+            } else if autoplay {
                 host.send(DrivingRangeEventReplay.shared)
             }
         }
@@ -80,6 +87,8 @@ struct DrivingRangeContent: View {
 
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var showsSessions = false
+    /// The controls' measured height: one row, or two when the status pill drops under the buttons.
+    @State private var controlsHeight: CGFloat = 44
 
     /// The side pane's width on a regular width: Android's 30 %, within readable bounds.
     private static let shotListFraction: CGFloat = 0.3
@@ -126,6 +135,9 @@ struct DrivingRangeContent: View {
                         state: state,
                         isLandscape: isLandscape,
                         docksToSide: docksToSide,
+                        // Clear of the controls (10 pt top padding plus an 18 pt gap), however
+                        // many rows they take.
+                        topInset: controlsHeight + 28,
                         onSelectClub: { send(DrivingRangeEventClubSelected(club: $0)) }
                     )
                     .frame(maxHeight: .infinity)
@@ -181,52 +193,86 @@ struct DrivingRangeContent: View {
         }
     }
 
+    /// Exit, the status pill, Follow/Fixed, History and Replay in one row when they fit at their
+    /// natural widths. Otherwise (a compact iPhone, large text, all three trailing buttons showing)
+    /// the pill drops to its own line under the buttons instead of being squeezed into a column of
+    /// letters (F8d-B), and wraps to two lines at most.
     private var controls: some View {
-        HStack(spacing: 10) {
-            Button(action: onExit) {
-                Label("Exit", systemImage: "xmark")
-                    .font(.subheadline.weight(.bold))
-                    .padding(.horizontal, 13)
-                    .padding(.vertical, 10)
-                    .background(.black.opacity(0.6), in: Capsule())
-                    .overlay {
-                        Capsule().stroke(.white.opacity(0.2), lineWidth: 1)
-                    }
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 10) {
+                exitButton
+                Spacer(minLength: 0)
+                statusPill
+                    .fixedSize()
+                trailingButtons
             }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier(RangeTestTags.shared.EXIT)
+            VStack(alignment: .trailing, spacing: 8) {
+                HStack(spacing: 10) {
+                    exitButton
+                    Spacer(minLength: 0)
+                    trailingButtons
+                }
+                statusPill
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { controlsHeight = $0 }
+    }
 
-            Spacer()
+    private var statusPill: some View {
+        Label(state.phase.label, systemImage: statusSymbol)
+            .font(.caption.weight(.semibold))
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
+            .background(.black.opacity(0.58), in: Capsule())
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier(RangeTestTags.shared.STATUS)
+    }
 
-            Label(state.phase.label, systemImage: statusSymbol)
-                .font(.caption.weight(.semibold))
-                .padding(.horizontal, 12)
-                .padding(.vertical, 9)
-                .background(.black.opacity(0.58), in: Capsule())
-                .accessibilityElement(children: .combine)
-                .accessibilityIdentifier(RangeTestTags.shared.STATUS)
-
+    private var trailingButtons: some View {
+        HStack(spacing: 10) {
             cameraToggle
 
             historyButton
 
             if DrivingRangeUiStateKt.canReplay(state) {
-                Button {
-                    send(DrivingRangeEventReplay.shared)
-                } label: {
-                    Image(systemName: "arrow.counterclockwise")
-                        .font(.subheadline.weight(.bold))
-                        .frame(width: 38, height: 38)
-                        .background(.black.opacity(0.6), in: Circle())
-                        .overlay {
-                            Circle().stroke(.white.opacity(0.2), lineWidth: 1)
-                        }
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Replay shot")
-                .accessibilityIdentifier(RangeTestTags.shared.REPLAY)
+                replayButton
             }
         }
+        .fixedSize()
+    }
+
+    private var exitButton: some View {
+        Button(action: onExit) {
+            Label("Exit", systemImage: "xmark")
+                .font(.subheadline.weight(.bold))
+                .padding(.horizontal, 13)
+                .padding(.vertical, 10)
+                .background(.black.opacity(0.6), in: Capsule())
+                .overlay {
+                    Capsule().stroke(.white.opacity(0.2), lineWidth: 1)
+                }
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier(RangeTestTags.shared.EXIT)
+    }
+
+    private var replayButton: some View {
+        Button {
+            send(DrivingRangeEventReplay.shared)
+        } label: {
+            Image(systemName: "arrow.counterclockwise")
+                .font(.subheadline.weight(.bold))
+                .frame(width: 38, height: 38)
+                .background(.black.opacity(0.6), in: Circle())
+                .overlay {
+                    Circle().stroke(.white.opacity(0.2), lineWidth: 1)
+                }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Replay shot")
+        .accessibilityIdentifier(RangeTestTags.shared.REPLAY)
     }
 
     /// Plan F8b: opens the session picker (Android's "History" button), icon-only so the row fits

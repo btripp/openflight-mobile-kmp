@@ -22,6 +22,9 @@ struct ClubDetailContent: View {
     let state: ClubDetailUiState
     let send: (ClubDetailEvent) -> Void
 
+    /// Plan F8d-B: the recent shots' "View on range"; nil (no app shell) hides it.
+    @Environment(\.openRange) private var openRange
+
     var body: some View {
         List {
             Section {
@@ -100,7 +103,16 @@ struct ClubDetailContent: View {
                                 if shot.possibleBadRead {
                                     StatusPill(text: "Bad read?", color: Theme.danger)
                                 }
+                                if let openRange {
+                                    ViewOnRangeButton(
+                                        iconOnly: true,
+                                        identifier: BagTestTags.shared.viewOnRange(shotId: shot.id)
+                                    ) {
+                                        openRange(RangeTarget(sessionId: shot.sessionId, shotId: String(shot.id)))
+                                    }
+                                }
                             }
+                            .accessibilityElement(children: .contain)
                             .accessibilityIdentifier(BagTestTags.shared.RECENT)
                         }
                     }

@@ -3,9 +3,12 @@ package dev.openflight.companion.feature.range
 
 import android.content.pm.ActivityInfo
 import androidx.activity.ComponentActivity
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
@@ -18,6 +21,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.unit.Density
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import dev.openflight.companion.core.designsystem.OfTheme
 import dev.openflight.companion.core.designsystem.OfWindowClass
@@ -32,6 +36,8 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 @RunWith(AndroidJUnit4::class)
 class DrivingRangeScreenTest {
@@ -257,6 +263,45 @@ class DrivingRangeScreenTest {
 
         assertEquals(1, exits)
     }
+
+    /**
+     * Plan F8d-B regression: at 200% text with Follow, History and Replay all showing, the status
+     * pill used to be squeezed into a column of letters between Exit and the buttons. Now it keeps
+     * its width (on its own line if it must) and overlaps none of the controls.
+     */
+    @Test
+    fun givenLargeFontAndEveryControl_whenShown_thenTheStatusPillStaysReadable() {
+        composeRule.setContent {
+            val density = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale = 2f)) {
+                OfTheme {
+                    DrivingRangeScreen(
+                        uiState = DrivingRangeUiState.Showing(shot, RangePhase.Waiting, activeFlight = null),
+                        reduceMotion = true,
+                        onEvent = { events += it },
+                        onExit = { exits++ },
+                        windowClass = OfWindowClass.COMPACT,
+                    )
+                }
+            }
+        }
+
+        composeRule.onNodeWithTag(RangeTestTags.REPLAY).assertIsDisplayed()
+        composeRule.onNodeWithTag(RangeTestTags.STATUS).assertIsDisplayed()
+        val status = bounds(RangeTestTags.STATUS)
+        // Squeezed, it was a tall column of letters, or (with no width left at all) nothing.
+        assertTrue(status.height > 0f && status.width >= 2 * status.height, "status pill squeezed: $status")
+        for (control in listOf(
+            RangeTestTags.EXIT,
+            RangeTestTags.CAMERA_MODE,
+            RangeTestTags.HISTORY,
+            RangeTestTags.REPLAY,
+        )) {
+            assertFalse(status.overlaps(bounds(control)), "status pill overlaps $control")
+        }
+    }
+
+    private fun bounds(tag: String): Rect = composeRule.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot
 
     private companion object {
         val shot =

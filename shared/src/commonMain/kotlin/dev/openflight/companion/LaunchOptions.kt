@@ -44,6 +44,10 @@ import dev.openflight.companion.core.data.TransportType
  * @property previewHistoryBulk plan F8b: [PreviewShotHistoryRepository] with a third, older session
  *   of [PREVIEW_BULK_SHOTS] shots, more than the range overlay's 200-shot cap (the performance
  *   check). Implies [previewHistory]. `--preview-history-bulk`.
+ * @property previewPiMock plan F8d-B: like [previewPi], but the preview Pi runs in `mock_mode`, so
+ *   the range, Session and Games offer "Simulate shot"; each simulate delivers a new, different
+ *   preview shot ([PreviewShotRepository.simulatedShot]) through the live path, with no server.
+ *   `--preview-pi-mock`.
  */
 data class LaunchOptions(
     val uiTesting: Boolean = false,
@@ -61,9 +65,10 @@ data class LaunchOptions(
     val rangeRealityKit: Boolean = false,
     val previewLiveShots: Boolean = false,
     val previewHistoryBulk: Boolean = false,
+    val previewPiMock: Boolean = false,
 ) {
     val usesFakeRepository: Boolean
-        get() = uiTesting || previewShot || previewPi
+        get() = uiTesting || previewShot || previewPi || previewPiMock
 
     companion object {
         const val UI_TESTING = "--ui-testing"
@@ -81,6 +86,7 @@ data class LaunchOptions(
         const val RANGE_REALITYKIT = "--range-realitykit"
         const val PREVIEW_LIVE_SHOTS = "--preview-live-shots"
         const val PREVIEW_HISTORY_BULK = "--preview-history-bulk"
+        const val PREVIEW_PI_MOCK = "--preview-pi-mock"
 
         /** How often `--preview-live-shots` delivers a shot. */
         const val PREVIEW_LIVE_SHOT_INTERVAL_MILLIS = 5_000L
@@ -114,6 +120,7 @@ data class LaunchOptions(
                 rangeRealityKit = RANGE_REALITYKIT in arguments,
                 previewLiveShots = PREVIEW_LIVE_SHOTS in arguments,
                 previewHistoryBulk = PREVIEW_HISTORY_BULK in arguments,
+                previewPiMock = PREVIEW_PI_MOCK in arguments,
             )
         }
     }

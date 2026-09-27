@@ -132,10 +132,6 @@ private fun ShotRowContent(
     }
 }
 
-/** The range can fly this row (plan F8d): a ball shot with ball speed and carry. */
-internal val SessionShotRow.canFly: Boolean
-    get() = !isSwingSpeed && ballSpeedMph != null && carryYards != null
-
 @Composable
 private fun RowMetric(
     value: String,

@@ -43,9 +43,7 @@ internal class LocalEditsShotRepository(
                 while (true) {
                     delay(liveShotIntervalMillis)
                     number += 1
-                    val shot = PreviewShotRepository.liveShot(number)
-                    shots.value = listOf(shot) + shots.value
-                    latest.value = shot
+                    deliver(PreviewShotRepository.liveShot(number))
                 }
             }
         }
@@ -53,6 +51,15 @@ internal class LocalEditsShotRepository(
 
     override val history: StateFlow<List<ShotEvent>> = shots
     override val latestShot: StateFlow<ShotEvent?> = latest
+
+    /**
+     * A new live [shot] arrives, newest first, like a Pi reporting a swing: `--preview-live-shots`,
+     * and `--preview-pi-mock`'s simulated shots (plan F8d-B).
+     */
+    fun deliver(shot: ShotEvent) {
+        shots.value = listOf(shot) + shots.value
+        latest.value = shot
+    }
 
     override fun deleteShot(eventId: String) = update { it.eventId != eventId }
 

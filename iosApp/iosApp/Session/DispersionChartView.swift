@@ -205,6 +205,8 @@ struct SelectedShotCardView: View {
     var deletable: Bool = true
     let onClose: () -> Void
     let onDelete: () -> Void
+    /// Plan F8d-B: flies this shot on the range, paused on it; hidden if nil.
+    var onViewOnRange: (() -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -213,6 +215,9 @@ struct SelectedShotCardView: View {
                     .font(.of(.headline, weight: .semibold))
                     .lineLimit(2)
                 Spacer()
+                if let onViewOnRange {
+                    ViewOnRangeButton(iconOnly: true, identifier: RangeEntryTags.selectedShot, action: onViewOnRange)
+                }
                 // 44 pt targets; the delete asks for confirmation first (plan R8f).
                 Button(role: .destructive, action: onDelete) { targetLabel("Delete") }
                     .font(.of(.subheadline, weight: .semibold))

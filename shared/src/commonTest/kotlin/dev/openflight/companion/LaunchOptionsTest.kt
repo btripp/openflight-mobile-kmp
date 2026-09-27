@@ -112,4 +112,13 @@ class LaunchOptionsTest {
         assertThat(LaunchOptions.fromArguments(listOf("app")).previewLiveShots).isFalse()
         assertThat(LaunchOptions.fromArguments(listOf("app")).previewHistoryBulk).isFalse()
     }
+
+    @Test
+    fun previewPiMockIsAFlagThatSwapsInTheFakeRepository() {
+        val options = LaunchOptions.fromArguments(listOf("app", "--preview-pi-mock"))
+
+        assertThat(options.previewPiMock).isTrue()
+        assertThat(options.usesFakeRepository).isTrue()
+        assertThat(LaunchOptions.fromArguments(listOf("app")).previewPiMock).isFalse()
+    }
 }

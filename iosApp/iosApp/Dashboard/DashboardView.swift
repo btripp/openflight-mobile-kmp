@@ -36,6 +36,8 @@ struct DashboardContent: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    /// Plan F8d-B: the latest shot's "View on range".
+    @Environment(\.openRange) private var openRange
 
     private var connection: ConnectionPanelState { state.connection }
     private var live: DashboardUiStateLive? { state as? DashboardUiStateLive }
@@ -56,9 +58,12 @@ struct DashboardContent: View {
         .foregroundStyle(Theme.cream)
     }
 
+    // Plain `VStack`s (plan F8d-B): a handful of cards gain nothing from laziness, and scrolling a
+    // `LazyVStack` down to the latest shot card (as a tap on its "View on range" does) sent its
+    // placement of the club chips' `FlowLayout` into a loop that never let the main thread go idle.
     private var compactLayout: some View {
         ScrollView {
-            LazyVStack(spacing: 20) {
+            VStack(spacing: 20) {
                 header
                 processingNotice
                 connectionCard
@@ -72,7 +77,7 @@ struct DashboardContent: View {
     private var regularLayout: some View {
         HStack(alignment: .top, spacing: 20) {
             ScrollView {
-                LazyVStack(spacing: 20) {
+                VStack(spacing: 20) {
                     header
                     processingNotice
                     liveMetrics
@@ -109,7 +114,12 @@ struct DashboardContent: View {
     @ViewBuilder
     private var liveMetrics: some View {
         if let live {
-            ShotCard(shot: live.latest, units: live.units, enrichment: live.latestEnrichment)
+            ShotCard(
+                shot: live.latest,
+                units: live.units,
+                enrichment: live.latestEnrichment,
+                onViewOnRange: openRange.map { open in { open(.liveShot(live.latest.eventId)) } }
+            )
                 .id(live.latest.eventId)
                 .overlay { ShotFlash(trigger: shotFlashes) }
                 .transition(.opacity)
