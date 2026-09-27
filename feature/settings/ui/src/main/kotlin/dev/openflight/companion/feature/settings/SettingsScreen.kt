@@ -60,7 +60,8 @@ import kotlin.math.roundToInt
  * today.
  *
  * Plan F1d: the cards are grouped into Device (connection, calibrate, camera, radar, simulators,
- * shutdown), Practice (units, audio call-outs, and plan F8a2a's range theme) and Data (debug
+ * shutdown), Practice (units, audio call-outs, plan F8a2a's range theme and plan F8a2t's shot trail,
+ * whose live [shotTrailPreview] the app supplies) and Data (debug
  * logging, cloud upload). The Device
  * group's "Calibrate radar" and "Camera" rows push those screens; each row only shows when its
  * [onOpenCalibration] / [onOpenCamera] is given.
@@ -77,6 +78,7 @@ fun SettingsScreen(
     windowClass: OfWindowClass = rememberOfWindowClass(),
     onOpenCalibration: (() -> Unit)? = null,
     onOpenCamera: (() -> Unit)? = null,
+    shotTrailPreview: ShotTrailPreview? = null,
 ) {
     OfScaffold(
         modifier = modifier,
@@ -108,6 +110,7 @@ fun SettingsScreen(
                 UnitsCard(uiState.units, onEvent)
                 AudioCalloutsCard(uiState.callouts, onEvent, windowClass)
                 RangeThemeCard(uiState.rangeTheme, onEvent)
+                ShotTrailCard(uiState.shotTrail, uiState.rangeTheme.selected, onEvent, windowClass, shotTrailPreview)
                 GroupHeader("Data", SettingsTestTags.GROUP_DATA)
                 // Hidden until the Pi reports its debug mode: never offer "Start" before that is known.
                 if (uiState.debug.loaded) DebugCard(uiState.debug, onEvent)

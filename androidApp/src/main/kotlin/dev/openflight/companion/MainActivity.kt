@@ -10,6 +10,7 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import dev.openflight.companion.core.data.RangeThemeSetting
+import dev.openflight.companion.core.data.ShotTrailStyle
 import dev.openflight.companion.core.data.TransportType
 import kotlinx.coroutines.runBlocking
 import org.koin.mp.KoinPlatform
@@ -65,6 +66,8 @@ class MainActivity : ComponentActivity() {
                     ?.coerceIn(0f, 1f)
                     ?.toDouble(),
             rangeTheme = RangeThemeSetting.fromStorageValue(getStringExtra(EXTRA_RANGE_THEME)),
+            // Plan F8a2t: screenshots of each shot trail style (iOS's --shot-trail).
+            shotTrail = ShotTrailStyle.fromStorageValue(getStringExtra(EXTRA_SHOT_TRAIL)),
         )
 
     private companion object {
@@ -81,6 +84,7 @@ class MainActivity : ComponentActivity() {
         const val EXTRA_PREVIEW_PI_SESSION_STUCK = "preview_pi_session_stuck"
         const val EXTRA_RANGE_FREEZE_PROGRESS = "range_freeze_progress"
         const val EXTRA_RANGE_THEME = "range_theme"
+        const val EXTRA_SHOT_TRAIL = "shot_trail"
 
         var launchOptionsApplied = false
     }

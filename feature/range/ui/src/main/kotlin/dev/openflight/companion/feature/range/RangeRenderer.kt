@@ -47,8 +47,6 @@ internal class RangeRenderer(
     private val sunGlow = style.sun.glow.toUnitRadialBrush()
     private val sunDiscColor = style.sun.disc.toColor()
     private val ridgeColors = scene.sky.ridges.map { it.color.toColor() }
-    private val tracerColor = style.tracer.toColor()
-    private val tracerGlowColor = style.tracerGlow.toColor()
     private val ballColor = style.ball.toColor()
     private val shadowColor = style.shadow.toColor()
     private val selectedColor = style.overlaySelected.toColor()
@@ -68,8 +66,9 @@ internal class RangeRenderer(
         labelHeightMeters: Float,
         minLabelPixels: Float,
         rollOutLabel: TextLayoutResult? = null,
+        landedSeconds: Float = 0f,
     ) {
-        if (!frame.prepare(pose, progress)) return
+        if (!frame.prepare(pose, progress, landedSeconds)) return
         val projection = frame.projection ?: return
         with(drawScope) {
             drawBackdrop(projection)
@@ -81,6 +80,8 @@ internal class RangeRenderer(
             overlay?.let { drawOverlay(it) }
             if (frame.geometry == null) {
                 if (overlay != null) drawRollOut(rollOutLabel)
+                // Plan F8a2t: the kept earlier trails stay while no flight is shown.
+                drawTrail()
             } else {
                 if (progress >= 1f) {
                     drawPolygons(frame.landing)
@@ -202,6 +203,25 @@ internal class RangeRenderer(
         }
     }
 
+    /**
+     * Plan F8a2t: every visible layer of the shot trail in order (the kept earlier trails, the
+     * landing effect, then the style's outlines), in its packed colour or its club palette colour.
+     */
+    private fun DrawScope.drawTrail() {
+        val layers = frame.trail.layers
+        for (index in layers.indices) {
+            val layer = layers[index]
+            if (!layer.visible) continue
+            val color =
+                if (layer.paletteIndex >= 0) {
+                    OfClubPalette.color(layer.paletteIndex).copy(alpha = (layer.argb ushr ALPHA_SHIFT) / CHANNEL_MAX)
+                } else {
+                    Color(layer.argb)
+                }
+            drawPath(layer.path.path, color)
+        }
+    }
+
     private fun DrawScope.drawPolygons(polygons: List<WorldPolygon<ComposePathSink>>) {
         for (index in polygons.indices) {
             val polygon = polygons[index]
@@ -255,10 +275,9 @@ internal class RangeRenderer(
             )
         }
 
-        val tracer = frame.tracer
-        tracer.glow?.let { drawPath(it.path, tracerGlowColor) }
-        drawPath(tracer.path.path, tracerColor)
+        drawTrail()
 
+        val tracer = frame.tracer
         val tipX = tracer.tipX
         val tipY = tracer.tipY
         if (!tipX.isNaN()) {
@@ -266,3 +285,6 @@ internal class RangeRenderer(
         }
     }
 }
+
+private const val ALPHA_SHIFT = 24
+private const val CHANNEL_MAX = 255f

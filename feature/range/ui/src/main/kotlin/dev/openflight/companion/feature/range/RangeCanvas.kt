@@ -76,6 +76,9 @@ import dev.openflight.companion.core.flight.RangeCameraPose
  * Plan F8a2p: [obstructions] are the overlaid UI's rectangles in this canvas's pixels (`left, top,
  * right, bottom` each); the yardage labels under them are hidden and the markers faded.
  *
+ * Plan F8a2t: [trail] picks the shot trail's style, its landing effect (static while
+ * [reduceMotion]) and the earlier live trails to keep; they're drawn by the shared [ShotTrail].
+ *
  * Plan F8a2a: [theme] picks the palette (the renderer is rebuilt when it changes). Debug
  * [freezeProgress] (the `range_freeze_progress` launch extra, iOS's `--range-freeze-progress`)
  * holds every flight at that playback progress for screenshots; at 1 the flight lands and the
@@ -100,6 +103,9 @@ fun RangeCanvas(
     theme: RangeTheme = RangeTheme.DAY,
     freezeProgress: Float? = null,
     obstructions: FloatArray = NO_OBSTRUCTIONS,
+    trail: RangeTrailState = RangeTrailState(),
+    interactive: Boolean = true,
+    sceneTag: String = RangeTestTags.SCENE,
 ) {
     var shown by remember { mutableStateOf<ActiveFlight?>(null) }
     val progress = remember { mutableFloatStateOf(0f) }
@@ -115,6 +121,8 @@ fun RangeCanvas(
     val resetView by rememberUpdatedState(onResetView)
     val selectLanding by rememberUpdatedState(onSelectLanding)
     val obstructionState = rememberUpdatedState(obstructions)
+    val trailState = rememberUpdatedState(trail)
+    val reduceMotionState = rememberUpdatedState(reduceMotion)
     // Plan F8c1: the shared palette and sizes; plan F8a2a: the user's theme.
     val style = theme.style
     val rig = remember { RangeCameraRig() }
@@ -206,6 +214,8 @@ fun RangeCanvas(
                 frame.setLabelPixels(style.minLabelSize.sp.toPx(), renderer.labelFontPixels)
                 onDrawBehind {
                     frame.setObstructions(obstructionState.value)
+                    // Plan F8a2t: the trail style, landing effect and kept earlier trails.
+                    frame.setTrail(trailState.value, staticEffects = reduceMotionState.value)
                     val current = shown
                     val transform = currentView.value
                     val pose =
@@ -227,16 +237,33 @@ fun RangeCanvas(
                         style.labelHeightMeters,
                         style.minLabelSize.sp.toPx(),
                         rollOutLabel,
+                        landedSeconds.floatValue,
                     )
                 }
             }
         }
 
+    // Plan F8a2t: a non-interactive canvas (the Settings preview) takes no gestures, so it scrolls.
+    val gestures =
+        if (interactive) {
+            Modifier.rangeViewGestures(
+                renderer = renderer,
+                base = rig.fixedPose,
+                view = currentView,
+                overlay = { currentOverlay },
+                onViewChanged = { viewChanged(it) },
+                onResetView = { resetView() },
+                onSelectLanding = { selectLanding(it) },
+            )
+        } else {
+            Modifier
+        }
     Spacer(
         modifier =
             modifier
-                .testTag(RangeTestTags.SCENE)
+                .testTag(sceneTag)
                 .semantics {
+                    if (!interactive) return@semantics
                     stateDescription = view.description
                     // Plan F8a2p: zoom without the pinch, for TalkBack (zoom is pinch-only on screen).
                     customActions =
@@ -248,15 +275,8 @@ fun RangeCanvas(
                                 view.canZoomOut.also { if (it) viewChanged(view.zoomedBySteps(-1)) }
                             },
                         )
-                }.rangeViewGestures(
-                    renderer = renderer,
-                    base = rig.fixedPose,
-                    view = currentView,
-                    overlay = { currentOverlay },
-                    onViewChanged = { viewChanged(it) },
-                    onResetView = { resetView() },
-                    onSelectLanding = { selectLanding(it) },
-                ).drawWithCache(drawCache),
+                }.then(gestures)
+                .drawWithCache(drawCache),
     )
 }
 

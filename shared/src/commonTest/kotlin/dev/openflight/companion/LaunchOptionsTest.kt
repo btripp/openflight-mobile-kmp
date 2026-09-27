@@ -6,6 +6,7 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isTrue
 import dev.openflight.companion.core.data.RangeThemeSetting
+import dev.openflight.companion.core.data.ShotTrailStyle
 import dev.openflight.companion.core.data.TransportType
 import kotlin.test.Test
 
@@ -133,5 +134,15 @@ class LaunchOptionsTest {
         assertThat(theme("--range-theme")).isEqualTo(null)
         assertThat(theme()).isEqualTo(null)
         assertThat(LaunchOptions.fromArguments(listOf("app", "--range-theme", "dusk")).usesFakeRepository).isFalse()
+    }
+
+    @Test
+    fun shotTrailSeedsAKnownStyleAndIgnoresAnythingElse() {
+        fun trail(vararg arguments: String) = LaunchOptions.fromArguments(listOf("app") + arguments).shotTrail
+
+        for (style in ShotTrailStyle.entries) assertThat(trail("--shot-trail", style.storageValue)).isEqualTo(style)
+        assertThat(trail("--shot-trail", "fireworks")).isEqualTo(null)
+        assertThat(trail("--shot-trail")).isEqualTo(null)
+        assertThat(trail()).isEqualTo(null)
     }
 }

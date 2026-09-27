@@ -122,6 +122,7 @@ suspend fun Koin.applyLaunchOptions(options: LaunchOptions) {
     options.transport?.let { settings.setTransport(it) }
     options.host?.let { settings.setHost(it) }
     options.rangeTheme?.let { settings.setRangeTheme(it) }
+    options.shotTrail?.let { settings.setShotTrail(it) }
 }
 
 private fun previewModule(

@@ -35,6 +35,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -83,12 +84,39 @@ class DrivingRangeViewModel(
     private val clubRequest = MutableStateFlow(ClubRequest())
     private val reduceMotion = MutableStateFlow(false)
     private val browse = MutableStateFlow(RangeBrowseState())
+
+    /** Plan F8a2t: the live flights flown before the current one, newest first (at most [MAX_PRIOR_FLIGHTS]). */
+    private val priorFlights = MutableStateFlow<List<ActiveFlight>>(emptyList())
+    private var lastLiveFlight: ActiveFlight? = null
+
+    private val trail =
+        combine(
+            settings.shotTrail,
+            settings.shotTrailKeepLast,
+            settings.landingEffect,
+            priorFlights,
+            browse,
+        ) { style, keepLast, effect, priors, browse ->
+            RangeTrailState(
+                style = style,
+                keepLast = keepLast,
+                landingEffect = effect,
+                // Plan F8a2t: earlier trails only in live; replay and the overlay draw none.
+                priorFlights = if (browse.isLive) priors.take(keepLast) else emptyList(),
+            )
+        }.distinctUntilChanged()
     private val camera =
-        combine(settings.rangeCameraMode, reduceMotion, settings.rangeTheme) { preferred, reduced, theme ->
+        combine(
+            settings.rangeCameraMode,
+            reduceMotion,
+            settings.rangeTheme,
+            trail,
+        ) { preferred, reduced, theme, trail ->
             RangeCameraState(
                 mode = if (reduced) RangeCameraMode.FIXED else preferred,
                 locked = reduced,
                 theme = RangeTheme.of(theme),
+                trail = trail,
             )
         }
     private val clubState =
@@ -243,13 +271,14 @@ class DrivingRangeViewModel(
         landingJob = null
 
         val measurements = measurementsFor(shot)
-        try {
-            resolver.resolve(measurements)
-        } catch (error: FlightInputResolutionError) {
-            generation++
-            flight.value = FlightState(RangePhase.Unavailable(error.message.orEmpty()), shot, activeFlight = null)
-            return
-        }
+        val spinRpm =
+            try {
+                resolver.resolve(measurements).spinRpm
+            } catch (error: FlightInputResolutionError) {
+                generation++
+                flight.value = FlightState(RangePhase.Unavailable(error.message.orEmpty()), shot, activeFlight = null)
+                return
+            }
 
         flight.value = FlightState(RangePhase.Preparing, shot, activeFlight = null)
         val current = ++generation
@@ -266,14 +295,35 @@ class DrivingRangeViewModel(
                     if (plan == null) {
                         FlightState(RangePhase.Unavailable(FLIGHT_UNAVAILABLE), shot, activeFlight = null)
                     } else {
+                        val active =
+                            ActiveFlight(
+                                plan.trajectory,
+                                current,
+                                speed,
+                                spinRpm = spinRpm,
+                                clubColorIndex = GolfClub.fromWireValue(shot.club)?.ordinal ?: 0,
+                            )
+                        rememberLiveFlight(active)
                         flight.value.copy(
                             phase = RangePhase.Flying,
-                            activeFlight = ActiveFlight(plan.trajectory, current, speed),
+                            activeFlight = active,
                             rollOut = plan.estimate.toRollOut(),
                         )
                     }
                 preparationJob = null
             }
+    }
+
+    /**
+     * Plan F8a2t: a new live flight pushes the previous one onto [priorFlights] ("Keep last shots"),
+     * unless it is the same shot flown again (Replay). Replay and overlay flights are never kept.
+     */
+    private fun rememberLiveFlight(active: ActiveFlight) {
+        if (!browse.value.isLive) return
+        val previous = lastLiveFlight
+        lastLiveFlight = active
+        if (previous == null || previous.trajectory.eventId == active.trajectory.eventId) return
+        priorFlights.update { (listOf(previous) + it).take(MAX_PRIOR_FLIGHTS) }
     }
 
     private fun advanceAfterLanding() {
@@ -667,6 +717,9 @@ class DrivingRangeViewModel(
         const val CLUB_CHANGE_FAILED = "Couldn't change the club."
         const val SIMULATE_FAILED = "Couldn't simulate a shot."
         const val FLIGHT_UNAVAILABLE = "This shot can't be flown."
+
+        /** Plan F8a2t: the most earlier live flights kept for "Keep last shots". */
+        const val MAX_PRIOR_FLIGHTS = ShotTrail.PRIOR_LAYERS
         private const val STOP_TIMEOUT_MILLIS = 5_000L
     }
 }

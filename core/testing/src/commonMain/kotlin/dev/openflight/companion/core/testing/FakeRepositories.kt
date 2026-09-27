@@ -2,9 +2,13 @@
 package dev.openflight.companion.core.testing
 
 import dev.openflight.companion.core.data.CalloutTrigger
+import dev.openflight.companion.core.data.DEFAULT_SHOT_TRAIL_KEEP_LAST
+import dev.openflight.companion.core.data.LandingEffect
 import dev.openflight.companion.core.data.RangeThemeSetting
+import dev.openflight.companion.core.data.SHOT_TRAIL_KEEP_OPTIONS
 import dev.openflight.companion.core.data.SettingsRepository
 import dev.openflight.companion.core.data.ShotRepository
+import dev.openflight.companion.core.data.ShotTrailStyle
 import dev.openflight.companion.core.data.TransportType
 import dev.openflight.companion.core.insights.CalloutField
 import dev.openflight.companion.core.insights.UnitSystem
@@ -17,6 +21,7 @@ import dev.openflight.companion.core.model.ShotEvent
 import kotlinx.coroutines.flow.MutableStateFlow
 
 /** A [SettingsRepository] over plain state flows. */
+@Suppress("TooManyFunctions") // Mirrors the SettingsRepository surface.
 class FakeSettingsRepository(
     transport: TransportType = TransportType.WIFI,
     host: String = SettingsRepository.DEFAULT_HOST,
@@ -78,6 +83,26 @@ class FakeSettingsRepository(
 
     override suspend fun setRangeTheme(theme: RangeThemeSetting) {
         rangeTheme.value = theme
+    }
+
+    // Plan F8a2t: the shot trail, added at the end to keep this file's diff mergeable (§4a A7).
+
+    override val shotTrail = MutableStateFlow(ShotTrailStyle.DEFAULT)
+
+    override suspend fun setShotTrail(style: ShotTrailStyle) {
+        shotTrail.value = style
+    }
+
+    override val shotTrailKeepLast = MutableStateFlow(DEFAULT_SHOT_TRAIL_KEEP_LAST)
+
+    override suspend fun setShotTrailKeepLast(count: Int) {
+        if (count in SHOT_TRAIL_KEEP_OPTIONS) shotTrailKeepLast.value = count
+    }
+
+    override val landingEffect = MutableStateFlow(LandingEffect.DEFAULT)
+
+    override suspend fun setLandingEffect(effect: LandingEffect) {
+        landingEffect.value = effect
     }
 }
 

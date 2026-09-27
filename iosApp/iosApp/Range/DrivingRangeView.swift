@@ -206,7 +206,8 @@ struct DrivingRangeContent: View {
                 onViewChanged: { send(DrivingRangeEventViewChanged(view: $0)) },
                 onResetView: { send(DrivingRangeEventResetView.shared) },
                 onSelectLanding: { send(DrivingRangeEventSelectShot(shotId: $0)) },
-                obstructions: obstructions
+                obstructions: obstructions,
+                trail: state.camera.trail
             )
             .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { canvasFrame = $0 }
         }

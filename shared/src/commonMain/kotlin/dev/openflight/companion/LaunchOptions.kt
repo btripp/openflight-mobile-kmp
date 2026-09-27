@@ -2,6 +2,7 @@
 package dev.openflight.companion
 
 import dev.openflight.companion.core.data.RangeThemeSetting
+import dev.openflight.companion.core.data.ShotTrailStyle
 import dev.openflight.companion.core.data.TransportType
 
 /**
@@ -50,6 +51,9 @@ import dev.openflight.companion.core.data.TransportType
  *   the range, Session and Games offer "Simulate shot"; each simulate delivers a new, different
  *   preview shot ([PreviewShotRepository.simulatedShot]) through the live path, with no server.
  *   `--preview-pi-mock`.
+ * @property shotTrail plan F8a2t: persisted as the shot trail before the UI starts, like
+ *   [rangeTheme]: `--shot-trail comet` (Android `--es shot_trail comet`), any
+ *   `ShotTrailStyle.storageValue`, for deterministic captures of each style.
  * @property rangeTheme plan F8a2a: persisted as the range theme before the UI starts (a settings
  *   seed like [transport]). `--range-theme day|dusk|night|links` (Android `--es range_theme night`).
  */
@@ -71,6 +75,7 @@ data class LaunchOptions(
     val previewHistoryBulk: Boolean = false,
     val previewPiMock: Boolean = false,
     val rangeTheme: RangeThemeSetting? = null,
+    val shotTrail: ShotTrailStyle? = null,
 ) {
     val usesFakeRepository: Boolean
         get() = uiTesting || previewShot || previewPi || previewPiMock
@@ -93,6 +98,7 @@ data class LaunchOptions(
         const val PREVIEW_HISTORY_BULK = "--preview-history-bulk"
         const val PREVIEW_PI_MOCK = "--preview-pi-mock"
         const val RANGE_THEME = "--range-theme"
+        const val SHOT_TRAIL = "--shot-trail"
 
         /** How often `--preview-live-shots` delivers a shot. */
         const val PREVIEW_LIVE_SHOT_INTERVAL_MILLIS = 5_000L
@@ -128,6 +134,7 @@ data class LaunchOptions(
                 previewHistoryBulk = PREVIEW_HISTORY_BULK in arguments,
                 previewPiMock = PREVIEW_PI_MOCK in arguments,
                 rangeTheme = valueAfter(RANGE_THEME)?.let(RangeThemeSetting::fromStorageValue),
+                shotTrail = valueAfter(SHOT_TRAIL)?.let(ShotTrailStyle::fromStorageValue),
             )
         }
     }

@@ -16,6 +16,7 @@ fun SettingsRoute(
     onOpenCalibration: (() -> Unit)? = null,
     onOpenCamera: (() -> Unit)? = null,
     viewModel: SettingsViewModel = koinViewModel(),
+    shotTrailPreview: ShotTrailPreview? = null,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val messages = rememberOfMessageHostState()
@@ -33,6 +34,7 @@ fun SettingsRoute(
         messages = messages,
         onOpenCalibration = onOpenCalibration,
         onOpenCamera = onOpenCamera,
+        shotTrailPreview = shotTrailPreview,
     )
 }
 
@@ -97,4 +99,11 @@ object SettingsTestTags {
 
     // Plan F8a2a: the range theme picker (Practice group).
     const val RANGE_THEME = "settings.rangeTheme"
+
+    // Plan F8a2t: the shot trail card (Practice group).
+    const val SHOT_TRAIL_CARD = "settings.shotTrail.card"
+    const val SHOT_TRAIL = "settings.shotTrail"
+    const val SHOT_TRAIL_KEEP = "settings.shotTrail.keepLast"
+    const val LANDING_EFFECT = "settings.shotTrail.landingEffect"
+    const val SHOT_TRAIL_PREVIEW = "settings.shotTrail.preview"
 }

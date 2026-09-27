@@ -2,6 +2,7 @@
 package dev.openflight.companion.core.data
 
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import app.cash.turbine.test
 import assertk.assertThat
@@ -293,5 +294,59 @@ class DataStoreSettingsRepositoryTest {
             val settings = DataStoreSettingsRepository(dataStore)
 
             assertThat(settings.rangeTheme.first()).isEqualTo(RangeThemeSetting.DAY)
+        }
+
+    // Plan F8a2t: the shot trail, added at the end to keep this file's diff mergeable (§4a A7).
+
+    @Test
+    fun theShotTrailDefaultsToClassicWithNoKeptTrailsAndNoLandingEffect() =
+        runTest {
+            val settings = DataStoreSettingsRepository(backgroundScope.dataStore())
+
+            assertThat(settings.shotTrail.first()).isEqualTo(ShotTrailStyle.CLASSIC)
+            assertThat(settings.shotTrailKeepLast.first()).isEqualTo(0)
+            assertThat(settings.landingEffect.first()).isEqualTo(LandingEffect.OFF)
+        }
+
+    @Test
+    fun everyShotTrailOptionRoundTripsAndSurvivesANewRepository() =
+        runTest {
+            val dataStore = backgroundScope.dataStore()
+            val settings = DataStoreSettingsRepository(dataStore)
+
+            for (style in ShotTrailStyle.entries) {
+                settings.setShotTrail(style)
+                assertThat(settings.shotTrail.first()).isEqualTo(style)
+                assertThat(DataStoreSettingsRepository(dataStore).shotTrail.first()).isEqualTo(style)
+                assertThat(dataStore.data.first()[stringPreferencesKey("shotTrail")]).isEqualTo(style.storageValue)
+            }
+            for (effect in LandingEffect.entries) {
+                settings.setLandingEffect(effect)
+                assertThat(DataStoreSettingsRepository(dataStore).landingEffect.first()).isEqualTo(effect)
+            }
+            for (count in SHOT_TRAIL_KEEP_OPTIONS.reversed()) {
+                settings.setShotTrailKeepLast(count)
+                assertThat(DataStoreSettingsRepository(dataStore).shotTrailKeepLast.first()).isEqualTo(count)
+            }
+        }
+
+    @Test
+    fun anUnofferedKeepCountIsIgnoredAndUnrecognizedStoredTrailValuesFallBack() =
+        runTest {
+            val dataStore = backgroundScope.dataStore()
+            val settings = DataStoreSettingsRepository(dataStore)
+            settings.setShotTrailKeepLast(3)
+
+            settings.setShotTrailKeepLast(7)
+            assertThat(settings.shotTrailKeepLast.first()).isEqualTo(3)
+
+            dataStore.edit {
+                it[stringPreferencesKey("shotTrail")] = "fireworks"
+                it[stringPreferencesKey("landingEffect")] = "confetti"
+                it[intPreferencesKey("shotTrailKeepLast")] = 42
+            }
+            assertThat(settings.shotTrail.first()).isEqualTo(ShotTrailStyle.CLASSIC)
+            assertThat(settings.landingEffect.first()).isEqualTo(LandingEffect.OFF)
+            assertThat(settings.shotTrailKeepLast.first()).isEqualTo(0)
         }
 }

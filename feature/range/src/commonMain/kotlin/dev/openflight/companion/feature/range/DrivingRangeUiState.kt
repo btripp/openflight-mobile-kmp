@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 package dev.openflight.companion.feature.range
 
+import dev.openflight.companion.core.data.DEFAULT_SHOT_TRAIL_KEEP_LAST
+import dev.openflight.companion.core.data.LandingEffect
 import dev.openflight.companion.core.data.RangeCameraMode
 import dev.openflight.companion.core.data.SettingsRepository
+import dev.openflight.companion.core.data.ShotTrailStyle
 import dev.openflight.companion.core.flight.FlightTrajectory
 import dev.openflight.companion.core.model.GolfClub
 import dev.openflight.companion.core.model.ShotEvent
@@ -50,6 +53,10 @@ data class ActiveFlight(
     val playbackId: Long,
     /** Replay speed (plan F8a1): the animation takes [playbackSeconds] / [speed]. 1 for live shots. */
     val speed: Double = 1.0,
+    /** Plan F8a2t: the flight's (resolved) launch spin, for the spin-ribbon trail; `null` if unknown. */
+    val spinRpm: Double? = null,
+    /** Plan F8a2t: the shot's club as a club palette index, for the club-colour trail. */
+    val clubColorIndex: Int = 0,
 )
 
 /**
@@ -75,11 +82,26 @@ data class RangeClubState(
  * @property locked reduced motion is on, so the camera is fixed and the toggle is disabled.
  * @property theme plan F8a2a: the look the renderers paint the scene with, the persisted
  *   [SettingsRepository.rangeTheme].
+ * @property trail plan F8a2t: how the shot's trail is drawn.
  */
 data class RangeCameraState(
     val mode: RangeCameraMode = SettingsRepository.DEFAULT_RANGE_CAMERA_MODE,
     val locked: Boolean = false,
     val theme: RangeTheme = RangeTheme.DAY,
+    val trail: RangeTrailState = RangeTrailState(),
+)
+
+/**
+ * The shot trail (plan F8a2t): the persisted [SettingsRepository.shotTrail],
+ * [SettingsRepository.shotTrailKeepLast] and [SettingsRepository.landingEffect], plus the earlier
+ * live flights to keep faded on the range, newest first: at most [keepLast] of them, and only in
+ * [RangeMode.Live] (replay and the overlay draw none).
+ */
+data class RangeTrailState(
+    val style: ShotTrailStyle = ShotTrailStyle.DEFAULT,
+    val keepLast: Int = DEFAULT_SHOT_TRAIL_KEEP_LAST,
+    val landingEffect: LandingEffect = LandingEffect.DEFAULT,
+    val priorFlights: List<ActiveFlight> = emptyList(),
 )
 
 /** What the range renders. */

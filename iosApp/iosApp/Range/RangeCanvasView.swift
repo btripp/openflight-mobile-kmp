@@ -53,6 +53,11 @@ struct RangeCanvasView: View {
     var onSelectLanding: (String) -> Void = { _ in }
     /// Plan F8a2p: the overlaid UI's frames, in this canvas's points.
     var obstructions: [CGRect] = []
+    /// Plan F8a2t: the shot trail's style, landing effect and kept earlier trails (`nil` keeps the
+    /// renderer's current ones: Classic, no effect, none kept).
+    var trail: RangeTrailState?
+    /// Plan F8a2t: the Settings preview uses its own identifier, so it's never mistaken for the range.
+    var sceneIdentifier: String = RangeTestTags.shared.SCENE
 
     @StateObject private var player = RangeCanvasPlayer()
     @Environment(\.displayScale) private var displayScale
@@ -72,7 +77,9 @@ struct RangeCanvasView: View {
                         rollOut: rollOut,
                         overlay: overlay,
                         selectedOverlayId: selectedOverlayId,
-                        obstructions: obstructions
+                        obstructions: obstructions,
+                        trail: trail,
+                        reduceMotion: reduceMotion
                     )
                 )
             }
@@ -94,7 +101,7 @@ struct RangeCanvasView: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Driving range")
         .accessibilityValue(viewDescription)
-        .accessibilityIdentifier(RangeTestTags.shared.SCENE)
+        .accessibilityIdentifier(sceneIdentifier)
         // Plan F8a2p: zoom without the pinch (zoom is pinch-only on screen): VoiceOver swipes up
         // and down on the scene, or picks "Zoom in" / "Zoom out" from its actions.
         .accessibilityAdjustableAction { direction in
@@ -157,6 +164,8 @@ final class RangeCanvasPlayer: ObservableObject {
         let overlay: [OverlayFlight]
         let selectedOverlayId: String?
         var obstructions: [CGRect] = []
+        var trail: RangeTrailState?
+        var reduceMotion = false
     }
 
     private enum Clock {
@@ -221,6 +230,8 @@ final class RangeCanvasPlayer: ObservableObject {
         /// Plan F8a2p: the ground's haze overlay and one soft mowing stripe.
         let hazeGradient: Gradient
         let stripeGradient: Gradient
+        /// Plan F8a2t: the shot trail's layers, in drawing order.
+        let trailLayers: [TrailLayer<CGPathSink>]
         let colors: Palette
 
         init(frame: RangeFrame<CGPathSink>, style: RangeVisualStyle) {
@@ -235,6 +246,7 @@ final class RangeCanvasPlayer: ObservableObject {
             sunGlow = style.sun.glow.gradient
             hazeGradient = style.haze.overlayStops.gradient
             stripeGradient = style.stripeGradient.gradient
+            trailLayers = frame.trail.layers
             colors = Palette(
                 ground: style.ground.swiftUI,
                 fairway: style.fairway.swiftUI,
@@ -400,6 +412,7 @@ final class RangeCanvasPlayer: ObservableObject {
         }
         updateFrameInputs(inputs)
         updateObstructions(inputs.obstructions, scale: scale)
+        if let trail = inputs.trail { frame.setTrail(state: trail, staticEffects: inputs.reduceMotion) }
 
         let pose = inputs.view.isIdentity
             ? rig.pose(
@@ -410,7 +423,7 @@ final class RangeCanvasPlayer: ObservableObject {
             )
             // Plan F8a: the follow camera is suspended while the user has moved the view.
             : inputs.view.applyTo(base: rig.fixedPose)
-        guard frame.prepare(pose: pose, progress: Float(progress)) else { return }
+        guard frame.prepare(pose: pose, progress: Float(progress), landedSeconds: Float(landedSeconds)) else { return }
 
         // Everything but the labels is drawn in device pixels, like the shared geometry.
         var pixels = context
@@ -428,6 +441,8 @@ final class RangeCanvasPlayer: ObservableObject {
         if overlay != nil || !landingMarkers.isEmpty { scheduleLandingMarkers(scale: scale) }
         if frame.geometry == nil {
             if overlay != nil { drawRollOut(pixels, context, rollOut: inputs.rollOut, scale: scale) }
+            // Plan F8a2t: the kept earlier trails stay while no flight is shown.
+            drawTrail(pixels)
         } else {
             if progress >= 1 {
                 drawLanding(pixels)
@@ -716,15 +731,25 @@ final class RangeCanvasPlayer: ObservableObject {
                 with: .color(scene.colors.shadow)
             )
         }
+        drawTrail(context)
         let tracer = frame.tracer
-        // Plan F8a2a: the soft glow under the tracer's core.
-        if let path = tracer.glow?.cgPath { context.fill(Path(path), with: .color(scene.colors.tracerGlow)) }
-        if let path = tracer.path.cgPath { context.fill(Path(path), with: .color(scene.colors.tracer)) }
         if !tracer.tipX.isNaN {
             context.fill(
                 circle(x: tracer.tipX, y: tracer.tipY, radius: CGFloat(frame.ballRadius)),
                 with: .color(scene.colors.ball)
             )
+        }
+    }
+
+    /// Plan F8a2t: every visible layer of the shot trail in order (the kept earlier trails, the
+    /// landing effect, then the style's outlines), in its packed colour or its club palette colour.
+    private func drawTrail(_ context: GraphicsContext) {
+        for layer in scene.trailLayers where layer.visible {
+            guard let path = layer.path.cgPath else { continue }
+            let color = layer.paletteIndex >= 0
+                ? Theme.clubColor(Int(layer.paletteIndex)).opacity(Double(UInt32(bitPattern: layer.argb) >> 24) / 255)
+                : Color(argb: layer.argb)
+            context.fill(Path(path), with: .color(color))
         }
     }
 

@@ -119,10 +119,16 @@ class SettingsViewModel(
             ::BaseState,
         )
 
+    // Plan F8a2t: the shot trail picker.
+    private val shotTrail =
+        combine(settings.shotTrail, settings.shotTrailKeepLast, settings.landingEffect) { style, keepLast, effect ->
+            ShotTrailUiState(selected = style, keepLast = keepLast, landingEffect = effect)
+        }
+
     val uiState: StateFlow<SettingsUiState> =
-        combine(baseState, callout, settings.rangeTheme) { base, calloutState, theme ->
+        combine(baseState, callout, settings.rangeTheme, shotTrail) { base, calloutState, theme, trail ->
             buildState(base.phone, base.link, base.device, base.radar, base.phase, calloutState)
-                .copy(rangeTheme = RangeThemeUiState(selected = theme))
+                .copy(rangeTheme = RangeThemeUiState(selected = theme), shotTrail = trail)
         }.stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
@@ -213,6 +219,18 @@ class SettingsViewModel(
 
             is SettingsEvent.SetRangeTheme -> {
                 viewModelScope.launch { settings.setRangeTheme(event.theme) }
+            }
+
+            is SettingsEvent.SetShotTrail -> {
+                viewModelScope.launch { settings.setShotTrail(event.style) }
+            }
+
+            is SettingsEvent.SetShotTrailKeepLast -> {
+                viewModelScope.launch { settings.setShotTrailKeepLast(event.count) }
+            }
+
+            is SettingsEvent.SetLandingEffect -> {
+                viewModelScope.launch { settings.setLandingEffect(event.effect) }
             }
         }
     }

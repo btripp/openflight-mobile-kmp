@@ -14,12 +14,17 @@ import kotlin.math.sqrt
  * wide; the platform fills it with [RangeVisualStyle.tracerGlow] under the core, the broadcast
  * look of a bright line in a soft halo.
  *
+ * Plan F8a2t: with a [painter], each visible run (its points, widths, sample positions and
+ * normals, [TracerRun]) goes to the painter instead of [path] and [glow], which then stay untouched;
+ * [ShotTrail] paints its styles that way.
+ *
  * [build] rewrites the same paths and scratch arrays every frame; it allocates nothing.
  */
 class TracerRibbon<P : PathSink>(
     val path: P,
     val glow: P? = null,
     private val glowWidthFactor: Float = 1f,
+    private val painter: TracerRunPainter? = null,
 ) {
     /** The tracer's tip, where the ball is drawn; NaN when it is behind the camera. */
     var tipX = Float.NaN
@@ -27,23 +32,12 @@ class TracerRibbon<P : PathSink>(
     var tipY = Float.NaN
         private set
 
-    private var runX = FloatArray(0)
-    private var runY = FloatArray(0)
-    private var runWidth = FloatArray(0)
-    private var normalX = FloatArray(0)
-    private var normalY = FloatArray(0)
-    private var runLength = 0
+    private val run = TracerRun()
     private val point = FloatArray(2)
 
     /** Sizes the scratch arrays for a flight of [segments] segments (plus the near-plane crossings). */
     fun ensureCapacity(segments: Int) {
-        val capacity = segments + EXTRA_POINTS
-        if (runX.size >= capacity) return
-        runX = FloatArray(capacity)
-        runY = FloatArray(capacity)
-        runWidth = FloatArray(capacity)
-        normalX = FloatArray(capacity)
-        normalY = FloatArray(capacity)
+        run.ensureCapacity(segments + EXTRA_POINTS)
     }
 
     /** The tracer from the tee up to [at], a fractional sample index of [geometry]. */
@@ -51,9 +45,11 @@ class TracerRibbon<P : PathSink>(
         geometry: FlightGeometry,
         at: Float,
     ) {
-        path.rewind()
-        glow?.rewind()
-        runLength = 0
+        if (painter == null) {
+            path.rewind()
+            glow?.rewind()
+        }
+        run.size = 0
         val whole = at.toInt().coerceIn(0, geometry.segments)
         val fraction = (at - whole).toDouble()
         for (index in 0 until whole) visitSegment(geometry, index, 1.0)
@@ -100,7 +96,9 @@ class TracerRibbon<P : PathSink>(
         val endWidth =
             geometry.tracerWidths[index] +
                 (geometry.tracerWidths[next] - geometry.tracerWidths[index]) * fraction.toFloat()
-        if (startVisible && runLength == 0) add(geometry.xs[index], geometry.ys[index], geometry.tracerWidths[index])
+        if (startVisible && run.size == 0) {
+            run.add(geometry.xs[index], geometry.ys[index], geometry.tracerWidths[index], index.toFloat())
+        }
         when {
             startVisible && endVisible -> {
                 addEnd(geometry, index, fraction, endWidth)
@@ -108,14 +106,14 @@ class TracerRibbon<P : PathSink>(
 
             startVisible -> {
                 if (geometry.projectBetween(index, FlightGeometry.NEAR_PLANE_CROSSING, point)) {
-                    add(point[0], point[1], geometry.tracerWidths[index])
+                    run.add(point[0], point[1], geometry.tracerWidths[index], index + geometry.nearCrossing(index))
                 }
                 flush()
             }
 
             endVisible -> {
                 if (geometry.projectBetween(index, FlightGeometry.NEAR_PLANE_CROSSING, point)) {
-                    add(point[0], point[1], endWidth)
+                    run.add(point[0], point[1], endWidth, index + geometry.nearCrossing(index))
                 }
                 addEnd(geometry, index, fraction, endWidth)
             }
@@ -129,71 +127,139 @@ class TracerRibbon<P : PathSink>(
         endWidth: Float,
     ) {
         if (fraction >= 1.0) {
-            add(geometry.xs[index + 1], geometry.ys[index + 1], geometry.tracerWidths[index + 1])
+            run.add(geometry.xs[index + 1], geometry.ys[index + 1], geometry.tracerWidths[index + 1], index + 1f)
         } else if (geometry.projectBetween(index, fraction, point)) {
-            add(point[0], point[1], endWidth)
+            run.add(point[0], point[1], endWidth, index + fraction.toFloat())
         }
     }
 
-    private fun add(
+    /** Hands the current run to the [painter], or appends it to [path] (and [glow]) as a closed ribbon. */
+    private fun flush() {
+        val n = run.size
+        if (n < 2) {
+            run.size = 0
+            return
+        }
+        run.computeNormals()
+        if (painter != null) {
+            painter.paint(run)
+        } else {
+            run.writeRibbon(path, 0, n - 1, 1f)
+            glow?.let { run.writeRibbon(it, 0, n - 1, glowWidthFactor) }
+        }
+        run.size = 0
+    }
+
+    private companion object {
+        /** Room for the near-plane crossing points and the fractional tip. */
+        const val EXTRA_POINTS = 3
+    }
+}
+
+/** Plan F8a2t: receives each visible run of a [TracerRibbon] (see [TracerRibbon.build]). */
+fun interface TracerRunPainter {
+    fun paint(run: TracerRun)
+}
+
+/**
+ * Plan F8a2t: one visible run of a tracer, in screen space: [size] points with their ribbon
+ * [widths] (pixels), their fractional sample [positions] in the flight ([FlightGeometry]'s index,
+ * so proportional to time), and unit [normalXs]/[normalYs] across the ribbon. Reused (rewritten in
+ * place) for every run and frame.
+ */
+class TracerRun {
+    var xs = FloatArray(0)
+        private set
+    var ys = FloatArray(0)
+        private set
+    var widths = FloatArray(0)
+        private set
+    var positions = FloatArray(0)
+        private set
+    var normalXs = FloatArray(0)
+        private set
+    var normalYs = FloatArray(0)
+        private set
+
+    /** Each point's width multiplier for [writeRibbon] (a taper, a twist); 1 unless a painter sets it. */
+    var widthFactors = FloatArray(0)
+        private set
+    var size = 0
+
+    val capacity: Int get() = xs.size
+
+    fun ensureCapacity(capacity: Int) {
+        if (xs.size >= capacity) return
+        xs = FloatArray(capacity)
+        ys = FloatArray(capacity)
+        widths = FloatArray(capacity)
+        positions = FloatArray(capacity)
+        normalXs = FloatArray(capacity)
+        normalYs = FloatArray(capacity)
+        widthFactors = FloatArray(capacity) { 1f }
+    }
+
+    /** Appends a point (ignored once full); its width factor starts at 1. */
+    fun add(
         x: Float,
         y: Float,
         width: Float,
+        position: Float,
     ) {
-        if (runLength >= runX.size) return
-        runX[runLength] = x
-        runY[runLength] = y
-        runWidth[runLength] = width
-        runLength++
+        if (size >= xs.size) return
+        xs[size] = x
+        ys[size] = y
+        widths[size] = width
+        positions[size] = position
+        widthFactors[size] = 1f
+        size++
     }
 
-    /** Appends the current run to [path] as a closed ribbon: one edge out, the other edge back. */
-    private fun flush() {
-        val n = runLength
-        runLength = 0
-        if (n < 2) return
+    /** Each point's unit normal from its neighbours' tangent (the last good one where points coincide). */
+    fun computeNormals() {
+        val n = size
         var lastNormalX = 0f
         var lastNormalY = -1f
         for (k in 0 until n) {
             val previous = if (k == 0) 0 else k - 1
             val following = if (k == n - 1) n - 1 else k + 1
-            val tangentX = runX[following] - runX[previous]
-            val tangentY = runY[following] - runY[previous]
+            val tangentX = xs[following] - xs[previous]
+            val tangentY = ys[following] - ys[previous]
             val length = sqrt(tangentX * tangentX + tangentY * tangentY)
             if (length > MIN_TANGENT_PIXELS) {
                 lastNormalX = -tangentY / length
                 lastNormalY = tangentX / length
             }
-            normalX[k] = lastNormalX
-            normalY[k] = lastNormalY
+            normalXs[k] = lastNormalX
+            normalYs[k] = lastNormalY
         }
-        writeRibbon(path, n, 1f)
-        glow?.let { writeRibbon(it, n, glowWidthFactor) }
     }
 
-    /** The run's [n] points as one closed ribbon in [sink], [widthFactor] times the sample widths. */
-    private fun writeRibbon(
-        sink: P,
-        n: Int,
+    /**
+     * Points [from]..[to] (inclusive) as one closed ribbon in [sink]: one edge out, the other back,
+     * [widthFactor] × each point's width × its [widthFactors]. Nothing for fewer than two points.
+     */
+    fun writeRibbon(
+        sink: PathSink,
+        from: Int,
+        to: Int,
         widthFactor: Float,
     ) {
-        for (k in 0 until n) {
-            val half = runWidth[k] * widthFactor / 2
-            val x = runX[k] + normalX[k] * half
-            val y = runY[k] + normalY[k] * half
-            if (k == 0) sink.moveTo(x, y) else sink.lineTo(x, y)
+        if (to <= from) return
+        for (k in from..to) {
+            val half = widths[k] * widthFactor * widthFactors[k] / 2
+            val x = xs[k] + normalXs[k] * half
+            val y = ys[k] + normalYs[k] * half
+            if (k == from) sink.moveTo(x, y) else sink.lineTo(x, y)
         }
-        for (k in n - 1 downTo 0) {
-            val half = runWidth[k] * widthFactor / 2
-            sink.lineTo(runX[k] - normalX[k] * half, runY[k] - normalY[k] * half)
+        for (k in to downTo from) {
+            val half = widths[k] * widthFactor * widthFactors[k] / 2
+            sink.lineTo(xs[k] - normalXs[k] * half, ys[k] - normalYs[k] * half)
         }
         sink.close()
     }
 
     private companion object {
         const val MIN_TANGENT_PIXELS = 0.01f
-
-        /** Room for the near-plane crossing points and the fractional tip. */
-        const val EXTRA_POINTS = 3
     }
 }
