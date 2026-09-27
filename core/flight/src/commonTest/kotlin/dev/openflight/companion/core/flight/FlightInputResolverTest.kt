@@ -8,7 +8,11 @@ import assertk.assertions.isTrue
 import kotlin.test.Test
 import kotlin.test.assertFailsWith
 
-/** Ported one-to-one from `ios/OpenFlightTests/FlightInputResolverTests.swift`. */
+/**
+ * Ported from `ios/OpenFlightTests/FlightInputResolverTests.swift`. Plan F2b moved the per-club
+ * defaults onto the backend's `CLUB_PHYSICS` (with its launch-per-mph speed term), so the default
+ * values below are the backend's, not the reference's.
+ */
 class FlightInputResolverTest {
     private val resolver = FlightInputResolver()
 
@@ -36,9 +40,10 @@ class FlightInputResolverTest {
                 ),
             )
 
-        assertThat(input.launchAngleDegrees).isEqualTo(12.0)
+        // CLUB_PHYSICS driver: 11° at 143 mph, −0.15°/mph, so 151.4 mph → 9.7°. Tour spin 2700.
+        assertThat(input.launchAngleDegrees).isEqualTo(9.7)
         assertThat(input.horizontalLaunchDegrees).isEqualTo(0.0)
-        assertThat(input.spinRpm).isEqualTo(2_500.0)
+        assertThat(input.spinRpm).isEqualTo(2_700.0)
         assertThat(input.spinAxisDegrees).isEqualTo(0.0)
         assertThat(input.provenance.estimatedParameters).isEqualTo(FlightParameter.entries.toSet())
         assertThat(input.provenance.usesEstimatedFlight).isTrue()
@@ -46,23 +51,47 @@ class FlightInputResolverTest {
 
     @Test
     fun clubDefaultTableCoversEveryClubFamily() {
+        // (club, the backend's average ball speed, so launch = the optimal launch) → CLUB_PHYSICS.
         val cases =
             listOf(
-                Triple("3-wood", 15.0, 3_500.0),
-                Triple("5_hybrid", 18.0, 4_200.0),
-                Triple("iron_3", 17.0, 4_500.0),
-                Triple("7-iron", 21.0, 5_500.0),
-                Triple("iron_9", 26.0, 7_000.0),
-                Triple("sw", 31.0, 8_500.0),
-                Triple("unknown", 18.0, 4_500.0),
+                ClubDefault("3-wood", 135.0, 12.5, 3_500.0),
+                ClubDefault("5_hybrid", 118.0, 15.0, 4_900.0),
+                ClubDefault("iron_3", 118.0, 14.5, 4_500.0),
+                ClubDefault("7-iron", 100.0, 20.5, 6_500.0),
+                ClubDefault("iron_9", 88.0, 25.5, 8_500.0),
+                ClubDefault("PW", 82.0, 28.0, 9_000.0),
+                ClubDefault("sw", 73.0, 32.0, 10_000.0),
+                ClubDefault("unknown", 120.0, 18.0, 5_000.0),
             )
 
-        for ((club, expectedLaunch, expectedSpin) in cases) {
-            val input = resolver.resolve(makeDrivingRangeShot(club = club, launchAngle = null, spinRpm = null))
-            assertThat(input.launchAngleDegrees, club).isEqualTo(expectedLaunch)
-            assertThat(input.spinRpm, club).isEqualTo(expectedSpin)
+        for (case in cases) {
+            val shot =
+                makeDrivingRangeShot(club = case.club, ballSpeedMph = case.speed, launchAngle = null, spinRpm = null)
+            val input = resolver.resolve(shot)
+            assertThat(input.launchAngleDegrees, case.club).isEqualTo(case.launch)
+            assertThat(input.spinRpm, case.club).isEqualTo(case.spin)
         }
     }
+
+    @Test
+    fun defaultLaunchRisesForSlowerShotsAndFallsForFasterOnesLikeTheBackend() {
+        fun launch(speed: Double) =
+            resolver
+                .resolve(makeDrivingRangeShot(club = "7-iron", ballSpeedMph = speed, launchAngle = null))
+                .launchAngleDegrees
+
+        // 7-iron: 20.5° at 100 mph, 0.30°/mph (server.py estimate_launch_angle), never below 5°.
+        assertThat(launch(90.0)).isEqualTo(23.5)
+        assertThat(launch(110.0)).isEqualTo(17.5)
+        assertThat(launch(200.0)).isEqualTo(5.0)
+    }
+
+    private data class ClubDefault(
+        val club: String,
+        val speed: Double,
+        val launch: Double,
+        val spin: Double,
+    )
 
     @Test
     fun extremeMeasurementsAreClampedAndRecorded() {
@@ -88,8 +117,8 @@ class FlightInputResolverTest {
         val input =
             resolver.resolve(makeDrivingRangeShot(launchAngle = Double.NaN, spinRpm = Double.POSITIVE_INFINITY))
 
-        assertThat(input.launchAngleDegrees).isEqualTo(12.0)
-        assertThat(input.spinRpm).isEqualTo(2_500.0)
+        assertThat(input.launchAngleDegrees).isEqualTo(9.7)
+        assertThat(input.spinRpm).isEqualTo(2_700.0)
         assertThat(input.provenance.estimatedParameters)
             .isEqualTo(setOf(FlightParameter.LAUNCH_ANGLE, FlightParameter.SPIN_RATE))
     }

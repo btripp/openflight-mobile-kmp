@@ -2,16 +2,32 @@
 package dev.openflight.companion.core.flight
 
 import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.exp
 import kotlin.math.sin
 
 /**
- * RK4 ball-flight integrator, ported from `ios/OpenFlight/DrivingRange/BallFlightSimulator.swift`.
- * Every physical constant below is copied verbatim from the reference.
+ * RK4 ball-flight integrator, ported from `ios/OpenFlight/DrivingRange/BallFlightSimulator.swift`
+ * and moved onto the backend's aerodynamics by plan F2b.
+ *
+ * The default [Configuration.render] uses the Ferguson, McNally & McPhee (2022) Cd/Cl polynomials
+ * with 0.04/s spin decay, the model behind the server's `carry_spin_adjusted`. Unconstrained, it
+ * reproduces the TrackMan 2009 PGA Tour averages to about 2.6 % RMS carry and 1.3 yd RMS apex
+ * (`TrackManTourGoldenTest`). The reference renderer's constant-Cd, linear-lift model
+ * ([Configuration.standard]) under-lifts a driver about threefold (a 13 yd apex vs TrackMan's 31)
+ * and is kept only for the ported reference tests.
+ *
+ * **Curve.** The spin axis tilts the Magnus force sideways. Without a spin axis the resolver flies
+ * axis 0, so the ball stays on its start line (set by the horizontal launch angle) and no curve is
+ * invented. Note that the server derives `spin_axis_deg = HLA − club path` (`server.py:3051` at
+ * 7ca4b40). By D-plane geometry the true tilt is about `atan(sin(face − path) / tan(spin loft))`,
+ * while `HLA − path ≈ k·(face − path)` with k ≈ 0.85 (driver) to 0.75 (irons). So the wire axis
+ * understates the curve roughly 4–5× for a driver and 2–3× for mid irons. That is an upstream
+ * backend issue to raise; the app draws the axis the wire reports rather than inflating it.
  */
 class BallFlightSimulator(
-    private val configuration: Configuration = Configuration.standard,
+    private val configuration: Configuration = Configuration.render,
 ) {
     /**
      * How drag and lift coefficients are computed.
@@ -30,14 +46,37 @@ class BallFlightSimulator(
     }
 
     /**
-     * Tunable physics knobs, ported from `BallFlightSimulator.Configuration`. [standard] mirrors
-     * OpenFlight air; [vacuum] strips out drag and lift, used as an independent closed-form
-     * oracle in tests. [conditions] is the backend-equivalent air the conditions adjustment uses
-     * (plan F2); the renderer keeps [standard].
+     * How a flight is made to land at [FlightInput.targetCarryMeters].
+     * - [NONE]: the unconstrained flight.
+     * - [SCALE]: the reference's uniform x/z rescale of the whole trajectory. It keeps the apex and
+     *   hang time but changes tan(landing angle) by 1/k, so it isn't a solution of the equations of
+     *   motion. Only [Configuration.standard] uses it.
+     * - [DRAG_FIT]: fit one drag scale k (Cd × k), clamped to [DRAG_SCALE_MIN] .. [DRAG_SCALE_MAX],
+     *   until the carry is within [CARRY_FIT_TOLERANCE_METERS] of the target, then close any
+     *   residual (a clamped k, or the last few centimetres) with a uniform x/z scale. Carry falls
+     *   monotonically and smoothly as drag rises, so a secant search converges in two or three
+     *   extra runs (bisection took about ten, too slow for 200 overlay shots on a phone); it keeps the
+     *   measured launch angle, horizontal launch and spin exactly. k stands in for what isn't
+     *   measured (the ball model, the air, the table carry's error) and is recorded in
+     *   [FlightTrajectory.carryFit].
+     */
+    enum class CarryConstraint {
+        NONE,
+        SCALE,
+        DRAG_FIT,
+    }
+
+    /**
+     * Tunable physics knobs, ported from `BallFlightSimulator.Configuration`.
+     * - [render]: every drawn and measured flight (plan F2b).
+     * - [conditions]: the same air and aerodynamics, unconstrained and without resampled frames,
+     *   for [ConditionsAdjuster].
+     * - [standard]: the reference renderer's model.
+     * - [vacuum]: no drag or lift, an independent closed-form oracle in tests.
      *
      * [spinDecayPerSecond] is an exponential spin decay, ω(t) = ω₀·e^(−rate·t), applied between
-     * integration steps as the backend does (about 4 %/s, Kiratidis & Leinweber 2018). It is 0
-     * (off) by default, so the renderer's flight is unchanged.
+     * integration steps as the backend does (about 4 %/s, Kiratidis & Leinweber 2018; within
+     * 0.4 yd of Smits & Smith's speed-dependent law).
      */
     data class Configuration(
         val timeStep: Double = DEFAULT_TIME_STEP,
@@ -47,7 +86,7 @@ class BallFlightSimulator(
         val dragCoefficient: Double = DEFAULT_DRAG_COEFFICIENT,
         val liftSlope: Double = DEFAULT_LIFT_SLOPE,
         val maximumLiftCoefficient: Double = DEFAULT_MAXIMUM_LIFT_COEFFICIENT,
-        val constrainToTargetCarry: Boolean = true,
+        val carryConstraint: CarryConstraint = CarryConstraint.SCALE,
         val aerodynamics: Aerodynamics = Aerodynamics.CONSTANT_DRAG_LINEAR_LIFT,
         val spinDecayPerSecond: Double = 0.0,
     ) {
@@ -63,18 +102,20 @@ class BallFlightSimulator(
             private const val BACKEND_GRAVITY = 9.81
             private const val BACKEND_SPIN_DECAY_PER_SECOND = 0.04
 
+            /** The reference renderer's model: constant Cd 0.24, linear lift, ρ 1.204, x/z rescale. */
             val standard = Configuration()
 
             /**
              * Backend-equivalent air for conditions adjustments: g = 9.81,
-             * [AirDensity.ISA_SEA_LEVEL] (the server's carry assumes 1.225, `ballistics.py:39`;
-             * the renderer's 1.204 is the reference app's warmer air), the Ferguson polynomial
-             * aerodynamics, 0.04/s spin decay and no rescaling to the server's carry.
+             * [AirDensity.ISA_SEA_LEVEL] (the server's carry assumes 1.225, `ballistics.py:39`; the
+             * reference renderer's 1.204 was warmer air), the Ferguson polynomial aerodynamics,
+             * 0.04/s spin decay and no carry constraint.
              *
-             * It steps at 100 Hz, not the backend's 500 Hz: in the backend's own simulator that
-             * moves carry and the mile-high density ratio by under 0.01 % for driver, 7-iron and
-             * PW, and it is five times cheaper (two runs per shot, on phones). No frames are
-             * resampled ([outputFramesPerSecond] 0); callers only read the landing.
+             * It steps at 100 Hz, not the backend's 500 Hz: in the backend's own simulator that moves
+             * carry and the mile-high density ratio by under 0.01 % for driver, 7-iron and PW, and it
+             * is five times cheaper. No frames are resampled ([outputFramesPerSecond] 0), so a
+             * conditions run keeps every integration step and [BallFlightSimulator.fitToCarry] can
+             * reuse it.
              */
             val conditions =
                 Configuration(
@@ -82,9 +123,20 @@ class BallFlightSimulator(
                     outputFramesPerSecond = 0.0,
                     gravity = BACKEND_GRAVITY,
                     airDensity = AirDensity.ISA_SEA_LEVEL,
-                    constrainToTargetCarry = false,
+                    carryConstraint = CarryConstraint.NONE,
                     aerodynamics = Aerodynamics.SPIN_PARAMETER_POLYNOMIAL,
                     spinDecayPerSecond = BACKEND_SPIN_DECAY_PER_SECOND,
+                )
+
+            /**
+             * Plan F2b: every drawn and measured flight. The physics of [conditions] (so a
+             * conditions run is a valid k = 1 start for the fit), resampled at 60 fps and
+             * drag-fitted to the target carry. Callers set [airDensity] from the conditions.
+             */
+            val render =
+                conditions.copy(
+                    outputFramesPerSecond = DEFAULT_OUTPUT_FRAMES_PER_SECOND,
+                    carryConstraint = CarryConstraint.DRAG_FIT,
                 )
 
             val vacuum =
@@ -93,10 +145,25 @@ class BallFlightSimulator(
                     dragCoefficient = 0.0,
                     liftSlope = 0.0,
                     maximumLiftCoefficient = 0.0,
-                    constrainToTargetCarry = false,
+                    carryConstraint = CarryConstraint.NONE,
                 )
         }
     }
+
+    /** The raw integrated flight (every step plus the interpolated landing) and its landing spin. */
+    private class Run(
+        val points: List<FlightPoint>,
+        val landingSpinRpm: Double,
+    ) {
+        val carryMeters: Double get() = points.last().positionMeters.z
+    }
+
+    /** A constrained flight before resampling. */
+    private class Constrained(
+        val points: List<FlightPoint>,
+        val landingSpinRpm: Double,
+        val carryFit: CarryFit?,
+    )
 
     private data class State(
         val position: Vec3,
@@ -108,7 +175,104 @@ class BallFlightSimulator(
         val velocity: Vec3,
     )
 
-    fun simulate(input: FlightInput): FlightTrajectory {
+    fun simulate(input: FlightInput): FlightTrajectory = finish(input, integrate(input, dragScale = 1.0))
+
+    /**
+     * [simulate] for an [unconstrained] flight of the same [input] that the caller already has (for
+     * example [ConditionsAdjuster]'s conditions run), so the k = 1 run isn't integrated twice.
+     * [unconstrained] must come from a configuration with this one's physics (time step, gravity,
+     * air density, aerodynamics, spin decay) and no resampling, such as [Configuration.conditions]
+     * at the same density.
+     */
+    fun fitToCarry(
+        input: FlightInput,
+        unconstrained: FlightTrajectory,
+    ): FlightTrajectory {
+        if (unconstrained.points.size < 2) return simulate(input)
+        return finish(input, Run(unconstrained.points, unconstrained.landingSpinRpm ?: input.spinRpm))
+    }
+
+    private fun finish(
+        input: FlightInput,
+        run: Run,
+    ): FlightTrajectory {
+        val constrained = constrain(input, run)
+        return FlightTrajectory(
+            eventId = input.eventId,
+            points = resample(constrained.points, configuration.outputFramesPerSecond),
+            provenance = input.provenance,
+            landingSpinRpm = constrained.landingSpinRpm,
+            carryFit = constrained.carryFit,
+        )
+    }
+
+    private fun constrain(
+        input: FlightInput,
+        run: Run,
+    ): Constrained {
+        val target = input.targetCarryMeters
+        val constrainable = run.carryMeters > MINIMUM_CARRY_FOR_SCALING_METERS && target > 0
+        return when {
+            !constrainable || configuration.carryConstraint == CarryConstraint.NONE -> {
+                Constrained(run.points, run.landingSpinRpm, carryFit = null)
+            }
+
+            configuration.carryConstraint == CarryConstraint.SCALE -> {
+                val factor = target / run.carryMeters
+                Constrained(run.points.map { scalePoint(it, factor) }, run.landingSpinRpm, CarryFit(1.0, factor))
+            }
+
+            else -> {
+                dragFit(input, run)
+            }
+        }
+    }
+
+    /** [CarryConstraint.DRAG_FIT]: search k until the carry is within tolerance, then scale out the residual. */
+    private fun dragFit(
+        input: FlightInput,
+        unit: Run,
+    ): Constrained {
+        val target = input.targetCarryMeters
+        var best = unit
+        var bestScale = 1.0
+        var previous = unit
+        var previousScale = 1.0
+        var iteration = 0
+        while (abs(best.carryMeters - target) > CARRY_FIT_TOLERANCE_METERS && iteration < MAXIMUM_FIT_ITERATIONS) {
+            // More drag, less carry. Secant on the carry-vs-k curve (monotone and smooth); the first
+            // step, and any non-decreasing slope, uses the typical relative slope instead. At a
+            // clamp that still can't reach the target the next k equals this one, so the loop stops.
+            val slope =
+                if (best !== previous && bestScale != previousScale) {
+                    (best.carryMeters - previous.carryMeters) / (bestScale - previousScale)
+                } else {
+                    0.0
+                }
+            val step =
+                if (slope < 0) {
+                    (target - best.carryMeters) / slope
+                } else {
+                    (best.carryMeters - target) / (TYPICAL_RELATIVE_CARRY_SLOPE * best.carryMeters)
+                }
+            val next = (bestScale + step).coerceIn(DRAG_SCALE_MIN, DRAG_SCALE_MAX)
+            if (next == bestScale) break
+            previous = best
+            previousScale = bestScale
+            best = integrate(input, next)
+            bestScale = next
+            iteration++
+        }
+        val residual = target / best.carryMeters
+        val points = if (residual == 1.0) best.points else best.points.map { scalePoint(it, residual) }
+        return Constrained(points, best.landingSpinRpm, CarryFit(dragScale = bestScale, residualScale = residual))
+    }
+
+    /** RK4 from the tee to the interpolated landing, with Cd × [dragScale]. */
+    private fun integrate(
+        input: FlightInput,
+        dragScale: Double,
+    ): Run {
         val vertical = input.launchAngleDegrees * DEGREES_TO_RADIANS
         val horizontal = input.horizontalLaunchDegrees * DEGREES_TO_RADIANS
         val horizontalSpeed = input.ballSpeedMetersPerSecond * cos(vertical)
@@ -135,7 +299,7 @@ class BallFlightSimulator(
             val previous = state
             val previousTime = time
             val previousSpinRpm = spinRpm
-            state = rk4(state, input, spinRpm, configuration.timeStep)
+            state = rk4(state, input, spinRpm, dragScale, configuration.timeStep)
             time += configuration.timeStep
             spinRpm *= spinDecayPerStep
 
@@ -160,21 +324,14 @@ class BallFlightSimulator(
                 FlightPoint(time = time, positionMeters = state.position, velocityMetersPerSecond = state.velocity),
             )
         }
-
-        val constrained = constrain(integrated, input.targetCarryMeters)
-        val compact = resample(constrained)
-        return FlightTrajectory(
-            eventId = input.eventId,
-            points = compact,
-            provenance = input.provenance,
-            landingSpinRpm = spinRpm,
-        )
+        return Run(integrated, spinRpm)
     }
 
     private fun acceleration(
         state: State,
         input: FlightInput,
         spinRpm: Double,
+        dragScale: Double,
     ): Vec3 {
         val relativeVelocity = state.velocity - input.windMetersPerSecond
         val speed = relativeVelocity.length()
@@ -186,7 +343,7 @@ class BallFlightSimulator(
         val aerodynamicScale = AERODYNAMIC_SCALE_FACTOR * configuration.airDensity * area / BALL_MASS_KILOGRAMS
         val spinRadiansPerSecond = spinRpm * RPM_TO_RADIANS_PER_SECOND
         val spinParameter = spinRadiansPerSecond * BALL_RADIUS_METERS / speed
-        val dragCoefficient = configuration.dragCoefficientAt(spinParameter)
+        val dragCoefficient = configuration.dragCoefficientAt(spinParameter) * dragScale
         val liftCoefficient = configuration.liftCoefficientAt(spinParameter)
         val drag = relativeVelocity * (-aerodynamicScale * dragCoefficient * speed)
 
@@ -213,12 +370,13 @@ class BallFlightSimulator(
         state: State,
         input: FlightInput,
         spinRpm: Double,
+        dragScale: Double,
         step: Double,
     ): State {
-        val first = derivative(state, input, spinRpm)
-        val second = derivative(offset(state, first, step / RK4_HALF_STEP_DIVISOR), input, spinRpm)
-        val third = derivative(offset(state, second, step / RK4_HALF_STEP_DIVISOR), input, spinRpm)
-        val fourth = derivative(offset(state, third, step), input, spinRpm)
+        val first = derivative(state, input, spinRpm, dragScale)
+        val second = derivative(offset(state, first, step / RK4_HALF_STEP_DIVISOR), input, spinRpm, dragScale)
+        val third = derivative(offset(state, second, step / RK4_HALF_STEP_DIVISOR), input, spinRpm, dragScale)
+        val fourth = derivative(offset(state, third, step), input, spinRpm, dragScale)
 
         return State(
             position =
@@ -240,7 +398,8 @@ class BallFlightSimulator(
         state: State,
         input: FlightInput,
         spinRpm: Double,
-    ): Derivative = Derivative(position = state.velocity, velocity = acceleration(state, input, spinRpm))
+        dragScale: Double,
+    ): Derivative = Derivative(position = state.velocity, velocity = acceleration(state, input, spinRpm, dragScale))
 
     private fun offset(
         state: State,
@@ -252,89 +411,90 @@ class BallFlightSimulator(
             velocity = state.velocity + derivative.velocity * scale,
         )
 
-    private fun constrain(
-        points: List<FlightPoint>,
-        targetCarry: Double,
-    ): List<FlightPoint> {
-        val rawCarry = points.lastOrNull()?.positionMeters?.z ?: return points
-        return if (canConstrainCarry(rawCarry, targetCarry)) {
-            val scaleFactor = targetCarry / rawCarry
-            points.map { point -> scalePoint(point, scaleFactor) }
-        } else {
-            points
-        }
-    }
+    companion object {
+        /** The drag fit's bracket (plan F2b); a residual beyond it is closed by scaling. */
+        const val DRAG_SCALE_MIN = 0.8
+        const val DRAG_SCALE_MAX = 1.25
 
-    private fun canConstrainCarry(
-        rawCarry: Double,
-        targetCarry: Double,
-    ): Boolean = configuration.constrainToTargetCarry && rawCarry > MINIMUM_CARRY_FOR_SCALING_METERS && targetCarry > 0
+        /** The drag fit stops within 0.1 yd of the target carry. */
+        const val CARRY_FIT_TOLERANCE_METERS = 0.1 * 0.9144
 
-    private fun scalePoint(
-        point: FlightPoint,
-        factor: Double,
-    ): FlightPoint =
-        FlightPoint(
-            time = point.time,
-            positionMeters =
-                Vec3(point.positionMeters.x * factor, point.positionMeters.y, point.positionMeters.z * factor),
-            velocityMetersPerSecond =
-                Vec3(
-                    point.velocityMetersPerSecond.x * factor,
-                    point.velocityMetersPerSecond.y,
-                    point.velocityMetersPerSecond.z * factor,
-                ),
-        )
+        private const val MAXIMUM_FIT_ITERATIONS = 20
 
-    private fun resample(points: List<FlightPoint>): List<FlightPoint> {
-        val last = points.lastOrNull()
-        if (last == null || points.size <= 1 || configuration.outputFramesPerSecond <= 0) {
-            return points
-        }
-        val interval = 1.0 / configuration.outputFramesPerSecond
-        val result = mutableListOf<FlightPoint>()
-        var sourceIndex = 0
-        var time = 0.0
-
-        while (time < last.time) {
-            while (sourceIndex + 1 < points.size && points[sourceIndex + 1].time < time) {
-                sourceIndex += 1
-            }
-            val start = points[sourceIndex]
-            val end = points[minOf(sourceIndex + 1, points.size - 1)]
-            val span = end.time - start.time
-            val progress = if (span > 0) (time - start.time) / span else 0.0
-            result.add(
-                FlightPoint(
-                    time = time,
-                    positionMeters = start.positionMeters + (end.positionMeters - start.positionMeters) * progress,
-                    velocityMetersPerSecond =
-                        start.velocityMetersPerSecond +
-                            (end.velocityMetersPerSecond - start.velocityMetersPerSecond) * progress,
-                ),
-            )
-            time += interval
-        }
-        result.add(last)
-        return result
-    }
-
-    private companion object {
-        const val BALL_MASS_KILOGRAMS = 0.04593
-        const val BALL_RADIUS_METERS = 0.02135
-        const val MAXIMUM_FLIGHT_TIME_SECONDS = 20.0
-        const val DEGREES_TO_RADIANS = PI / 180.0
-        const val RPM_TO_RADIANS_PER_SECOND = 2.0 * PI / 60.0
-        const val AERODYNAMIC_SCALE_FACTOR = 0.5
-        const val MINIMUM_SPEED_FOR_AERODYNAMICS = 0.01
-        const val MINIMUM_LIFT_DIRECTION_LENGTH = 0.0001
-        const val MINIMUM_CARRY_FOR_SCALING_METERS = 0.5
-        const val LANDING_GUARD_STEP_COUNT = 2
-        const val RK4_HALF_STEP_DIVISOR = 2.0
-        const val RK4_MIDDLE_WEIGHT = 2.0
-        const val RK4_WEIGHT_DIVISOR = 6.0
+        /**
+         * −d(carry)/dk ÷ carry near k = 1: +16 % drag costs a driver about 10 % carry and −14 %
+         * gains a 7-iron about 10 % (the research runs behind plan F2b), so about 0.62.
+         */
+        private const val TYPICAL_RELATIVE_CARRY_SLOPE = 0.62
+        private const val BALL_MASS_KILOGRAMS = 0.04593
+        private const val BALL_RADIUS_METERS = 0.02135
+        private const val MAXIMUM_FLIGHT_TIME_SECONDS = 20.0
+        private const val DEGREES_TO_RADIANS = PI / 180.0
+        private const val RPM_TO_RADIANS_PER_SECOND = 2.0 * PI / 60.0
+        private const val AERODYNAMIC_SCALE_FACTOR = 0.5
+        private const val MINIMUM_SPEED_FOR_AERODYNAMICS = 0.01
+        private const val MINIMUM_LIFT_DIRECTION_LENGTH = 0.0001
+        private const val MINIMUM_CARRY_FOR_SCALING_METERS = 0.5
+        private const val LANDING_GUARD_STEP_COUNT = 2
+        private const val RK4_HALF_STEP_DIVISOR = 2.0
+        private const val RK4_MIDDLE_WEIGHT = 2.0
+        private const val RK4_WEIGHT_DIVISOR = 6.0
     }
 }
+
+/** [points] linearly resampled at [framesPerSecond], keeping the exact landing; as-is at 0. */
+private fun resample(
+    points: List<FlightPoint>,
+    framesPerSecond: Double,
+): List<FlightPoint> {
+    val last = points.lastOrNull()
+    if (last == null || points.size <= 1 || framesPerSecond <= 0) {
+        return points
+    }
+    val interval = 1.0 / framesPerSecond
+    val result = mutableListOf<FlightPoint>()
+    var sourceIndex = 0
+    var time = 0.0
+
+    while (time < last.time) {
+        while (sourceIndex + 1 < points.size && points[sourceIndex + 1].time < time) {
+            sourceIndex += 1
+        }
+        val start = points[sourceIndex]
+        val end = points[minOf(sourceIndex + 1, points.size - 1)]
+        val span = end.time - start.time
+        val progress = if (span > 0) (time - start.time) / span else 0.0
+        result.add(
+            FlightPoint(
+                time = time,
+                positionMeters = start.positionMeters + (end.positionMeters - start.positionMeters) * progress,
+                velocityMetersPerSecond =
+                    start.velocityMetersPerSecond +
+                        (end.velocityMetersPerSecond - start.velocityMetersPerSecond) * progress,
+            ),
+        )
+        time += interval
+    }
+    result.add(last)
+    return result
+}
+
+/** [point] with its x/z position and velocity scaled by [factor] (height and vertical speed kept). */
+private fun scalePoint(
+    point: FlightPoint,
+    factor: Double,
+): FlightPoint =
+    FlightPoint(
+        time = point.time,
+        positionMeters =
+            Vec3(point.positionMeters.x * factor, point.positionMeters.y, point.positionMeters.z * factor),
+        velocityMetersPerSecond =
+            Vec3(
+                point.velocityMetersPerSecond.x * factor,
+                point.velocityMetersPerSecond.y,
+                point.velocityMetersPerSecond.z * factor,
+            ),
+    )
 
 /** Cd at [spinParameter] under [BallFlightSimulator.Configuration.aerodynamics]. */
 private fun BallFlightSimulator.Configuration.dragCoefficientAt(spinParameter: Double): Double =

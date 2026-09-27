@@ -56,7 +56,7 @@ class RangeLaunchViewModelTest {
             history = history,
             conditions = FakeConditionsRepository(),
             piSession = piSession,
-            simulation = ::countingSimulation,
+            flightPlan = { m, c, b -> testFlightPlan(m, c, b, ::countingSimulation) },
             computeDispatcher = StandardTestDispatcher(scheduler),
             distanceEstimate = { _, _, _ -> null },
         )

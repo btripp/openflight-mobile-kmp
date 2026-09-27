@@ -18,15 +18,19 @@ sealed class FlightInputResolutionError(
 /**
  * Turns a raw [ShotEvent] into a physically-sane [FlightInput], filling missing or non-finite
  * measurements from a per-club defaults table and clamping out-of-range ones, recording both as
- * [FlightInputProvenance]. Ported from `FlightInputResolver.swift`; the per-club defaults table
- * is copied verbatim.
+ * [FlightInputProvenance]. Ported from `FlightInputResolver.swift`.
+ *
+ * Plan F2b:
+ * - The per-club defaults are the backend's `CLUB_PHYSICS` ([ClubPhysics]), so an estimated flight
+ *   is the one the server's carry assumes.
+ * - A spin the server calculated (`spin_source = "calculated"`, from `170·v·sin(LA)^1.2`) or
+ *   substituted (`"club_typical"`) is flown but recorded as estimated. For drivers and woods a
+ *   calculated spin is replaced by the club's typical spin, because the kinematic formula
+ *   overstates it there (about 3850 rpm at 167 mph and 10.9°, against a tour average of 2686).
+ * - A missing spin axis flies as 0, so the ball keeps its start line and doesn't curve; it's
+ *   recorded as estimated.
  */
 class FlightInputResolver {
-    private data class ClubFlightDefaults(
-        val launchDegrees: Double,
-        val spinRpm: Double,
-    )
-
     private data class ResolvedMeasurements(
         val launchDegrees: Double,
         val horizontalDegrees: Double,
@@ -43,7 +47,7 @@ class FlightInputResolver {
      */
     fun resolve(shot: FlightMeasurements): FlightInput {
         validate(shot)
-        val measurements = resolveMeasurements(shot, defaultsForClub(shot.club))
+        val measurements = resolveMeasurements(shot, ClubPhysics.forClub(shot.club))
 
         return FlightInput(
             eventId = shot.id,
@@ -69,7 +73,7 @@ class FlightInputResolver {
 
     private fun resolveMeasurements(
         shot: FlightMeasurements,
-        defaults: ClubFlightDefaults,
+        physics: ClubPhysics,
     ): ResolvedMeasurements {
         val estimated = mutableSetOf<FlightParameter>()
         val clamped = mutableSetOf<FlightParameter>()
@@ -77,7 +81,7 @@ class FlightInputResolver {
         val launch =
             resolved(
                 shot.launchAngleVertical,
-                fallback = defaults.launchDegrees,
+                fallback = physics.defaultLaunchDegrees(shot.ballSpeedMph),
                 min = LAUNCH_ANGLE_MIN_DEGREES,
                 max = LAUNCH_ANGLE_MAX_DEGREES,
                 parameter = FlightParameter.LAUNCH_ANGLE,
@@ -94,16 +98,18 @@ class FlightInputResolver {
                 estimated = estimated,
                 clamped = clamped,
             )
+        val calculatedWoodSpin = shot.spinSource == SPIN_SOURCE_CALCULATED && physics.isDriverOrWood
         val spin =
             resolved(
-                shot.spinRpm,
-                fallback = defaults.spinRpm,
+                if (calculatedWoodSpin) null else shot.spinRpm,
+                fallback = physics.typicalSpinRpm,
                 min = SPIN_RATE_MIN_RPM,
                 max = SPIN_RATE_MAX_RPM,
                 parameter = FlightParameter.SPIN_RATE,
                 estimated = estimated,
                 clamped = clamped,
             )
+        if (shot.spinSource in ESTIMATED_SPIN_SOURCES) estimated.add(FlightParameter.SPIN_RATE)
         val spinAxis =
             resolved(
                 shot.spinAxisDeg,
@@ -145,61 +151,6 @@ class FlightInputResolver {
         return bounded
     }
 
-    @Suppress("CyclomaticComplexMethod")
-    private fun defaultsForClub(club: String): ClubFlightDefaults {
-        val normalized =
-            club
-                .lowercase()
-                .replace('_', '-')
-                .replace(' ', '-')
-
-        return when (normalized) {
-            "driver" -> {
-                ClubFlightDefaultsTable.DRIVER
-            }
-
-            "3-wood", "5-wood", "7-wood" -> {
-                ClubFlightDefaultsTable.WOOD
-            }
-
-            "3-hybrid", "5-hybrid", "7-hybrid", "9-hybrid" -> {
-                ClubFlightDefaultsTable.HYBRID
-            }
-
-            "2-iron", "3-iron", "4-iron", "iron-2", "iron-3", "iron-4" -> {
-                ClubFlightDefaultsTable.LONG_IRON
-            }
-
-            "5-iron", "6-iron", "7-iron", "iron-5", "iron-6", "iron-7" -> {
-                ClubFlightDefaultsTable.MID_IRON
-            }
-
-            "8-iron", "9-iron", "iron-8", "iron-9" -> {
-                ClubFlightDefaultsTable.SHORT_IRON
-            }
-
-            "pw", "gw", "sw", "lw", "pitching-wedge", "gap-wedge", "sand-wedge", "lob-wedge" -> {
-                ClubFlightDefaultsTable.WEDGE
-            }
-
-            else -> {
-                ClubFlightDefaultsTable.UNKNOWN
-            }
-        }
-    }
-
-    /** The per-club launch/spin defaults table from `FlightInputResolver.swift`, verbatim. */
-    private object ClubFlightDefaultsTable {
-        val DRIVER = ClubFlightDefaults(launchDegrees = 12.0, spinRpm = 2_500.0)
-        val WOOD = ClubFlightDefaults(launchDegrees = 15.0, spinRpm = 3_500.0)
-        val HYBRID = ClubFlightDefaults(launchDegrees = 18.0, spinRpm = 4_200.0)
-        val LONG_IRON = ClubFlightDefaults(launchDegrees = 17.0, spinRpm = 4_500.0)
-        val MID_IRON = ClubFlightDefaults(launchDegrees = 21.0, spinRpm = 5_500.0)
-        val SHORT_IRON = ClubFlightDefaults(launchDegrees = 26.0, spinRpm = 7_000.0)
-        val WEDGE = ClubFlightDefaults(launchDegrees = 31.0, spinRpm = 8_500.0)
-        val UNKNOWN = ClubFlightDefaults(launchDegrees = 18.0, spinRpm = 4_500.0)
-    }
-
     private companion object {
         const val MILES_PER_HOUR_TO_METERS_PER_SECOND = 0.44704
         const val YARDS_TO_METERS = 0.9144
@@ -214,5 +165,8 @@ class FlightInputResolver {
         const val SPIN_AXIS_MIN_DEGREES = -60.0
         const val SPIN_AXIS_MAX_DEGREES = 60.0
         const val SPIN_AXIS_FALLBACK_DEGREES = 0.0
+
+        const val SPIN_SOURCE_CALCULATED = "calculated"
+        val ESTIMATED_SPIN_SOURCES = setOf(SPIN_SOURCE_CALCULATED, "club_typical")
     }
 }

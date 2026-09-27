@@ -75,7 +75,14 @@ class ShotDistanceEstimator(
         shot: FlightMeasurements,
         conditions: Conditions,
         targetBearing: TargetBearing?,
-    ): ShotDistanceEstimate? {
+    ): ShotDistanceEstimate? = estimateWithRun(shot, conditions, targetBearing)?.estimate
+
+    /** The estimate plus the resolved input and conditions run behind it, for [ShotFlightPlanner]. */
+    internal fun estimateWithRun(
+        shot: FlightMeasurements,
+        conditions: Conditions,
+        targetBearing: TargetBearing?,
+    ): EstimateWithRun? {
         val input =
             try {
                 resolver.resolve(shot)
@@ -92,20 +99,28 @@ class ShotDistanceEstimator(
         val carry = if (isAdjusted) adjusted.carryYards else anchorCarry
         val roll = rollEstimator.estimate(adjusted.landing, adjusted.landingSpinRpm, conditions.surface).rollYards
 
-        return ShotDistanceEstimate(
-            carryYards = carry,
-            rollYards = roll,
-            totalYards = carry + roll,
-            lateralDriftYards = if (adjusted.windApplied) adjusted.lateralDriftYards else 0.0,
-            anchorCarryYards = anchorCarry,
-            anchor = anchor,
-            isAdjusted = isAdjusted,
-            windApplied = adjusted.windApplied,
-            windNeedsTargetBearing = targetBearing == null && !conditions.wind.isCalm,
-            airDensity = adjusted.airDensity,
-            flightProvenance = input.provenance,
-        )
+        val estimate =
+            ShotDistanceEstimate(
+                carryYards = carry,
+                rollYards = roll,
+                totalYards = carry + roll,
+                lateralDriftYards = if (adjusted.windApplied) adjusted.lateralDriftYards else 0.0,
+                anchorCarryYards = anchorCarry,
+                anchor = anchor,
+                isAdjusted = isAdjusted,
+                windApplied = adjusted.windApplied,
+                windNeedsTargetBearing = targetBearing == null && !conditions.wind.isCalm,
+                airDensity = adjusted.airDensity,
+                flightProvenance = input.provenance,
+            )
+        return EstimateWithRun(estimate, input, adjusted)
     }
+
+    internal class EstimateWithRun(
+        val estimate: ShotDistanceEstimate,
+        val input: FlightInput,
+        val adjusted: AdjustedCarry,
+    )
 
     private companion object {
         /**

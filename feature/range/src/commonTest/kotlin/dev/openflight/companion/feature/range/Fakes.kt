@@ -6,15 +6,21 @@ import dev.openflight.companion.core.data.SettingsRepository
 import dev.openflight.companion.core.data.ShotRepository
 import dev.openflight.companion.core.data.TransportType
 import dev.openflight.companion.core.flight.FlightInput
+import dev.openflight.companion.core.flight.FlightInputResolver
+import dev.openflight.companion.core.flight.FlightMeasurements
 import dev.openflight.companion.core.flight.FlightPoint
 import dev.openflight.companion.core.flight.FlightTrajectory
+import dev.openflight.companion.core.flight.PlannedShot
+import dev.openflight.companion.core.flight.ShotDistanceEstimator
 import dev.openflight.companion.core.flight.Vec3
 import dev.openflight.companion.core.model.CalibrationResult
 import dev.openflight.companion.core.model.ClubSelection
+import dev.openflight.companion.core.model.Conditions
 import dev.openflight.companion.core.model.ConnectionState
 import dev.openflight.companion.core.model.GolfClub
 import dev.openflight.companion.core.model.PhoneOrientationMeasurement
 import dev.openflight.companion.core.model.ShotEvent
+import dev.openflight.companion.core.model.TargetBearing
 import kotlinx.coroutines.flow.MutableStateFlow
 
 internal class FakeSettingsRepository(
@@ -128,3 +134,18 @@ internal fun makeTestTrajectory(input: FlightInput): FlightTrajectory =
             ),
         provenance = input.provenance,
     )
+
+/**
+ * Plan F2b: the view model's flight plan with the real distance estimate and [simulation]'s flight
+ * (by default [makeTestTrajectory]'s one-second arc) landing at the estimate's carry.
+ */
+internal fun testFlightPlan(
+    measurements: FlightMeasurements,
+    conditions: Conditions,
+    bearing: TargetBearing?,
+    simulation: (FlightInput) -> FlightTrajectory = ::makeTestTrajectory,
+): PlannedShot? {
+    val estimate = ShotDistanceEstimator().estimate(measurements, conditions, bearing) ?: return null
+    val input = FlightInputResolver().resolve(measurements).copy(targetCarryMeters = estimate.carryYards * 0.9144)
+    return PlannedShot(estimate, simulation(input))
+}
