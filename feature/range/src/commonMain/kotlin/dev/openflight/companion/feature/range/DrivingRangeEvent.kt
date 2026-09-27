@@ -1,6 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 package dev.openflight.companion.feature.range
 
+import dev.openflight.companion.core.data.LandingEffect
+import dev.openflight.companion.core.data.RangeCameraMode
+import dev.openflight.companion.core.data.RangeShowSetting
+import dev.openflight.companion.core.data.RangeThemeSetting
+import dev.openflight.companion.core.data.ShotTrailStyle
+import dev.openflight.companion.core.data.ViewingProfile
+import dev.openflight.companion.core.insights.UnitSystem
 import dev.openflight.companion.core.model.GolfClub
 
 /** User and scene intents from the range, sent up to [DrivingRangeViewModel.onEvent]. */
@@ -85,6 +92,55 @@ sealed interface DrivingRangeEvent {
      * shot arrives through the normal live path; nothing is made up locally.
      */
     data object SimulateShot : DrivingRangeEvent
+
+    // endregion
+
+    // region Plan F8f: range quick settings. Each persists through the same SettingsRepository key
+    // Settings › Practice uses, and the settings flows bring it back into the state.
+
+    /**
+     * "Show": live only, the current session's newest N or all of it, or every session, as the
+     * overlay (keeping its club filter). Persisted, and restored when the range next opens.
+     */
+    data class SetShow(
+        val show: RangeShowSetting,
+    ) : DrivingRangeEvent
+
+    data class SetTrailStyle(
+        val style: ShotTrailStyle,
+    ) : DrivingRangeEvent
+
+    /** "Keep last shots": one of `SHOT_TRAIL_KEEP_OPTIONS`. */
+    data class SetTrailKeepLast(
+        val count: Int,
+    ) : DrivingRangeEvent
+
+    data class SetLandingEffect(
+        val effect: LandingEffect,
+    ) : DrivingRangeEvent
+
+    data class SetTheme(
+        val theme: RangeThemeSetting,
+    ) : DrivingRangeEvent
+
+    /** FIXED or FOLLOW (ignored while reduced motion fixes the camera). */
+    data class SetCameraMode(
+        val mode: RangeCameraMode,
+    ) : DrivingRangeEvent
+
+    data class SetUnits(
+        val units: UnitSystem,
+    ) : DrivingRangeEvent
+
+    /** "Show total + roll (est.)". */
+    data class SetShowTotal(
+        val show: Boolean,
+    ) : DrivingRangeEvent
+
+    /** "Viewing profile": this device's choice only; the Pi's active profile never changes. */
+    data class SetViewingProfile(
+        val profile: ViewingProfile,
+    ) : DrivingRangeEvent
 
     // endregion
 }

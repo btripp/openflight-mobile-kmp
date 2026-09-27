@@ -32,9 +32,8 @@ import dev.openflight.companion.core.designsystem.OfOutlinedButton
 import dev.openflight.companion.core.designsystem.OfSpacing
 import dev.openflight.companion.core.designsystem.OfText
 import dev.openflight.companion.core.designsystem.OfTextRole
+import dev.openflight.companion.core.insights.UnitSystem
 import dev.openflight.companion.core.model.GolfClub
-import dev.openflight.companion.core.model.ShotMetricFormatter
-import kotlin.math.roundToInt
 
 /** Plan F8a1: the replay transport or the overlay's bar, at the bottom of the scene. */
 @Composable
@@ -219,7 +218,9 @@ internal fun RangeShotList(
     browse: RangeBrowseState,
     onSelect: (String) -> Unit,
     modifier: Modifier = Modifier,
+    numbers: RangeNumbers = RangeNumbers(),
 ) {
+    val distanceUnit = if (numbers.units == UnitSystem.METRIC) "m" else "yd"
     LazyColumn(
         modifier = modifier.fillMaxSize().background(OfColorTokens.BgDeep).testTag(RangeTestTags.SHOT_LIST),
         contentPadding = PaddingValues(OfSpacing.Md),
@@ -249,7 +250,7 @@ internal fun RangeShotList(
                 OfText(text = "#${shot.number}", role = OfTextRole.BodySmall, color = OfColorTokens.CreamDim)
                 OfText(text = shot.clubLabel, role = OfTextRole.Body, modifier = Modifier.weight(1f))
                 OfText(
-                    text = "${ShotMetricFormatter.number(shot.carryYards, decimals = 0)} yd",
+                    text = "${numbers.distance(shot.carryYards)} $distanceUnit",
                     role = OfTextRole.Body,
                     color = if (selected) OfColorTokens.Gold else OfColorTokens.Cream,
                 )
@@ -305,7 +306,10 @@ internal fun BrowseChips(
             )
         }
         if (rollOut != null) {
-            OfChip(label = rollOutSummary(rollOut), modifier = Modifier.testTag(RangeTestTags.ROLL_OUT))
+            OfChip(
+                label = uiState.camera.numbers.rollOutSummary(rollOut),
+                modifier = Modifier.testTag(RangeTestTags.ROLL_OUT),
+            )
         }
         // Plan F8d: a `--mock` Pi over Wi-Fi flies a new simulated shot through the live path. Last,
         // so it stays at the row's end while the other chips come and go.
@@ -319,11 +323,6 @@ internal fun BrowseChips(
         }
     }
 }
-
-/** "Total est. 285 yd · roll 21": total and roll are always estimates (plan §0.2). */
-internal fun rollOutSummary(rollOut: RangeRollOut): String =
-    "Total est. ${rollOut.totalYards.roundToInt()} yd · roll ${rollOut.rollYards.roundToInt()}" +
-        if (rollOut.carryEstimated) " · carry est." else ""
 
 private val BarBackground = Color.Black.copy(alpha = 0.62f)
 private val BarShape = RoundedCornerShape(18.dp)

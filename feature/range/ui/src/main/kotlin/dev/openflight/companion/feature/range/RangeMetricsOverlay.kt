@@ -63,6 +63,7 @@ internal fun RangeMetricsOverlay(
     obstructions: RangeObstructionTracker? = null,
 ) {
     val shot = uiState.displayedShot
+    val numbers = uiState.camera.numbers
     val layout = uiState.detailLayout(landscape = isLandscape, docked = !expandToFill)
     Column(
         modifier =
@@ -86,8 +87,8 @@ internal fun RangeMetricsOverlay(
         ) {
             OfMetricPrimary(
                 title = "BALL SPEED",
-                value = ShotMetricFormatter.number(shot?.ballSpeedMph, decimals = 1),
-                unit = "MPH",
+                value = numbers.speed(shot?.ballSpeedMph),
+                unit = numbers.speedUnit.uppercase(),
                 compact = expandToFill,
                 modifier =
                     Modifier
@@ -97,8 +98,8 @@ internal fun RangeMetricsOverlay(
             )
             OfMetricPrimary(
                 title = "CARRY",
-                value = ShotMetricFormatter.number(shot?.estimatedCarryYards, decimals = 0),
-                unit = "YDS",
+                value = numbers.distance(shot?.estimatedCarryYards),
+                unit = numbers.distanceUnit.uppercase(),
                 compact = expandToFill,
                 modifier =
                     Modifier
@@ -140,6 +141,7 @@ internal fun RangeMetricsOverlay(
                 layout,
                 onSelectClub,
                 Modifier.rangeObstruction("details", obstructions),
+                numbers,
             )
         }
     }
@@ -152,8 +154,9 @@ private fun DetailMetrics(
     layout: RangeDetailLayout,
     onSelectClub: (GolfClub) -> Unit,
     modifier: Modifier = Modifier,
+    numbers: RangeNumbers = RangeNumbers(),
 ) {
-    val metrics = detailMetrics(shot)
+    val metrics = detailMetrics(shot, numbers)
     val dense = layout != RangeDetailLayout.GRID
     if (layout == RangeDetailLayout.ROW) {
         Row(
@@ -299,10 +302,13 @@ internal data class RangeMetricValue(
     val unit: String,
 )
 
-/** RangeMetricsOverlay.swift `detailMetrics`. */
-internal fun detailMetrics(shot: ShotEvent?): List<RangeMetricValue> =
+/** RangeMetricsOverlay.swift `detailMetrics`; plan F8f: the club speed in the chosen units. */
+internal fun detailMetrics(
+    shot: ShotEvent?,
+    numbers: RangeNumbers = RangeNumbers(),
+): List<RangeMetricValue> =
     listOf(
-        RangeMetricValue("CLUB SPEED", ShotMetricFormatter.number(shot?.clubSpeedMph, decimals = 1), "mph"),
+        RangeMetricValue("CLUB SPEED", numbers.speed(shot?.clubSpeedMph), numbers.speedUnit),
         RangeMetricValue("SMASH", ShotMetricFormatter.number(shot?.smashFactor, decimals = 2), ""),
         RangeMetricValue("LAUNCH", ShotMetricFormatter.number(shot?.launchAngleVertical, decimals = 1), "°"),
         RangeMetricValue(

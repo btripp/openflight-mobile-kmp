@@ -236,19 +236,24 @@ class ShotTrailTest {
     }
 
     @Test
-    fun keepLastDrawsAtMostThreeEarlierTrailsFadingWithAge() {
-        assertThat(ShotTrail.PRIOR_FADES.size).isEqualTo(ShotTrail.PRIOR_LAYERS)
+    fun keepLastDrawsThreeEarlierTrailsFadingWithAge() {
+        assertThat(ShotTrail.PRIOR_FADES.size).isEqualTo(3)
         for (index in 1 until ShotTrail.PRIOR_FADES.size) {
             assertThat(ShotTrail.PRIOR_FADES[index]).isLessThan(ShotTrail.PRIOR_FADES[index - 1])
         }
         val frame = frame()
-        val priors = List(4) { ActiveFlight(arc(lateral = it * 5.0), playbackId = it.toLong()) }
+        val priors = List(3) { ActiveFlight(arc(lateral = it * 5.0), playbackId = it.toLong()) }
 
         frame.setTrail(RangeTrailState(keepLast = 3, priorFlights = priors), staticEffects = false)
         frame.prepare(RangeCameraPlanner().pose, progress = 1f)
 
-        val layers = frame.trail.layers.take(ShotTrail.PRIOR_LAYERS)
+        val layers = frame.trail.layers.take(3)
         assertThat(layers.all { it.visible }).isTrue()
+        assertThat(
+            frame.trail.layers
+                .subList(3, ShotTrail.PRIOR_LAYERS)
+                .none { it.visible },
+        ).isTrue()
         val alphas = layers.map { it.argb ushr ALPHA_SHIFT }
         assertThat(alphas).containsExactly(
             *ShotTrail.PRIOR_FADES.map { (FULL_PRIOR_ALPHA * it + 0.5f).toInt() }.toTypedArray(),
@@ -261,6 +266,27 @@ class ShotTrailTest {
                 .take(ShotTrail.PRIOR_LAYERS)
                 .none { it.visible },
         ).isTrue()
+    }
+
+    @Test
+    fun keepLastTenDrawsTenFadingTrailsAndTheOlderOnesAsSummaryRibbons() {
+        assertThat(ShotTrail.PRIOR_LAYERS).isEqualTo(10)
+        val frame = frame()
+        val priors = List(10) { ActiveFlight(arc(lateral = it * 3.0), playbackId = it.toLong()) }
+
+        frame.setTrail(RangeTrailState(keepLast = 10, priorFlights = priors), staticEffects = false)
+        frame.prepare(RangeCameraPlanner().pose, progress = 1f)
+
+        val layers = frame.trail.layers.take(ShotTrail.PRIOR_LAYERS)
+        assertThat(layers.all { it.visible }).isTrue()
+        val alphas = layers.map { it.argb ushr ALPHA_SHIFT }
+        for (index in 1 until alphas.size) assertThat(alphas[index]).isLessThan(alphas[index - 1])
+        assertThat(ShotTrail.priorFade(0, 10)).isEqualTo(ShotTrail.PRIOR_FADES.first())
+        assertThat(ShotTrail.priorFade(9, 10)).isCloseTo(ShotTrail.OLDEST_PRIOR_FADE, 0.001f)
+        // One fill per kept trail; the summary ribbons have fewer points than the full ones.
+        val newest = layers[0].path.points.size
+        val summary = layers[ShotTrail.FULL_PRIORS].path.points.size
+        assertThat(summary).isLessThan(newest)
     }
 
     @Test

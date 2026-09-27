@@ -106,4 +106,7 @@ object SettingsTestTags {
     const val SHOT_TRAIL_KEEP = "settings.shotTrail.keepLast"
     const val LANDING_EFFECT = "settings.shotTrail.landingEffect"
     const val SHOT_TRAIL_PREVIEW = "settings.shotTrail.preview"
+
+    // Plan F8f: "Show total distance" (plan F5b's toggle, Practice group).
+    const val SHOW_TOTAL_DISTANCE = "settings.showTotalDistance"
 }

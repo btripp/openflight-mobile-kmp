@@ -190,7 +190,12 @@ class RangeFrame<P : PathSink>(
             val segments = QUALITY.tracerPointCount
             priorFlightsFor = state.priorFlights
             val kept = state.priorFlights.take(ShotTrail.PRIOR_LAYERS)
-            priorGeometries = kept.map { FlightGeometry.build(it.trajectory, projection, segments) }
+            // Plan F8f: past the newest few, kept trails are summary ribbons (fewer segments).
+            priorGeometries =
+                kept.mapIndexed { index, prior ->
+                    val resolution = if (index < ShotTrail.FULL_PRIORS) segments else ShotTrail.SUMMARY_PRIOR_SEGMENTS
+                    FlightGeometry.build(prior.trajectory, projection, resolution)
+                }
             trail.ensureCapacity(segments)
             trail.setPriors(priorGeometries, kept.map { it.clubColorIndex })
             priorsDirty = true

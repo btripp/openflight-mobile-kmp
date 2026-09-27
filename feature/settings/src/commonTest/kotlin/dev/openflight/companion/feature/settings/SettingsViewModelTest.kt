@@ -426,7 +426,7 @@ class SettingsViewModelTest {
                     "Spin ribbon",
                     "Ground track",
                 )
-                assertThat(trail.keepOptions.map { it.label }).containsExactly("Off", "Last 3")
+                assertThat(trail.keepOptions.map { it.label }).containsExactly("Off", "Last 3", "Last 5", "Last 10")
                 assertThat(trail.landingEffects.map { it.label }).containsExactly("Off", "Ring", "Burst")
             }
         }
@@ -450,6 +450,22 @@ class SettingsViewModelTest {
                 assertThat(settings.shotTrail.value).isEqualTo(ShotTrailStyle.SMOKE)
                 assertThat(settings.shotTrailKeepLast.value).isEqualTo(3)
                 assertThat(settings.landingEffect.value).isEqualTo(LandingEffect.RING)
+            }
+        }
+
+    @Test
+    fun showTotalDistanceIsOnByDefaultAndTheToggleSharesTheRangesSetting() =
+        runTest {
+            viewModel.uiState.testIgnoringRest {
+                assertThat(awaitItem().showTotalDistance).isTrue()
+
+                viewModel.onEvent(SettingsEvent.SetShowTotalDistance(false))
+                awaitUntil { !it.showTotalDistance }
+                assertThat(settings.showTotalDistance.value).isFalse()
+
+                // The range's quick settings write the same key; Settings follows it.
+                settings.setShowTotalDistance(true)
+                awaitUntil { it.showTotalDistance }
             }
         }
 

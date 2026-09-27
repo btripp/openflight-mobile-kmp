@@ -23,6 +23,8 @@ struct RangeMetricsOverlay: View {
     let onSelectClub: (GolfClub) -> Void
 
     private var shot: ShotEvent? { state.displayedShot }
+    /// Plan F8f: the chosen units (the range quick settings and Settings › Practice share them).
+    private var numbers: RangeNumbers { state.camera.numbers }
     private var layout: RangeDetailLayout {
         DrivingRangeUiStateKt.detailLayout(state, landscape: isLandscape, docked: docksToSide)
     }
@@ -66,16 +68,16 @@ struct RangeMetricsOverlay: View {
         HStack(spacing: 12) {
             RangePrimaryMetric(
                 title: "BALL SPEED",
-                value: RangeFormat.number(shot.map { KotlinDouble(value: $0.ballSpeedMph) }, decimals: 1),
-                unit: "MPH",
+                value: numbers.speed(mph: shot.map { KotlinDouble(value: $0.ballSpeedMph) }, decimals: 1),
+                unit: numbers.speedUnit.uppercased(),
                 compact: !docksToSide,
                 accessibilityIdentifier: RangeTestTags.shared.BALL_SPEED
             )
             .rangeObstruction("ballSpeed")
             RangePrimaryMetric(
                 title: "CARRY",
-                value: RangeFormat.number(shot.map { KotlinDouble(value: $0.estimatedCarryYards) }, decimals: 0),
-                unit: "YDS",
+                value: numbers.distance(yards: shot.map { KotlinDouble(value: $0.estimatedCarryYards) }, decimals: 0),
+                unit: numbers.distanceUnit.uppercased(),
                 compact: !docksToSide,
                 accessibilityIdentifier: RangeTestTags.shared.CARRY
             )
@@ -165,7 +167,11 @@ struct RangeMetricsOverlay: View {
 
     private var detailMetrics: [RangeMetricValue] {
         [
-            RangeMetricValue(title: "CLUB SPEED", value: RangeFormat.number(shot?.clubSpeedMph, decimals: 1), unit: "mph"),
+            RangeMetricValue(
+                title: "CLUB SPEED",
+                value: numbers.speed(mph: shot?.clubSpeedMph, decimals: 1),
+                unit: numbers.speedUnit
+            ),
             RangeMetricValue(title: "SMASH", value: RangeFormat.number(shot?.smashFactor, decimals: 2), unit: ""),
             RangeMetricValue(title: "LAUNCH", value: RangeFormat.number(shot?.launchAngleVertical, decimals: 1), unit: "°"),
             RangeMetricValue(

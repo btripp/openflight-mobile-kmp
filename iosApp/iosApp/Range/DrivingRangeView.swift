@@ -87,6 +87,8 @@ struct DrivingRangeContent: View {
 
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var showsSessions = false
+    /// Plan F8f: the range quick settings (a sheet on an iPhone, a side panel on an iPad).
+    @State private var showsQuickSettings = false
     /// The controls' measured height: one row, or two when the status pill drops under the buttons.
     @State private var controlsHeight: CGFloat = 44
     /// Plan F8a2p: the overlaid UI's frames and the canvas's, both global, for the scene's obstructions.
@@ -98,15 +100,22 @@ struct DrivingRangeContent: View {
 
     var body: some View {
         GeometryReader { geometry in
-            if horizontalSizeClass == .regular && !state.browse.isLive {
-                HStack(spacing: 0) {
-                    RangeShotList(browse: state.browse) { send(DrivingRangeEventSelectShot(shotId: $0)) }
-                        .frame(width: min(max(geometry.size.width * Self.shotListFraction, 260), 380))
+            HStack(spacing: 0) {
+                if horizontalSizeClass == .regular && !state.browse.isLive {
+                    RangeShotList(browse: state.browse, numbers: state.camera.numbers) {
+                        send(DrivingRangeEventSelectShot(shotId: $0))
+                    }
+                    .frame(width: min(max(geometry.size.width * Self.shotListFraction, 260), 380))
                     Divider()
-                    stage
                 }
-            } else {
                 stage
+                // Plan F8f: on an iPad the quick settings sit beside the scene (and the shot list).
+                if showsQuickSettingsPanel {
+                    Divider()
+                    RangeQuickSettingsView(state: state, send: send, isPanel: true) { showsQuickSettings = false }
+                        .frame(width: Self.quickSettingsWidth)
+                        .transition(.move(edge: .trailing))
+                }
             }
         }
         .foregroundStyle(Theme.cream)
@@ -114,6 +123,27 @@ struct DrivingRangeContent: View {
         .sheet(isPresented: $showsSessions) {
             RangeSessionSheet(sessions: state.browse.sessions, send: send) { showsSessions = false }
         }
+        // Plan F8f: on an iPhone, a sheet over the scene; swipe down or tap outside to close.
+        .sheet(isPresented: quickSettingsSheet) {
+            RangeQuickSettingsView(state: state, send: send)
+                .presentationDetents([.fraction(0.6), .large])
+                .presentationDragIndicator(.visible)
+                .presentationBackground(Theme.bgCard)
+        }
+    }
+
+    /// The quick settings width beside the scene on an iPad.
+    private static let quickSettingsWidth: CGFloat = 340
+
+    private var showsQuickSettingsPanel: Bool {
+        showsQuickSettings && horizontalSizeClass == .regular
+    }
+
+    private var quickSettingsSheet: Binding<Bool> {
+        Binding(
+            get: { showsQuickSettings && horizontalSizeClass != .regular },
+            set: { if !$0 { showsQuickSettings = false } }
+        )
     }
 
     /// The scene with its overlays: everything but the iPad side pane.
@@ -265,8 +295,31 @@ struct DrivingRangeContent: View {
             if DrivingRangeUiStateKt.canReplay(state) {
                 replayButton
             }
+
+            quickSettingsButton
         }
         .fixedSize()
+    }
+
+    /// Plan F8f: the gear that opens (or, on an iPad, closes) the range quick settings.
+    private var quickSettingsButton: some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.2)) { showsQuickSettings.toggle() }
+        } label: {
+            Image(systemName: "gearshape")
+                .font(.subheadline.weight(.bold))
+                .frame(width: 38, height: 38)
+                .background(.black.opacity(0.6), in: Circle())
+                .overlay {
+                    Circle().stroke(.white.opacity(0.2), lineWidth: 1)
+                }
+                .frame(minWidth: 44, minHeight: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Range settings")
+        .accessibilityHint("Show, trail, view and numbers, without leaving the range")
+        .accessibilityIdentifier(RangeTestTags.shared.QUICK_SETTINGS)
     }
 
     private var exitButton: some View {

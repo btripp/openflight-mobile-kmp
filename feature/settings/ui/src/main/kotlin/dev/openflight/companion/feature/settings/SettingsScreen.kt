@@ -107,7 +107,7 @@ fun SettingsScreen(
                 RadarCard(uiState.radar, onEvent)
                 ShutdownCard(uiState.shutdown, onEvent)
                 GroupHeader("Practice", SettingsTestTags.GROUP_PRACTICE)
-                UnitsCard(uiState.units, onEvent)
+                UnitsCard(uiState.units, uiState.showTotalDistance, onEvent)
                 AudioCalloutsCard(uiState.callouts, onEvent, windowClass)
                 RangeThemeCard(uiState.rangeTheme, onEvent)
                 ShotTrailCard(uiState.shotTrail, uiState.rangeTheme.selected, onEvent, windowClass, shotTrailPreview)
@@ -178,6 +178,7 @@ internal fun SectionTitle(text: String) {
 @Composable
 private fun UnitsCard(
     units: UnitSystem,
+    showTotalDistance: Boolean,
     onEvent: (SettingsEvent) -> Unit,
 ) {
     OfCard(modifier = Modifier.fillMaxWidth(), contentSpacing = OfSpacing.Md) {
@@ -191,6 +192,14 @@ private fun UnitsCard(
                 if (picked != units) onEvent(SettingsEvent.SetUnits(picked))
             },
             modifier = Modifier.fillMaxWidth().testTag(SettingsTestTags.UNITS),
+        )
+        // Plan F8f (plan F5b's toggle): the same key as the range's quick settings "Numbers".
+        OfSwitchRow(
+            label = "Show total distance",
+            checked = showTotalDistance,
+            onCheckedChange = { onEvent(SettingsEvent.SetShowTotalDistance(it)) },
+            detail = "The estimated total and roll (est.) next to carry on the range",
+            modifier = Modifier.testTag(SettingsTestTags.SHOW_TOTAL_DISTANCE),
         )
     }
 }

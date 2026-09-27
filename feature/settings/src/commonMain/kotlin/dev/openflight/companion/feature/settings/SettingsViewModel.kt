@@ -126,9 +126,19 @@ class SettingsViewModel(
         }
 
     val uiState: StateFlow<SettingsUiState> =
-        combine(baseState, callout, settings.rangeTheme, shotTrail) { base, calloutState, theme, trail ->
+        combine(
+            baseState,
+            callout,
+            settings.rangeTheme,
+            shotTrail,
+            settings.showTotalDistance,
+        ) { base, calloutState, theme, trail, showTotal ->
             buildState(base.phone, base.link, base.device, base.radar, base.phase, calloutState)
-                .copy(rangeTheme = RangeThemeUiState(selected = theme), shotTrail = trail)
+                .copy(
+                    rangeTheme = RangeThemeUiState(selected = theme),
+                    shotTrail = trail,
+                    showTotalDistance = showTotal,
+                )
         }.stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
@@ -231,6 +241,10 @@ class SettingsViewModel(
 
             is SettingsEvent.SetLandingEffect -> {
                 viewModelScope.launch { settings.setLandingEffect(event.effect) }
+            }
+
+            is SettingsEvent.SetShowTotalDistance -> {
+                viewModelScope.launch { settings.setShowTotalDistance(event.show) }
             }
         }
     }

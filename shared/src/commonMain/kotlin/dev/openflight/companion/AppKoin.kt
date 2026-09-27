@@ -11,6 +11,7 @@ import dev.openflight.companion.core.data.PiSessionRepository
 import dev.openflight.companion.core.data.SettingsRepository
 import dev.openflight.companion.core.data.ShotHistoryRepository
 import dev.openflight.companion.core.data.ShotRepository
+import dev.openflight.companion.core.data.ViewingProfile
 import dev.openflight.companion.core.data.dataModule
 import dev.openflight.companion.core.speech.ScreenReaderMonitor
 import dev.openflight.companion.core.speech.SpeechEngine
@@ -113,16 +114,39 @@ suspend fun Koin.applyLaunchOptions(options: LaunchOptions) {
         val koin = this
         val mockPi =
             PreviewDevicePiSessionRepository(mockMode = true) { number ->
-                (koin.get<ShotRepository>() as? LocalEditsShotRepository)
-                    ?.deliver(PreviewShotRepository.simulatedShot(number))
+                // Plan F8f: stamped with the active profile at detection, like the Pi's.
+                val active =
+                    koin
+                        .get<PiSessionRepository>()
+                        .profiles.value.activeProfile
+                (koin.get<ShotRepository>() as? LocalEditsShotRepository)?.deliver(
+                    PreviewShotRepository
+                        .simulatedShot(number)
+                        .copy(profileId = active?.id, profileName = active?.name),
+                )
             }
         loadModules(listOf(module { single<PiSessionRepository> { mockPi } }), allowOverride = true)
     }
-    val settings = get<SettingsRepository>()
+    if (options.previewProfiles) {
+        // Plan F8f: the preview history's two people, for the range's "Viewing profile".
+        val withRoster = PreviewProfilesPiSessionRepository(get<PiSessionRepository>())
+        loadModules(listOf(module { single<PiSessionRepository> { withRoster } }), allowOverride = true)
+    }
+    seedSettings(get<SettingsRepository>(), options)
+}
+
+/** The launch options' settings seeds, stored before the UI starts. */
+private suspend fun seedSettings(
+    settings: SettingsRepository,
+    options: LaunchOptions,
+) {
     options.transport?.let { settings.setTransport(it) }
     options.host?.let { settings.setHost(it) }
     options.rangeTheme?.let { settings.setRangeTheme(it) }
     options.shotTrail?.let { settings.setShotTrail(it) }
+    options.rangeShowSeed?.let { settings.setRangeShow(it) }
+    // Plan F8f: a UI-test launch starts on the active profile, whatever an earlier test picked.
+    if (options.usesFakeRepository) settings.setViewingProfile(ViewingProfile.FollowActive)
 }
 
 private fun previewModule(
