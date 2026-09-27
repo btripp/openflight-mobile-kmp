@@ -7,6 +7,7 @@ import dev.openflight.companion.core.data.ConditionsRepository
 import dev.openflight.companion.core.data.HistoryShot
 import dev.openflight.companion.core.data.PiSessionRepository
 import dev.openflight.companion.core.data.RangeCameraMode
+import dev.openflight.companion.core.data.RangeShowSetting
 import dev.openflight.companion.core.data.SettingsRepository
 import dev.openflight.companion.core.data.ShotHistoryRepository
 import dev.openflight.companion.core.data.ShotRepository
@@ -62,10 +63,14 @@ import kotlinx.coroutines.withContext
  * Entering either pauses live playback. A live shot arriving meanwhile never pulls the user out:
  * it raises [RangeBrowseState.newLiveShot], and [DrivingRangeEvent.ReturnToLive] flies it.
  *
+ * Plan F8f adds the quick settings: each control persists through the key Settings › Practice
+ * uses, and "Show" maps onto the overlay (the current session's newest N or all of it, following its
+ * new live shots, or every session), restored when the range next opens.
+ *
  * The simulation runs on [computeDispatcher] (`Dispatchers.Default`); tests inject a test
  * dispatcher so the dwell and the simulation run on virtual time.
  */
-@Suppress("TooManyFunctions", "LongParameterList") // One phase machine plus its replay/overlay modes.
+@Suppress("TooManyFunctions", "LongParameterList", "LargeClass")
 class DrivingRangeViewModel(
     private val shots: ShotRepository,
     private val settings: SettingsRepository,
@@ -105,18 +110,23 @@ class DrivingRangeViewModel(
                 priorFlights = if (browse.isLive) priors.take(keepLast) else emptyList(),
             )
         }.distinctUntilChanged()
+
+    /** Plan F8f: the units and "Show total + roll (est.)", shared with Settings › Practice. */
+    private val numbers = combine(settings.units, settings.showTotalDistance, ::RangeNumbers).distinctUntilChanged()
     private val camera =
         combine(
             settings.rangeCameraMode,
             reduceMotion,
             settings.rangeTheme,
             trail,
-        ) { preferred, reduced, theme, trail ->
+            numbers,
+        ) { preferred, reduced, theme, trail, numbers ->
             RangeCameraState(
                 mode = if (reduced) RangeCameraMode.FIXED else preferred,
                 locked = reduced,
                 theme = RangeTheme.of(theme),
                 trail = trail,
+                numbers = numbers,
             )
         }
     private val clubState =
@@ -140,6 +150,9 @@ class DrivingRangeViewModel(
     /** The live shot that arrived while replaying or overlaying; [DrivingRangeEvent.ReturnToLive] flies it. */
     private var pendingLiveShot: ShotEvent? = null
     private var browseJob: Job? = null
+
+    /** Plan F8f: a mode was asked for (a launch, History, Show, Live), so the stored "Show" isn't applied. */
+    private var modeRequested = false
     private var replayShots: List<HistoryShot> = emptyList()
     private var overlayShots: List<HistoryShot> = emptyList()
 
@@ -171,7 +184,7 @@ class DrivingRangeViewModel(
                     club,
                     camera,
                     browse,
-                    flight.rollOut,
+                    flight.rollOut?.shownWith(camera.numbers),
                     simulate.available,
                     simulate.error,
                 )
@@ -187,6 +200,63 @@ class DrivingRangeViewModel(
         viewModelScope.launch {
             history.sessions().collect { sessions ->
                 browse.update { state -> state.copy(sessions = sessions.map(RangeSessionOption::of)) }
+            }
+        }
+        viewModelScope.launch {
+            // Plan F8f: reopen on the last "Show" choice, unless the screen already asked for a mode.
+            val stored = settings.rangeShow.first()
+            if (stored != RangeShowSetting.LIVE && !modeRequested) applyShow(stored)
+        }
+        viewModelScope.launch {
+            combine(settings.viewingProfile, piSession.profiles, RangeProfileState::of)
+                .distinctUntilChanged()
+                .collect(::applyProfiles)
+        }
+    }
+
+    /** The newest live shot the viewing profile shows (plan F8f), or `null`. */
+    private fun latestShownShot(): ShotEvent? {
+        val latest = shots.latestShot.value
+        return if (latest == null || profileFilter.shows(latest.profileId)) {
+            latest
+        } else {
+            shots.history.value.firstOrNull { profileFilter.shows(it.profileId) }
+        }
+    }
+
+    /** The profile filter in force (plan F8f); everyone until the roster and the choice are known. */
+    private val profileFilter: RangeProfileState get() = browse.value.profiles
+
+    /**
+     * Plan F8f: a new "Viewing profile" or roster. When it changes whose shots show, the kept
+     * trails go, a live shot of someone else's leaves the screen (for this profile's latest), and a
+     * replay or overlay reloads with this profile's shots.
+     */
+    private fun applyProfiles(profiles: RangeProfileState) {
+        val changed = profiles.filterProfileId != profileFilter.filterProfileId
+        if (changed) {
+            // Cleared first, so no state shows the new profile with the old one's trails.
+            priorFlights.value = emptyList()
+            lastLiveFlight = null
+        }
+        browse.update { it.copy(profiles = profiles) }
+        if (!changed) return
+        when (val mode = browse.value.mode) {
+            RangeMode.Live -> {
+                val shown = flight.value.displayedShot
+                if (shown != null && !profiles.shows(shown.profileId)) {
+                    stopFlight()
+                    pendingShot = null
+                    flight.value = FlightState(RangePhase.Waiting, latestShownShot())
+                }
+            }
+
+            is RangeMode.Overlay -> {
+                startOverlay(mode.sessionId, mode.club, mode.limit, browse.value.show)
+            }
+
+            is RangeMode.Replay -> {
+                startReplay(mode.sessionId, index = 0)
             }
         }
     }
@@ -214,25 +284,153 @@ class DrivingRangeViewModel(
 
     private fun onBrowseEvent(event: DrivingRangeEvent) {
         when (event) {
-            is DrivingRangeEvent.StartReplay -> startReplay(event.sessionId, event.index)
-            is DrivingRangeEvent.StartOverlay -> startOverlay(event.sessionId, event.club)
-            is DrivingRangeEvent.SetOverlayClub -> setOverlayClub(event.club)
-            DrivingRangeEvent.ReturnToLive -> returnToLive()
-            DrivingRangeEvent.PlayPause -> playPause()
-            DrivingRangeEvent.NextShot -> stepReplay(1)
-            DrivingRangeEvent.PreviousShot -> stepReplay(-1)
-            is DrivingRangeEvent.SetSpeed -> browse.update { it.copy(speed = event.speed) }
-            is DrivingRangeEvent.SelectShot -> selectShot(event.shotId)
-            is DrivingRangeEvent.ViewChanged -> browse.update { it.copy(view = event.view) }
-            DrivingRangeEvent.ResetView -> browse.update { it.copy(view = ViewTransform.IDENTITY) }
-            else -> Unit
+            is DrivingRangeEvent.StartReplay -> {
+                modeRequested = true
+                startReplay(event.sessionId, event.index)
+            }
+
+            is DrivingRangeEvent.StartOverlay -> {
+                modeRequested = true
+                startOverlay(event.sessionId, event.club)
+            }
+
+            is DrivingRangeEvent.SetOverlayClub -> {
+                setOverlayClub(event.club)
+            }
+
+            DrivingRangeEvent.ReturnToLive -> {
+                modeRequested = true
+                returnToLive()
+            }
+
+            DrivingRangeEvent.PlayPause -> {
+                playPause()
+            }
+
+            DrivingRangeEvent.NextShot -> {
+                stepReplay(1)
+            }
+
+            DrivingRangeEvent.PreviousShot -> {
+                stepReplay(-1)
+            }
+
+            is DrivingRangeEvent.SetSpeed -> {
+                browse.update { it.copy(speed = event.speed) }
+            }
+
+            is DrivingRangeEvent.SelectShot -> {
+                selectShot(event.shotId)
+            }
+
+            is DrivingRangeEvent.ViewChanged -> {
+                browse.update { it.copy(view = event.view) }
+            }
+
+            DrivingRangeEvent.ResetView -> {
+                browse.update { it.copy(view = ViewTransform.IDENTITY) }
+            }
+
+            else -> {
+                onQuickSettingsEvent(event)
+            }
+        }
+    }
+
+    /**
+     * Plan F8f: the quick settings panel. Every control persists through the key Settings ›
+     * Practice uses; the settings flows then bring the change into the state, so both stay in sync
+     * and the scene updates without leaving the range.
+     */
+    private fun onQuickSettingsEvent(event: DrivingRangeEvent) {
+        when (event) {
+            is DrivingRangeEvent.SetShow -> {
+                setShow(event.show)
+            }
+
+            is DrivingRangeEvent.SetTrailStyle -> {
+                persist { settings.setShotTrail(event.style) }
+            }
+
+            is DrivingRangeEvent.SetTrailKeepLast -> {
+                persist { settings.setShotTrailKeepLast(event.count) }
+            }
+
+            is DrivingRangeEvent.SetLandingEffect -> {
+                persist { settings.setLandingEffect(event.effect) }
+            }
+
+            is DrivingRangeEvent.SetTheme -> {
+                persist { settings.setRangeTheme(event.theme) }
+            }
+
+            is DrivingRangeEvent.SetCameraMode -> {
+                if (!reduceMotion.value) {
+                    persist {
+                        settings.setRangeCameraMode(
+                            event.mode,
+                        )
+                    }
+                }
+            }
+
+            is DrivingRangeEvent.SetUnits -> {
+                persist { settings.setUnits(event.units) }
+            }
+
+            is DrivingRangeEvent.SetShowTotal -> {
+                persist { settings.setShowTotalDistance(event.show) }
+            }
+
+            // Device-local: never `set_active_profile`, which would switch every phone on the Pi.
+            is DrivingRangeEvent.SetViewingProfile -> {
+                persist { settings.setViewingProfile(event.profile) }
+            }
+
+            else -> {
+                Unit
+            }
+        }
+    }
+
+    private fun persist(write: suspend () -> Unit) {
+        viewModelScope.launch { write() }
+    }
+
+    /** Plan F8f: "Show" persists the choice and switches to it now. */
+    private fun setShow(show: RangeShowSetting) {
+        modeRequested = true
+        persist { settings.setRangeShow(show) }
+        applyShow(show)
+    }
+
+    /**
+     * Maps a "Show" choice onto the browse modes: [RangeShowSetting.LIVE] is live; LAST N and THIS
+     * SESSION overlay the current session (newest N, or all of it), following its new shots; ALL
+     * SESSIONS overlays every session. The overlay's club filter carries over.
+     */
+    private fun applyShow(show: RangeShowSetting) {
+        val club = (browse.value.mode as? RangeMode.Overlay)?.club
+        when (show) {
+            RangeShowSetting.LIVE -> returnToLive()
+            RangeShowSetting.ALL_SESSIONS -> startOverlay(sessionId = null, club = club, show = show)
+            else -> startOverlay(sessionId = null, club = club, limit = show.lastShots, show = show)
         }
     }
 
     private fun observe(shot: ShotEvent?) {
         if (shot == null || shot.eventId == lastObservedEventId) return
         lastObservedEventId = shot.eventId
-        if (!browse.value.isLive) {
+        if (profileFilter.shows(shot.profileId)) observeShown(shot)
+    }
+
+    /** A live shot the viewing profile shows (plan F8f: another profile's neither flies nor shows). */
+    private fun observeShown(shot: ShotEvent) {
+        if (browse.value.followsLiveShots) {
+            // Plan F8f: "Last N" / "This session" keep hitting: the shot flies over the overlay,
+            // which picks it up from the session's history.
+            browse.update { it.copy(selectedShotId = null) }
+        } else if (!browse.value.isLive) {
             // Plan F8a: never yank the user out of replay or overlay; offer the way back instead.
             pendingLiveShot = shot
             browse.update { it.copy(newLiveShot = true) }
@@ -394,13 +592,15 @@ class DrivingRangeViewModel(
                 overlayTruncated = false,
                 overlayClubs = emptyList(),
                 newLiveShot = pendingLiveShot != null,
+                show = null,
             )
         }
         flight.value = FlightState(RangePhase.Waiting, displayedShot = null)
         browseJob =
             viewModelScope.launch {
                 var session = sessionId
-                var stored = replayableShots(sessionId)
+                // Plan F8f: a "View on range" of one shot shows it whoever hit it.
+                var stored = replayableShots(sessionId, everyone = shotId != null)
                 var start = index
                 if (shotId != null) {
                     start = stored.indexOfLaunchShot(shotId)
@@ -428,13 +628,21 @@ class DrivingRangeViewModel(
             }
     }
 
-    /** Session [sessionId]'s flyable shots, oldest first: the order the session was hit in. */
-    private suspend fun replayableShots(sessionId: String): List<HistoryShot> =
-        history
+    /**
+     * Session [sessionId]'s flyable shots, oldest first: the order the session was hit in; only the
+     * viewing profile's (plan F8f) unless [everyone].
+     */
+    private suspend fun replayableShots(
+        sessionId: String,
+        everyone: Boolean = false,
+    ): List<HistoryShot> {
+        val profiles = profileFilter
+        return history
             .shots(sessionId)
             .first()
-            .filter { it.toRangeShotEvent() != null }
+            .filter { it.toRangeShotEvent() != null && (everyone || profiles.shows(it.detail.profileId)) }
             .sortedWith(compareBy<HistoryShot>({ it.detail.timestamp }, { it.id }))
+    }
 
     /** The newest stored session (other than [except]) holding [shotId], with its replayable shots. */
     private suspend fun findStoredShot(
@@ -443,7 +651,7 @@ class DrivingRangeViewModel(
     ): Pair<String, List<HistoryShot>>? {
         for (candidate in history.sessions(includeImported = true).first()) {
             if (candidate.id == except) continue
-            val shots = replayableShots(candidate.id)
+            val shots = replayableShots(candidate.id, everyone = true)
             if (shots.indexOfLaunchShot(shotId) >= 0) return candidate.id to shots
         }
         return null
@@ -451,6 +659,7 @@ class DrivingRangeViewModel(
 
     /** Plan F8d: "View on range" opens paused on the shot; without one it replays from the start. */
     private fun launch(launch: RangeLaunch) {
+        modeRequested = true
         startReplay(launch.sessionId, index = 0, shotId = launch.shotId)
     }
 
@@ -499,57 +708,100 @@ class DrivingRangeViewModel(
         }
     }
 
+    /**
+     * Overlays session [sessionId]'s shots (every session's when `null`), only [club]'s when set,
+     * only the newest [limit] when set. Plan F8f: a [show] that follows the current session
+     * ([RangeShowSetting.followsCurrentSession]) overlays the current session (or the newest stored
+     * one before the first connect) and keeps collecting it, so each new live shot joins the overlay
+     * after it flies.
+     */
     private fun startOverlay(
         sessionId: String?,
         club: String?,
+        limit: Int? = null,
+        show: RangeShowSetting? = null,
     ) {
+        val follows = show?.followsCurrentSession == true
+        val shown = flight.value.displayedShot
         leaveLive()
         browse.update {
             it.copy(
-                mode = RangeMode.Overlay(sessionId, club),
+                mode = RangeMode.Overlay(sessionId, club, limit),
                 loading = true,
                 playing = false,
                 shots = emptyList(),
                 selectedShotId = null,
                 overlayFlights = emptyList(),
                 overlayTruncated = false,
-                newLiveShot = pendingLiveShot != null,
+                newLiveShot = pendingLiveShot != null && !follows,
+                show = show,
             )
         }
-        flight.value = FlightState(RangePhase.Waiting, displayedShot = null)
+        // Following the session keeps the shot on screen (and its metrics); the flight itself stops.
+        flight.value = FlightState(RangePhase.Waiting, displayedShot = if (follows) shown else null)
         browseJob =
             viewModelScope.launch {
-                val candidates = loadOverlayCandidates(sessionId, club)
-                val clubs = orderClubs(candidates.mapNotNull { shot -> shot.detail.club?.takeIf { it.isNotEmpty() } })
-                val matching = if (club == null) candidates else candidates.filter { it.detail.club == club }
-                val capped = matching.take(RangeBrowseState.OVERLAY_CAP)
-                val missing = capped.filter { it.id !in overlayCache }
-                if (missing.isNotEmpty()) {
-                    val air = conditions.conditions.value
-                    val bearing = conditions.targetBearing.value
-                    val computed =
-                        withContext(computeDispatcher) {
-                            missing.associate { it.id to overlayTrajectory(it, air, bearing) }
-                        }
-                    overlayCache.putAll(computed)
+                if (!follows) {
+                    showOverlay(loadOverlayCandidates(sessionId, club), club, limit)
+                    return@launch
                 }
-                val flights =
-                    capped.mapNotNull { shot ->
-                        val trajectory = overlayCache[shot.id] ?: return@mapNotNull null
-                        val wire = shot.detail.club.orEmpty()
-                        OverlayFlight(shot.id.toString(), wire, clubs.indexOf(wire).coerceAtLeast(0), trajectory)
-                    }
-                overlayShots = capped
-                browse.update {
-                    it.copy(
-                        loading = false,
-                        shots = capped.mapIndexed { i, shot -> shot.toRangeShotItem(i + 1) },
-                        overlayFlights = flights,
-                        overlayTruncated = matching.size > RangeBrowseState.OVERLAY_CAP,
-                        overlayClubs = clubs,
+                val current =
+                    history.currentSessionId.value ?: history
+                        .sessions()
+                        .first()
+                        .firstOrNull()
+                        ?.id
+                browse.update { it.copy(mode = RangeMode.Overlay(current, club, limit)) }
+                if (current == null) {
+                    showOverlay(emptyList(), club, limit)
+                    return@launch
+                }
+                history.shots(current).collect { stored ->
+                    val profiles = profileFilter
+                    showOverlay(
+                        stored.filter { it.toRangeShotEvent() != null && profiles.shows(it.detail.profileId) },
+                        club,
+                        limit,
                     )
                 }
             }
+    }
+
+    /** Builds the overlay from [candidates] (newest first): [club]'s, capped at [limit] or the overlay cap. */
+    private suspend fun showOverlay(
+        candidates: List<HistoryShot>,
+        club: String?,
+        limit: Int?,
+    ) {
+        val clubs = orderClubs(candidates.mapNotNull { shot -> shot.detail.club?.takeIf { it.isNotEmpty() } })
+        val matching = if (club == null) candidates else candidates.filter { it.detail.club == club }
+        val capped = matching.take(limit ?: RangeBrowseState.OVERLAY_CAP)
+        val missing = capped.filter { it.id !in overlayCache }
+        if (missing.isNotEmpty()) {
+            val air = conditions.conditions.value
+            val bearing = conditions.targetBearing.value
+            val computed =
+                withContext(computeDispatcher) {
+                    missing.associate { it.id to overlayTrajectory(it, air, bearing) }
+                }
+            overlayCache.putAll(computed)
+        }
+        val flights =
+            capped.mapNotNull { shot ->
+                val trajectory = overlayCache[shot.id] ?: return@mapNotNull null
+                val wire = shot.detail.club.orEmpty()
+                OverlayFlight(shot.id.toString(), wire, clubs.indexOf(wire).coerceAtLeast(0), trajectory)
+            }
+        overlayShots = capped
+        browse.update {
+            it.copy(
+                loading = false,
+                shots = capped.mapIndexed { i, shot -> shot.toRangeShotItem(i + 1) },
+                overlayFlights = flights,
+                overlayTruncated = limit == null && matching.size > RangeBrowseState.OVERLAY_CAP,
+                overlayClubs = clubs,
+            )
+        }
     }
 
     /**
@@ -560,7 +812,11 @@ class DrivingRangeViewModel(
         sessionId: String?,
         club: String?,
     ): List<HistoryShot> {
-        val flyable: (HistoryShot) -> Boolean = { it.toRangeShotEvent() != null }
+        // Plan F8f: only the viewing profile's shots.
+        val profiles = profileFilter
+        val flyable: (HistoryShot) -> Boolean = {
+            it.toRangeShotEvent() != null && profiles.shows(it.detail.profileId)
+        }
         if (sessionId != null) return history.shots(sessionId).first().filter(flyable)
         val collected = mutableListOf<HistoryShot>()
         var matching = 0
@@ -591,7 +847,7 @@ class DrivingRangeViewModel(
 
     private fun setOverlayClub(club: String?) {
         val mode = browse.value.mode as? RangeMode.Overlay ?: return
-        if (mode.club != club) startOverlay(mode.sessionId, club)
+        if (mode.club != club) startOverlay(mode.sessionId, club, mode.limit, browse.value.show)
     }
 
     private fun selectShot(shotId: String) {
@@ -635,13 +891,13 @@ class DrivingRangeViewModel(
         stopFlight()
         replayShots = emptyList()
         overlayShots = emptyList()
-        browse.update { RangeBrowseState(sessions = it.sessions, speed = it.speed) }
+        browse.update { RangeBrowseState(sessions = it.sessions, speed = it.speed, profiles = it.profiles) }
         val live = pendingLiveShot
         pendingLiveShot = null
         if (live != null) {
             prepare(live)
         } else {
-            flight.value = FlightState(RangePhase.Waiting, shots.latestShot.value)
+            flight.value = FlightState(RangePhase.Waiting, latestShownShot())
         }
     }
 
@@ -723,6 +979,14 @@ class DrivingRangeViewModel(
         private const val STOP_TIMEOUT_MILLIS = 5_000L
     }
 }
+
+/** Plan F8f: hidden while "Show total + roll (est.)" is off; its label in the chosen units. */
+private fun RangeRollOut.shownWith(numbers: RangeNumbers): RangeRollOut? =
+    when {
+        !numbers.showTotal -> null
+        units == numbers.units -> this
+        else -> copy(units = numbers.units)
+    }
 
 private fun ShotDistanceEstimate.toRollOut(): RangeRollOut =
     RangeRollOut(

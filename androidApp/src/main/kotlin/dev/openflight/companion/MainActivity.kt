@@ -9,6 +9,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import dev.openflight.companion.core.data.RangeShowSetting
 import dev.openflight.companion.core.data.RangeThemeSetting
 import dev.openflight.companion.core.data.ShotTrailStyle
 import dev.openflight.companion.core.data.TransportType
@@ -68,6 +69,9 @@ class MainActivity : ComponentActivity() {
             rangeTheme = RangeThemeSetting.fromStorageValue(getStringExtra(EXTRA_RANGE_THEME)),
             // Plan F8a2t: screenshots of each shot trail style (iOS's --shot-trail).
             shotTrail = ShotTrailStyle.fromStorageValue(getStringExtra(EXTRA_SHOT_TRAIL)),
+            // Plan F8f: the range's "Show" choice (iOS's --range-show).
+            rangeShow = RangeShowSetting.fromStorageValue(getStringExtra(EXTRA_RANGE_SHOW)),
+            previewProfiles = getBooleanExtra(EXTRA_PREVIEW_PROFILES, false),
         )
 
     private companion object {
@@ -85,6 +89,8 @@ class MainActivity : ComponentActivity() {
         const val EXTRA_RANGE_FREEZE_PROGRESS = "range_freeze_progress"
         const val EXTRA_RANGE_THEME = "range_theme"
         const val EXTRA_SHOT_TRAIL = "shot_trail"
+        const val EXTRA_RANGE_SHOW = "range_show"
+        const val EXTRA_PREVIEW_PROFILES = "preview_profiles"
 
         var launchOptionsApplied = false
     }

@@ -2,13 +2,16 @@
 package dev.openflight.companion.feature.range
 
 import dev.openflight.companion.core.data.DEFAULT_SHOT_TRAIL_KEEP_LAST
+import dev.openflight.companion.core.data.DEFAULT_SHOW_TOTAL_DISTANCE
 import dev.openflight.companion.core.data.LandingEffect
 import dev.openflight.companion.core.data.RangeCameraMode
+import dev.openflight.companion.core.data.RangeShowSetting
 import dev.openflight.companion.core.data.RangeThemeSetting
 import dev.openflight.companion.core.data.SettingsRepository
 import dev.openflight.companion.core.data.ShotRepository
 import dev.openflight.companion.core.data.ShotTrailStyle
 import dev.openflight.companion.core.data.TransportType
+import dev.openflight.companion.core.data.ViewingProfile
 import dev.openflight.companion.core.flight.CarryAnchor
 import dev.openflight.companion.core.flight.FlightInput
 import dev.openflight.companion.core.flight.FlightInputResolver
@@ -19,6 +22,7 @@ import dev.openflight.companion.core.flight.PlannedShot
 import dev.openflight.companion.core.flight.ShotDistanceEstimate
 import dev.openflight.companion.core.flight.ShotDistanceEstimator
 import dev.openflight.companion.core.flight.Vec3
+import dev.openflight.companion.core.insights.UnitSystem
 import dev.openflight.companion.core.model.CalibrationResult
 import dev.openflight.companion.core.model.ClubSelection
 import dev.openflight.companion.core.model.Conditions
@@ -75,6 +79,29 @@ internal class FakeSettingsRepository(
 
     override suspend fun setLandingEffect(effect: LandingEffect) {
         landingEffect.value = effect
+    }
+
+    // Plan F8f: range quick settings.
+    override val units = MutableStateFlow(SettingsRepository.DEFAULT_UNITS)
+    override val rangeShow = MutableStateFlow(RangeShowSetting.DEFAULT)
+    override val showTotalDistance = MutableStateFlow(DEFAULT_SHOW_TOTAL_DISTANCE)
+
+    override suspend fun setUnits(units: UnitSystem) {
+        this.units.value = units
+    }
+
+    override suspend fun setRangeShow(show: RangeShowSetting) {
+        rangeShow.value = show
+    }
+
+    override suspend fun setShowTotalDistance(show: Boolean) {
+        showTotalDistance.value = show
+    }
+
+    override val viewingProfile = MutableStateFlow<ViewingProfile>(ViewingProfile.FollowActive)
+
+    override suspend fun setViewingProfile(profile: ViewingProfile) {
+        viewingProfile.value = profile
     }
 }
 

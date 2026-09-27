@@ -278,6 +278,16 @@ enum class RangeTheme(
     ),
     ;
 
+    /** Plan F8f: the persisted choice that names this theme (the quick settings' selection). */
+    val setting: RangeThemeSetting
+        get() =
+            when (this) {
+                DAY -> RangeThemeSetting.DAY
+                DUSK -> RangeThemeSetting.DUSK
+                NIGHT -> RangeThemeSetting.NIGHT
+                LINKS -> RangeThemeSetting.LINKS
+            }
+
     companion object {
         /** The theme a persisted [RangeThemeSetting] names. */
         fun of(setting: RangeThemeSetting): RangeTheme =

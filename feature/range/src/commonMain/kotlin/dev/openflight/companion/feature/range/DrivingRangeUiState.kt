@@ -83,12 +83,14 @@ data class RangeClubState(
  * @property theme plan F8a2a: the look the renderers paint the scene with, the persisted
  *   [SettingsRepository.rangeTheme].
  * @property trail plan F8a2t: how the shot's trail is drawn.
+ * @property numbers plan F8f: the units and whether the estimated total shows.
  */
 data class RangeCameraState(
     val mode: RangeCameraMode = SettingsRepository.DEFAULT_RANGE_CAMERA_MODE,
     val locked: Boolean = false,
     val theme: RangeTheme = RangeTheme.DAY,
     val trail: RangeTrailState = RangeTrailState(),
+    val numbers: RangeNumbers = RangeNumbers(),
 )
 
 /**
@@ -243,14 +245,18 @@ fun DrivingRangeUiState.detailLayout(
         else -> RangeDetailLayout.DENSE_GRID
     }
 
-/** The compact strip's one line: "Club 103.2 mph · Launch 12.6° · Spin 2,380 rpm" ("—" when missing). */
+/**
+ * The compact strip's one line: "Club 103.2 mph · Launch 12.6° · Spin 2,380 rpm" ("—" when
+ * missing), the club speed in the chosen units (plan F8f).
+ */
 val DrivingRangeUiState.compactMetricsSummary: String
     get() {
         val shot = displayedShot
+        val numbers = camera.numbers
         val launch = ShotMetricFormatter.number(shot?.launchAngleVertical, decimals = 1)
         val launchText = if (launch == ShotMetricFormatter.MISSING) launch else "$launch°"
         return listOf(
-            "Club ${withUnit(ShotMetricFormatter.number(shot?.clubSpeedMph, decimals = 1), "mph")}",
+            "Club ${withUnit(numbers.speed(shot?.clubSpeedMph), numbers.speedUnit)}",
             "Launch $launchText",
             "Spin ${withUnit(ShotMetricFormatter.number(shot?.spinRpm, decimals = 0), "rpm")}",
         ).joinToString(separator = " · ")

@@ -166,10 +166,39 @@ interface SettingsRepository {
 
     /** Default no-op, see [calloutsEnabled]. */
     suspend fun setLandingEffect(effect: LandingEffect) {}
+
+    // Plan F8f: range quick settings, added at the end to keep this file's diff mergeable (§4a A7).
+
+    /** What the driving range shows when it opens: the last "Show" choice, defaulting to live. */
+    val rangeShow: Flow<RangeShowSetting> get() = flowOf(RangeShowSetting.DEFAULT)
+
+    /** Default no-op, see [calloutsEnabled]. */
+    suspend fun setRangeShow(show: RangeShowSetting) {}
+
+    /**
+     * Plan F5b/F8f "Show total distance": the estimated total and roll-out (labelled "est.") next
+     * to carry. On by default.
+     */
+    val showTotalDistance: Flow<Boolean> get() = flowOf(DEFAULT_SHOW_TOTAL_DISTANCE)
+
+    /** Default no-op, see [calloutsEnabled]. */
+    suspend fun setShowTotalDistance(show: Boolean) {}
+
+    /**
+     * Plan F8f: whose shots this device shows on the range ([ViewingProfile]). Device-local: the Pi's
+     * active profile is global to the Pi, so it is never switched from here.
+     */
+    val viewingProfile: Flow<ViewingProfile> get() = flowOf(ViewingProfile.FollowActive)
+
+    /** Default no-op, see [calloutsEnabled]. */
+    suspend fun setViewingProfile(profile: ViewingProfile) {}
 }
 
-/** Plan F8a2t: "Keep last shots" offers none or three faded earlier trails. */
-val SHOT_TRAIL_KEEP_OPTIONS: List<Int> = listOf(0, 3)
+/**
+ * Plan F8a2t: "Keep last shots" offers none or three faded earlier trails; plan F8f adds five and
+ * ten (the older ones drawn as thin summary ribbons, so the fill budget holds).
+ */
+val SHOT_TRAIL_KEEP_OPTIONS: List<Int> = listOf(0, 3, 5, 10)
 
 /** Plan F8a2t: no earlier trails until the user asks for them. */
 const val DEFAULT_SHOT_TRAIL_KEEP_LAST: Int = 0
@@ -280,5 +309,87 @@ enum class LandingEffect(
         val DEFAULT: LandingEffect = OFF
 
         fun fromStorageValue(value: String?): LandingEffect? = entries.firstOrNull { it.storageValue == value }
+    }
+}
+
+/** Plan F8f: the estimated total shows by default (plan F5b's "Show total distance"). */
+const val DEFAULT_SHOW_TOTAL_DISTANCE: Boolean = true
+
+/**
+ * What the driving range shows (plan F8f's quick settings "Show"): the live shot only, the newest
+ * [lastShots] of the current session, the whole current session, or every stored session, each as
+ * the range's overlay. `feature:range` maps it onto its browse modes; this is only the persisted
+ * choice.
+ */
+@Suppress("MagicNumber") // The counts are the options themselves.
+enum class RangeShowSetting(
+    /** The value persisted in settings. */
+    val storageValue: String,
+    /** How many of the current session's newest shots to draw, or `null` for no limit. */
+    val lastShots: Int? = null,
+) {
+    LIVE("live"),
+    LAST_5("last_5", 5),
+    LAST_10("last_10", 10),
+    LAST_20("last_20", 20),
+    THIS_SESSION("this_session"),
+    ALL_SESSIONS("all_sessions"),
+    ;
+
+    /** The current session's overlay (LAST N or THIS SESSION), which keeps up with new live shots. */
+    val followsCurrentSession: Boolean get() = this != LIVE && this != ALL_SESSIONS
+
+    companion object {
+        val DEFAULT: RangeShowSetting = LIVE
+
+        fun fromStorageValue(value: String?): RangeShowSetting? = entries.firstOrNull { it.storageValue == value }
+    }
+}
+
+/**
+ * Plan F8f: whose shots this device shows when several people share one Pi (and so one session):
+ * the Pi's active profile ([FollowActive], the default), one [Pinned] profile, or [AllProfiles]
+ * (one bay, taking turns). Kept on the device, because the Pi's active profile is global: switching
+ * it here would switch every other phone on the Pi too.
+ */
+sealed interface ViewingProfile {
+    /** The value persisted in settings. */
+    val storageValue: String
+
+    data object FollowActive : ViewingProfile {
+        override val storageValue: String = "follow_active"
+    }
+
+    data object AllProfiles : ViewingProfile {
+        override val storageValue: String = "all_profiles"
+    }
+
+    data class Pinned(
+        val profileId: String,
+    ) : ViewingProfile {
+        override val storageValue: String get() = PINNED_PREFIX + profileId
+    }
+
+    companion object {
+        private const val PINNED_PREFIX = "profile:"
+
+        fun fromStorageValue(value: String?): ViewingProfile? =
+            when {
+                value == FollowActive.storageValue -> {
+                    FollowActive
+                }
+
+                value == AllProfiles.storageValue -> {
+                    AllProfiles
+                }
+
+                value != null && value.startsWith(PINNED_PREFIX) && value.length > PINNED_PREFIX.length -> {
+                    Pinned(value.removePrefix(PINNED_PREFIX))
+                }
+
+                else -> {
+                    null
+                }
+            }
     }
 }

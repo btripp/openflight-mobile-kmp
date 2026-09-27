@@ -96,6 +96,20 @@ struct SettingsContent: View {
             }
             .pickerStyle(.segmented)
             .accessibilityIdentifier("settings.units")
+            // Plan F8f (plan F5b's toggle): the same key as the range quick settings' "Numbers".
+            Toggle(isOn: Binding(
+                get: { state.showTotalDistance },
+                set: { send(SettingsEventSetShowTotalDistance(show: $0)) }
+            )) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Show total distance")
+                    Text("The estimated total and roll (est.) next to carry on the range")
+                        .font(.of(.caption))
+                        .foregroundStyle(Theme.creamDim)
+                }
+            }
+            .tint(Theme.gold)
+            .accessibilityIdentifier("settings.showTotalDistance")
         } header: {
             header("UNITS", group: "Practice")
         }

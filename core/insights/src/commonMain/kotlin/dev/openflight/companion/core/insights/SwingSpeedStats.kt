@@ -91,7 +91,17 @@ fun computeDetailStats(shots: List<ShotDetail>): ClubStats {
  * a guess at whose shots these are.
  */
 fun List<ShotDetail>.forProfile(profileId: String): List<ShotDetail> =
-    if (profileId.isBlank()) emptyList() else filter { it.profileId == profileId }
+    if (profileId.isBlank()) emptyList() else filter { isShotOfProfile(it.profileId, profileId) }
+
+/**
+ * [forProfile]'s rule for one shot (plan F8f, the range's "Viewing profile"): a shot filed under
+ * [shotProfileId] is [profileId]'s only on an exact match; a blank [profileId] (no profile known
+ * yet) matches nothing, and a shot with a blank or missing id is nobody's.
+ */
+fun isShotOfProfile(
+    shotProfileId: String?,
+    profileId: String,
+): Boolean = profileId.isNotBlank() && shotProfileId == profileId
 
 /** [computeClubChips] for the Pi's session rows; a row without a club counts under `""`. */
 fun computeDetailClubChips(shots: List<ShotDetail>): List<ClubChip> {

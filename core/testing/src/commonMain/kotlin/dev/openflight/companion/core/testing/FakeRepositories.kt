@@ -3,13 +3,16 @@ package dev.openflight.companion.core.testing
 
 import dev.openflight.companion.core.data.CalloutTrigger
 import dev.openflight.companion.core.data.DEFAULT_SHOT_TRAIL_KEEP_LAST
+import dev.openflight.companion.core.data.DEFAULT_SHOW_TOTAL_DISTANCE
 import dev.openflight.companion.core.data.LandingEffect
+import dev.openflight.companion.core.data.RangeShowSetting
 import dev.openflight.companion.core.data.RangeThemeSetting
 import dev.openflight.companion.core.data.SHOT_TRAIL_KEEP_OPTIONS
 import dev.openflight.companion.core.data.SettingsRepository
 import dev.openflight.companion.core.data.ShotRepository
 import dev.openflight.companion.core.data.ShotTrailStyle
 import dev.openflight.companion.core.data.TransportType
+import dev.openflight.companion.core.data.ViewingProfile
 import dev.openflight.companion.core.insights.CalloutField
 import dev.openflight.companion.core.insights.UnitSystem
 import dev.openflight.companion.core.model.CalibrationResult
@@ -103,6 +106,26 @@ class FakeSettingsRepository(
 
     override suspend fun setLandingEffect(effect: LandingEffect) {
         landingEffect.value = effect
+    }
+
+    // Plan F8f: range quick settings, added at the end to keep this file's diff mergeable (§4a A7).
+
+    override val rangeShow = MutableStateFlow(RangeShowSetting.DEFAULT)
+
+    override suspend fun setRangeShow(show: RangeShowSetting) {
+        rangeShow.value = show
+    }
+
+    override val showTotalDistance = MutableStateFlow(DEFAULT_SHOW_TOTAL_DISTANCE)
+
+    override suspend fun setShowTotalDistance(show: Boolean) {
+        showTotalDistance.value = show
+    }
+
+    override val viewingProfile = MutableStateFlow<ViewingProfile>(ViewingProfile.FollowActive)
+
+    override suspend fun setViewingProfile(profile: ViewingProfile) {
+        viewingProfile.value = profile
     }
 }
 

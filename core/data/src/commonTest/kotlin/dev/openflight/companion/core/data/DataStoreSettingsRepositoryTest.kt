@@ -1,13 +1,16 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 package dev.openflight.companion.core.data
 
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import app.cash.turbine.test
 import assertk.assertThat
 import assertk.assertions.isEqualTo
+import assertk.assertions.isFalse
 import assertk.assertions.isNull
+import assertk.assertions.isTrue
 import dev.openflight.companion.core.insights.CalloutField
 import dev.openflight.companion.core.insights.UnitSystem
 import dev.openflight.companion.core.model.GolfClub
@@ -348,5 +351,70 @@ class DataStoreSettingsRepositoryTest {
             assertThat(settings.shotTrail.first()).isEqualTo(ShotTrailStyle.CLASSIC)
             assertThat(settings.landingEffect.first()).isEqualTo(LandingEffect.OFF)
             assertThat(settings.shotTrailKeepLast.first()).isEqualTo(0)
+        }
+
+    // Plan F8f: range quick settings, added at the end to keep this file's diff mergeable (§4a A7).
+
+    @Test
+    fun keepLastOffersFiveAndTenToo() =
+        runTest {
+            val settings = DataStoreSettingsRepository(backgroundScope.dataStore())
+
+            assertThat(SHOT_TRAIL_KEEP_OPTIONS).isEqualTo(listOf(0, 3, 5, 10))
+            settings.setShotTrailKeepLast(10)
+            assertThat(settings.shotTrailKeepLast.first()).isEqualTo(10)
+            settings.setShotTrailKeepLast(5)
+            assertThat(settings.shotTrailKeepLast.first()).isEqualTo(5)
+        }
+
+    @Test
+    fun theRangeShowDefaultsToLiveAndEveryChoiceRoundTrips() =
+        runTest {
+            val dataStore = backgroundScope.dataStore()
+            val settings = DataStoreSettingsRepository(dataStore)
+            assertThat(settings.rangeShow.first()).isEqualTo(RangeShowSetting.LIVE)
+
+            for (show in RangeShowSetting.entries.reversed()) {
+                settings.setRangeShow(show)
+                assertThat(DataStoreSettingsRepository(dataStore).rangeShow.first()).isEqualTo(show)
+                assertThat(dataStore.data.first()[stringPreferencesKey("rangeShow")]).isEqualTo(show.storageValue)
+            }
+
+            dataStore.edit { it[stringPreferencesKey("rangeShow")] = "everything" }
+            assertThat(settings.rangeShow.first()).isEqualTo(RangeShowSetting.LIVE)
+        }
+
+    @Test
+    fun showTotalDistanceDefaultsOnAndRoundTrips() =
+        runTest {
+            val dataStore = backgroundScope.dataStore()
+            val settings = DataStoreSettingsRepository(dataStore)
+            assertThat(settings.showTotalDistance.first()).isTrue()
+
+            settings.setShowTotalDistance(false)
+
+            assertThat(DataStoreSettingsRepository(dataStore).showTotalDistance.first()).isFalse()
+            assertThat(dataStore.data.first()[booleanPreferencesKey("showTotalDistance")]).isEqualTo(false)
+        }
+
+    @Test
+    fun theViewingProfileFollowsTheActiveOneByDefaultAndEveryChoiceRoundTrips() =
+        runTest {
+            val dataStore = backgroundScope.dataStore()
+            val settings = DataStoreSettingsRepository(dataStore)
+            assertThat(settings.viewingProfile.first()).isEqualTo(ViewingProfile.FollowActive)
+
+            for (profile in listOf(
+                ViewingProfile.Pinned("p-2"),
+                ViewingProfile.AllProfiles,
+                ViewingProfile.FollowActive,
+            )) {
+                settings.setViewingProfile(profile)
+                assertThat(DataStoreSettingsRepository(dataStore).viewingProfile.first()).isEqualTo(profile)
+            }
+            assertThat(dataStore.data.first()[stringPreferencesKey("viewingProfile")]).isEqualTo("follow_active")
+
+            dataStore.edit { it[stringPreferencesKey("viewingProfile")] = "profile:" }
+            assertThat(settings.viewingProfile.first()).isEqualTo(ViewingProfile.FollowActive)
         }
 }

@@ -100,6 +100,11 @@ sealed interface SettingsEvent {
     data class SetLandingEffect(
         val effect: LandingEffect,
     ) : SettingsEvent
+
+    /** Plan F8f (plan F5b's toggle): "Show total distance", the estimated total and roll-out. */
+    data class SetShowTotalDistance(
+        val show: Boolean,
+    ) : SettingsEvent
 }
 
 /** One-shot signals from [SettingsViewModel]. */

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 package dev.openflight.companion
 
+import dev.openflight.companion.core.data.RangeShowSetting
 import dev.openflight.companion.core.data.RangeThemeSetting
 import dev.openflight.companion.core.data.ShotTrailStyle
 import dev.openflight.companion.core.data.TransportType
@@ -56,6 +57,14 @@ import dev.openflight.companion.core.data.TransportType
  *   `ShotTrailStyle.storageValue`, for deterministic captures of each style.
  * @property rangeTheme plan F8a2a: persisted as the range theme before the UI starts (a settings
  *   seed like [transport]). `--range-theme day|dusk|night|links` (Android `--es range_theme night`).
+ * @property rangeShow plan F8f: persisted as the range's "Show" choice before the UI starts:
+ *   `--range-show last_5` (Android `--es range_show last_5`), any `RangeShowSetting.storageValue`.
+ *   A fake-repository launch ([usesFakeRepository]) without it starts on live, so a UI test that
+ *   left another choice stored can't change the next test's range. Such a launch also resets the
+ *   device's "Viewing profile" to follow the active one.
+ * @property previewProfiles plan F8f: the Pi reports the roster of [previewHistory]'s shots (Ann,
+ *   active, and Bo; [PreviewProfilesPiSessionRepository]), for the range's "Viewing profile".
+ *   `--preview-profiles` (Android `--ez preview_profiles true`).
  */
 data class LaunchOptions(
     val uiTesting: Boolean = false,
@@ -76,9 +85,15 @@ data class LaunchOptions(
     val previewPiMock: Boolean = false,
     val rangeTheme: RangeThemeSetting? = null,
     val shotTrail: ShotTrailStyle? = null,
+    val rangeShow: RangeShowSetting? = null,
+    val previewProfiles: Boolean = false,
 ) {
     val usesFakeRepository: Boolean
         get() = uiTesting || previewShot || previewPi || previewPiMock
+
+    /** Plan F8f: the "Show" choice to store before the UI starts, if any (see [rangeShow]). */
+    val rangeShowSeed: RangeShowSetting?
+        get() = rangeShow ?: RangeShowSetting.LIVE.takeIf { usesFakeRepository }
 
     companion object {
         const val UI_TESTING = "--ui-testing"
@@ -99,6 +114,8 @@ data class LaunchOptions(
         const val PREVIEW_PI_MOCK = "--preview-pi-mock"
         const val RANGE_THEME = "--range-theme"
         const val SHOT_TRAIL = "--shot-trail"
+        const val RANGE_SHOW = "--range-show"
+        const val PREVIEW_PROFILES = "--preview-profiles"
 
         /** How often `--preview-live-shots` delivers a shot. */
         const val PREVIEW_LIVE_SHOT_INTERVAL_MILLIS = 5_000L
@@ -135,6 +152,8 @@ data class LaunchOptions(
                 previewPiMock = PREVIEW_PI_MOCK in arguments,
                 rangeTheme = valueAfter(RANGE_THEME)?.let(RangeThemeSetting::fromStorageValue),
                 shotTrail = valueAfter(SHOT_TRAIL)?.let(ShotTrailStyle::fromStorageValue),
+                rangeShow = valueAfter(RANGE_SHOW)?.let(RangeShowSetting::fromStorageValue),
+                previewProfiles = PREVIEW_PROFILES in arguments,
             )
         }
     }

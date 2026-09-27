@@ -3,11 +3,14 @@ package dev.openflight.companion.feature.settings
 
 import dev.openflight.companion.core.data.CalloutTrigger
 import dev.openflight.companion.core.data.DEFAULT_SHOT_TRAIL_KEEP_LAST
+import dev.openflight.companion.core.data.DEFAULT_SHOW_TOTAL_DISTANCE
 import dev.openflight.companion.core.data.LandingEffect
 import dev.openflight.companion.core.data.RangeThemeSetting
 import dev.openflight.companion.core.data.SHOT_TRAIL_KEEP_OPTIONS
 import dev.openflight.companion.core.data.ShotTrailStyle
 import dev.openflight.companion.core.data.TransportType
+import dev.openflight.companion.core.data.pickerLabel
+import dev.openflight.companion.core.data.shotTrailKeepLabel
 import dev.openflight.companion.core.insights.CalloutField
 import dev.openflight.companion.core.insights.UnitSystem
 import dev.openflight.companion.core.model.ConnectionProblem
@@ -58,6 +61,8 @@ data class SettingsUiState(
     val rangeTheme: RangeThemeUiState = RangeThemeUiState(),
     // Plan F8a2t: the shot trail, added at the end to keep this file's diff mergeable (§4a A7).
     val shotTrail: ShotTrailUiState = ShotTrailUiState(),
+    // Plan F8f (plan F5b's toggle): the estimated total next to carry, appended (§4a A7).
+    val showTotalDistance: Boolean = DEFAULT_SHOW_TOTAL_DISTANCE,
 )
 
 /** A simulator connector's severity bucket (`SimStatus.tsx`'s `severity`). */
@@ -250,13 +255,7 @@ data class RangeThemeOption(
     val label: String,
 ) {
     companion object {
-        val ALL: List<RangeThemeOption> =
-            listOf(
-                RangeThemeOption(RangeThemeSetting.DAY, "Day"),
-                RangeThemeOption(RangeThemeSetting.DUSK, "Dusk"),
-                RangeThemeOption(RangeThemeSetting.NIGHT, "Night"),
-                RangeThemeOption(RangeThemeSetting.LINKS, "Links"),
-            )
+        val ALL: List<RangeThemeOption> = RangeThemeSetting.entries.map { RangeThemeOption(it, it.pickerLabel) }
     }
 }
 
@@ -284,20 +283,7 @@ data class ShotTrailOption(
     val label: String,
 ) {
     companion object {
-        val ALL: List<ShotTrailOption> =
-            listOf(
-                ShotTrailOption(ShotTrailStyle.CLASSIC, "Classic"),
-                ShotTrailOption(ShotTrailStyle.BROADCAST_GLOW, "Broadcast glow"),
-                ShotTrailOption(ShotTrailStyle.COMET, "Comet"),
-                ShotTrailOption(ShotTrailStyle.CLUB_COLOUR, "Club colour"),
-                ShotTrailOption(ShotTrailStyle.DOTTED, "Dotted"),
-                ShotTrailOption(ShotTrailStyle.SMOKE, "Smoke"),
-                ShotTrailOption(ShotTrailStyle.NEON, "Neon"),
-                ShotTrailOption(ShotTrailStyle.SPEED_HEAT, "Speed heat"),
-                ShotTrailOption(ShotTrailStyle.RAINBOW, "Rainbow"),
-                ShotTrailOption(ShotTrailStyle.SPIN_RIBBON, "Spin ribbon"),
-                ShotTrailOption(ShotTrailStyle.GROUND_TRACK, "Ground track"),
-            )
+        val ALL: List<ShotTrailOption> = ShotTrailStyle.entries.map { ShotTrailOption(it, it.pickerLabel) }
     }
 }
 
@@ -308,18 +294,7 @@ data class ShotTrailKeepOption(
 ) {
     companion object {
         val ALL: List<ShotTrailKeepOption> =
-            SHOT_TRAIL_KEEP_OPTIONS.map { count ->
-                ShotTrailKeepOption(
-                    count,
-                    if (count ==
-                        0
-                    ) {
-                        "Off"
-                    } else {
-                        "Last " + count
-                    },
-                )
-            }
+            SHOT_TRAIL_KEEP_OPTIONS.map { count -> ShotTrailKeepOption(count, shotTrailKeepLabel(count)) }
     }
 }
 
@@ -329,11 +304,6 @@ data class LandingEffectOption(
     val label: String,
 ) {
     companion object {
-        val ALL: List<LandingEffectOption> =
-            listOf(
-                LandingEffectOption(LandingEffect.OFF, "Off"),
-                LandingEffectOption(LandingEffect.RING, "Ring"),
-                LandingEffectOption(LandingEffect.BURST, "Burst"),
-            )
+        val ALL: List<LandingEffectOption> = LandingEffect.entries.map { LandingEffectOption(it, it.pickerLabel) }
     }
 }

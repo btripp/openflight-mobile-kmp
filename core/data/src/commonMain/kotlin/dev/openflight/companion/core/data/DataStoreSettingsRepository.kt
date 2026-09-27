@@ -197,6 +197,35 @@ internal class DataStoreSettingsRepository(
         dataStore.edit { it[LANDING_EFFECT_KEY] = effect.storageValue }
     }
 
+    // Plan F8f: range quick settings, added at the end to keep this file's diff mergeable (§4a A7).
+
+    override val rangeShow: Flow<RangeShowSetting> =
+        preferences
+            .map { RangeShowSetting.fromStorageValue(it[RANGE_SHOW_KEY]) ?: RangeShowSetting.DEFAULT }
+            .distinctUntilChanged()
+
+    override suspend fun setRangeShow(show: RangeShowSetting) {
+        dataStore.edit { it[RANGE_SHOW_KEY] = show.storageValue }
+    }
+
+    override val showTotalDistance: Flow<Boolean> =
+        preferences
+            .map { it[SHOW_TOTAL_DISTANCE_KEY] ?: DEFAULT_SHOW_TOTAL_DISTANCE }
+            .distinctUntilChanged()
+
+    override suspend fun setShowTotalDistance(show: Boolean) {
+        dataStore.edit { it[SHOW_TOTAL_DISTANCE_KEY] = show }
+    }
+
+    override val viewingProfile: Flow<ViewingProfile> =
+        preferences
+            .map { ViewingProfile.fromStorageValue(it[VIEWING_PROFILE_KEY]) ?: ViewingProfile.FollowActive }
+            .distinctUntilChanged()
+
+    override suspend fun setViewingProfile(profile: ViewingProfile) {
+        dataStore.edit { it[VIEWING_PROFILE_KEY] = profile.storageValue }
+    }
+
     companion object {
         /** DataStore requires the `.preferences_pb` extension for preferences files. */
         const val FILE_NAME = "openflight.preferences_pb"
@@ -226,6 +255,11 @@ internal class DataStoreSettingsRepository(
         private val SHOT_TRAIL_KEY = stringPreferencesKey("shotTrail")
         private val SHOT_TRAIL_KEEP_LAST_KEY = intPreferencesKey("shotTrailKeepLast")
         private val LANDING_EFFECT_KEY = stringPreferencesKey("landingEffect")
+
+        // Plan F8f: range quick settings.
+        private val RANGE_SHOW_KEY = stringPreferencesKey("rangeShow")
+        private val SHOW_TOTAL_DISTANCE_KEY = booleanPreferencesKey("showTotalDistance")
+        private val VIEWING_PROFILE_KEY = stringPreferencesKey("viewingProfile")
     }
 }
 

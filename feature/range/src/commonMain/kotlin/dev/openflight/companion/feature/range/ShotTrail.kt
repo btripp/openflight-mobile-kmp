@@ -149,6 +149,7 @@ class ShotTrail<P : PathSink>(
 
     /** Rewrites the earlier trails for the current camera (their geometry must be reprojected). */
     fun buildPriors() {
+        val kept = priorGeometries.count { it != null }
         for (index in 0 until PRIOR_LAYERS) {
             val layer = layers[index]
             val prior = priorGeometries[index]
@@ -157,7 +158,7 @@ class ShotTrail<P : PathSink>(
                 continue
             }
             val base = palette.prior(trailStyle)
-            val alpha = ((base ushr ALPHA_SHIFT) / CHANNEL_MAX) * PRIOR_FADES[index]
+            val alpha = ((base ushr ALPHA_SHIFT) / CHANNEL_MAX) * priorFade(index, kept)
             val usesPalette = trailStyle == ShotTrailStyle.CLUB_COLOUR
             layer.reset(withAlpha(base, alpha), if (usesPalette) priorPalettes[index] else TrailLayer.NO_PALETTE)
             priorWriting = index
@@ -570,11 +571,37 @@ class ShotTrail<P : PathSink>(
     // endregion
 
     companion object {
-        /** Earlier trails kept at most ("Keep last shots"). */
-        const val PRIOR_LAYERS = 3
+        /** Earlier trails kept at most ("Keep last shots": plan F8a2t's 3, plan F8f's 10). */
+        const val PRIOR_LAYERS = 10
 
-        /** Each earlier trail's alpha multiplier, newest first. */
+        /**
+         * Plan F8f: the newest earlier trails drawn at the live trail's resolution; older ones are
+         * summary ribbons of [SUMMARY_PRIOR_SEGMENTS] segments, one thin fill each, so keeping ten
+         * stays within the per-frame fill and re-projection budget.
+         */
+        const val FULL_PRIORS = 3
+
+        /** A summary ribbon's segment count (the overlay's 41 points, near enough). */
+        const val SUMMARY_PRIOR_SEGMENTS = 40
+
+        /** Each earlier trail's alpha multiplier, newest first, while three or fewer are kept (plan F8a2t). */
         val PRIOR_FADES: List<Float> = listOf(0.55f, 0.34f, 0.18f)
+
+        /** The oldest of more than three kept trails fades to this (plan F8f). */
+        const val OLDEST_PRIOR_FADE = 0.1f
+
+        /**
+         * The alpha multiplier of earlier trail [index] (0 = newest) of [kept]: F8a2t's [PRIOR_FADES]
+         * for up to three, else an even geometric fade from the newest's to [OLDEST_PRIOR_FADE].
+         */
+        fun priorFade(
+            index: Int,
+            kept: Int,
+        ): Float {
+            if (kept <= PRIOR_FADES.size) return PRIOR_FADES[index.coerceIn(0, PRIOR_FADES.lastIndex)]
+            val fraction = index.coerceIn(0, kept - 1).toFloat() / (kept - 1)
+            return PRIOR_FADES.first() * (OLDEST_PRIOR_FADE / PRIOR_FADES.first()).pow(fraction)
+        }
 
         const val EFFECT_LAYERS = 2
         const val STYLE_LAYERS = 12
