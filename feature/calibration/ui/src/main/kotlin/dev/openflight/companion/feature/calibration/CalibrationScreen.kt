@@ -23,6 +23,7 @@ import dev.openflight.companion.core.designsystem.OfButton
 import dev.openflight.companion.core.designsystem.OfCard
 import dev.openflight.companion.core.designsystem.OfColorTokens
 import dev.openflight.companion.core.designsystem.OfContentWidth
+import dev.openflight.companion.core.designsystem.OfNotice
 import dev.openflight.companion.core.designsystem.OfOutlinedButton
 import dev.openflight.companion.core.designsystem.OfScaffold
 import dev.openflight.companion.core.designsystem.OfSpacing
@@ -31,6 +32,7 @@ import dev.openflight.companion.core.designsystem.OfTextField
 import dev.openflight.companion.core.designsystem.OfTextRole
 import dev.openflight.companion.core.designsystem.OfTheme
 import dev.openflight.companion.core.designsystem.OfTopBar
+import dev.openflight.companion.core.designsystem.StatusTone
 import dev.openflight.companion.core.model.CalibrationResult
 import dev.openflight.companion.core.model.ShotMetricFormatter
 import dev.openflight.companion.core.sensors.PhoneOrientationDisplayAngles
@@ -77,6 +79,15 @@ fun CalibrationScreen(
                         .padding(horizontal = OfSpacing.Xl, vertical = OfSpacing.Sm),
                 verticalArrangement = Arrangement.spacedBy(OfSpacing.Xl),
             ) {
+                // Plan F14: Demo mode has no radar; say so before anything else.
+                uiState.needsHardware?.let { message ->
+                    OfNotice(
+                        title = "Needs a real OpenFlight Pi",
+                        detail = message,
+                        tone = StatusTone.InProgress,
+                        modifier = Modifier.testTag(CalibrationTestTags.NEEDS_HARDWARE),
+                    )
+                }
                 InstructionsCard()
                 TransportCard(uiState, onEvent)
                 MeasurementCard(uiState.sensor)

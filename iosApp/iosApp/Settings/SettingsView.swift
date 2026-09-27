@@ -41,6 +41,8 @@ struct SettingsContent: View {
         Form {
             // Device
             connectionSection
+            // Plan F14: try the app without a Pi.
+            DemoModeSection(demo: state.demo, send: send)
             if showDeviceLinks { deviceLinksSection }
             launchMonitorSection
             if let power = state.power { powerStatusSection(power) }
@@ -211,8 +213,9 @@ struct SettingsContent: View {
 
     private var connectionSection: some View {
         Section {
-            row("Transport", state.transport.label_)
-            row("Host", state.host)
+            // Plan F14: Demo mode's pretend Pi is on Wi-Fi, whatever transport the real Pi uses.
+            row("Transport", state.demo.enabled ? "Demo Pi (Wi-Fi)" : state.transport.label_)
+            if !state.demo.enabled { row("Host", state.host) }
             row("Shot stream", state.connectionState.description_)
             LabeledContent("Live session") {
                 StatusPill(text: state.linkDescription, color: linkColor)

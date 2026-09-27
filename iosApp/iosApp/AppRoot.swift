@@ -68,6 +68,8 @@ struct AppRoot: View {
     @State private var path: [AppRoute]
     @State private var tab: AppTab = .practice
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    /// Plan F14: the Demo badge shows above every screen while Demo mode is on.
+    @StateObject private var demoMode = DemoModeObserver()
 
     init(launchOptions: LaunchOptions) {
         self.launchOptions = launchOptions
@@ -81,6 +83,14 @@ struct AppRoot: View {
                 AppSidebarShell(launchOptions: launchOptions, path: $path, tab: $tab)
             } else {
                 AppTabShell(launchOptions: launchOptions, path: $path, tab: $tab)
+            }
+        }
+        .demoBanner(demoMode.enabled)
+        // Plan F14 (`--callout-probe`, debug UI tests only): the last call-out, written down.
+        // At the top, clear of the tab bar the tests tap.
+        .overlay(alignment: .topTrailing) {
+            if launchOptions.calloutProbe {
+                CalloutProbeView()
             }
         }
         .tint(Theme.gold)

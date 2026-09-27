@@ -2,5 +2,8 @@
 package dev.openflight.companion
 
 import android.os.Build
+import java.util.TimeZone
 
 actual fun platformName(): String = "Android ${Build.VERSION.SDK_INT}"
+
+actual fun localUtcOffsetMillis(epochMillis: Long): Long = TimeZone.getDefault().getOffset(epochMillis).toLong()

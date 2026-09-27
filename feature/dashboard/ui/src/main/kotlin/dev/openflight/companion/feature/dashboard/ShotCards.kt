@@ -23,10 +23,12 @@ import dev.openflight.companion.core.designsystem.OfConfidenceDots
 import dev.openflight.companion.core.designsystem.OfDivider
 import dev.openflight.companion.core.designsystem.OfMetricDetail
 import dev.openflight.companion.core.designsystem.OfMetricPrimary
+import dev.openflight.companion.core.designsystem.OfPill
 import dev.openflight.companion.core.designsystem.OfSpacing
 import dev.openflight.companion.core.designsystem.OfText
 import dev.openflight.companion.core.designsystem.OfTextButton
 import dev.openflight.companion.core.designsystem.OfTextRole
+import dev.openflight.companion.core.designsystem.StatusTone
 import dev.openflight.companion.core.designsystem.metricContentDescription
 import dev.openflight.companion.core.insights.ClubChip
 import dev.openflight.companion.core.insights.ConfidenceLevel
@@ -51,6 +53,7 @@ internal fun ShotCard(
     units: UnitSystem = UnitSystem.IMPERIAL,
     enrichment: ShotEnrichment? = null,
     onViewOnRange: (() -> Unit)? = null,
+    demo: Boolean = false,
 ) {
     OfCard(
         modifier = Modifier.fillMaxWidth().testTag(DashboardTestTags.LATEST_SHOT),
@@ -58,7 +61,20 @@ internal fun ShotCard(
     ) {
         Row(verticalAlignment = Alignment.Top) {
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                OfText(text = "LATEST SHOT", role = OfTextRole.Eyebrow, color = OfColorTokens.Gold)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    OfText(text = "LATEST SHOT", role = OfTextRole.Eyebrow, color = OfColorTokens.Gold)
+                    // Plan F14: a made-up shot is never shown as a measurement.
+                    if (demo) {
+                        OfPill(
+                            label = ConnectionPanelState.DEMO_TAG,
+                            tone = StatusTone.InProgress,
+                            modifier = Modifier.testTag(DashboardTestTags.DEMO_SHOT_TAG),
+                        )
+                    }
+                }
                 OfText(text = shot.displayClub, role = OfTextRole.Title)
                 enrichment?.profileName?.let { player ->
                     OfText(

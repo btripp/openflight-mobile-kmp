@@ -72,6 +72,8 @@ class MainActivity : ComponentActivity() {
             // Plan F8f: the range's "Show" choice (iOS's --range-show).
             rangeShow = RangeShowSetting.fromStorageValue(getStringExtra(EXTRA_RANGE_SHOW)),
             previewProfiles = getBooleanExtra(EXTRA_PREVIEW_PROFILES, false),
+            // Plan F14: `--es demo_mode on` (iOS's --demo-mode).
+            demoMode = LaunchOptions.demoModeFromValue(getStringExtra(EXTRA_DEMO_MODE)),
         )
 
     private companion object {
@@ -91,6 +93,7 @@ class MainActivity : ComponentActivity() {
         const val EXTRA_SHOT_TRAIL = "shot_trail"
         const val EXTRA_RANGE_SHOW = "range_show"
         const val EXTRA_PREVIEW_PROFILES = "preview_profiles"
+        const val EXTRA_DEMO_MODE = "demo_mode"
 
         var launchOptionsApplied = false
     }

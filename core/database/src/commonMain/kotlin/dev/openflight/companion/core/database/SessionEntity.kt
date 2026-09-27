@@ -18,7 +18,7 @@ import androidx.room3.PrimaryKey
  *   imported session, when the sharer recorded it.
  * @property host the Wi-Fi `host:port`, or `null` over Bluetooth.
  * @property transport `WIFI` or `BLUETOOTH` (`core:data`'s `TransportType` names).
- * @property source [SOURCE_LOCAL] or [SOURCE_IMPORTED].
+ * @property source [SOURCE_LOCAL], [SOURCE_IMPORTED] or (plan F14) [SOURCE_DEMO].
  * @property ownerName who an imported session belongs to; `null` for the phone's own.
  * @property includeInStats whether the session's shots count in club stats and gapping.
  */
@@ -40,5 +40,11 @@ data class SessionEntity(
 
         /** A session imported from a share file. */
         const val SOURCE_IMPORTED: String = "IMPORTED"
+
+        /**
+         * Plan F14: a Demo mode session (made-up shots, no Pi). A value of the existing TEXT column,
+         * so no schema change: the DAO keeps these out of the phone's own history and stats.
+         */
+        const val SOURCE_DEMO: String = "DEMO"
     }
 }

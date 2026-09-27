@@ -65,6 +65,10 @@ import dev.openflight.companion.core.data.TransportType
  * @property previewProfiles plan F8f: the Pi reports the roster of [previewHistory]'s shots (Ann,
  *   active, and Bo; [PreviewProfilesPiSessionRepository]), for the range's "Viewing profile".
  *   `--preview-profiles` (Android `--ez preview_profiles true`).
+ * @property demoMode plan F14: `--demo-mode on|off` (Android `--es demo_mode on`) turns Demo mode on
+ *   or off before the UI starts. Any scripted launch without it starts with Demo mode off.
+ * @property calloutProbe plan F14: `--callout-probe` turns call-outs on and writes each one down
+ *   ([CalloutProbeSpeechEngine]) instead of speaking it, for the iOS UI tests.
  */
 data class LaunchOptions(
     val uiTesting: Boolean = false,
@@ -87,6 +91,8 @@ data class LaunchOptions(
     val shotTrail: ShotTrailStyle? = null,
     val rangeShow: RangeShowSetting? = null,
     val previewProfiles: Boolean = false,
+    val demoMode: Boolean? = null,
+    val calloutProbe: Boolean = false,
 ) {
     val usesFakeRepository: Boolean
         get() = uiTesting || previewShot || previewPi || previewPiMock
@@ -116,6 +122,17 @@ data class LaunchOptions(
         const val SHOT_TRAIL = "--shot-trail"
         const val RANGE_SHOW = "--range-show"
         const val PREVIEW_PROFILES = "--preview-profiles"
+
+        const val DEMO_MODE = "--demo-mode"
+        const val CALLOUT_PROBE = "--callout-probe"
+
+        /** `on`/`off` (also `true`/`false`) as [LaunchOptions.demoMode]; anything else is `null`. */
+        fun demoModeFromValue(value: String?): Boolean? =
+            when (value?.lowercase()) {
+                "on", "true" -> true
+                "off", "false" -> false
+                else -> null
+            }
 
         /** How often `--preview-live-shots` delivers a shot. */
         const val PREVIEW_LIVE_SHOT_INTERVAL_MILLIS = 5_000L
@@ -154,6 +171,8 @@ data class LaunchOptions(
                 shotTrail = valueAfter(SHOT_TRAIL)?.let(ShotTrailStyle::fromStorageValue),
                 rangeShow = valueAfter(RANGE_SHOW)?.let(RangeShowSetting::fromStorageValue),
                 previewProfiles = PREVIEW_PROFILES in arguments,
+                demoMode = demoModeFromValue(valueAfter(DEMO_MODE)),
+                calloutProbe = CALLOUT_PROBE in arguments,
             )
         }
     }

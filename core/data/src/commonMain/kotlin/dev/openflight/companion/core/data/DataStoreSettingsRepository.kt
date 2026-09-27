@@ -226,6 +226,27 @@ internal class DataStoreSettingsRepository(
         dataStore.edit { it[VIEWING_PROFILE_KEY] = profile.storageValue }
     }
 
+    // Plan F14: Demo mode.
+
+    override val demoMode: Flow<Boolean> =
+        preferences.map { it[DEMO_MODE_KEY] ?: false }.distinctUntilChanged()
+
+    override suspend fun setDemoMode(enabled: Boolean) {
+        dataStore.edit { it[DEMO_MODE_KEY] = enabled }
+    }
+
+    override val demoAutoFireSeconds: Flow<Int> =
+        preferences
+            .map { stored ->
+                stored[DEMO_AUTO_FIRE_KEY]?.takeIf { it in DemoModeRepository.AUTO_FIRE_OPTIONS }
+                    ?: DemoModeRepository.DEFAULT_AUTO_FIRE_SECONDS
+            }.distinctUntilChanged()
+
+    override suspend fun setDemoAutoFireSeconds(seconds: Int) {
+        if (seconds !in DemoModeRepository.AUTO_FIRE_OPTIONS) return
+        dataStore.edit { it[DEMO_AUTO_FIRE_KEY] = seconds }
+    }
+
     companion object {
         /** DataStore requires the `.preferences_pb` extension for preferences files. */
         const val FILE_NAME = "openflight.preferences_pb"
@@ -260,6 +281,10 @@ internal class DataStoreSettingsRepository(
         private val RANGE_SHOW_KEY = stringPreferencesKey("rangeShow")
         private val SHOW_TOTAL_DISTANCE_KEY = booleanPreferencesKey("showTotalDistance")
         private val VIEWING_PROFILE_KEY = stringPreferencesKey("viewingProfile")
+
+        // Plan F14: Demo mode.
+        private val DEMO_MODE_KEY = booleanPreferencesKey("demoMode")
+        private val DEMO_AUTO_FIRE_KEY = intPreferencesKey("demoAutoFireSeconds")
     }
 }
 

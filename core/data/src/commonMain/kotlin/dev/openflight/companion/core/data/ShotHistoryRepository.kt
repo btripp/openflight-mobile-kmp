@@ -132,6 +132,12 @@ enum class SessionSource {
 
     /** Imported from a share file. */
     IMPORTED,
+
+    /**
+     * Plan F14: made up by Demo mode (no Pi, no measurements). Listed and counted only while Demo
+     * mode is on ([DemoShotHistoryRepository]); never mixed into the phone's own history or stats.
+     */
+    DEMO,
 }
 
 /** Which of a club's shots [ShotHistoryRepository.shotsForClub] returns. */

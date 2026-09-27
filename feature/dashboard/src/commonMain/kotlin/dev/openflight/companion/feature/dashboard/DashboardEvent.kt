@@ -45,4 +45,13 @@ sealed interface DashboardEvent {
     data class LocalNetworkPermissionChanged(
         val granted: Boolean,
     ) : DashboardEvent
+
+    /** Plan F14: "Try without a Pi": turns Demo mode on, which connects a pretend Pi. */
+    data object TryDemo : DashboardEvent
+
+    /** Plan F14: leaves Demo mode, back to the real connection. */
+    data object ExitDemo : DashboardEvent
+
+    /** Plan F14: "Hit a shot": the pretend Pi reports a swing with the selected club. */
+    data object HitDemoShot : DashboardEvent
 }

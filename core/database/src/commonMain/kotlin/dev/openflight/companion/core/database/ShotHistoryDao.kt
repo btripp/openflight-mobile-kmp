@@ -20,7 +20,17 @@ abstract class ShotHistoryDao {
     /**
      * Sessions that hold at least one shot, newest first (by their newest shot, then by start).
      * A session whose last shot was deleted drops out on its own, like Expo's `loadSessions`.
-     * Imported sessions are listed only with [includeImported].
+     * Imported sessions are listed only with [includeImported]. Demo sessions (plan F14) never are:
+     * see [observeSessionsOf].
+     */
+    fun observeSessions(includeImported: Boolean): Flow<List<SessionSummaryRow>> =
+        observeSessionsOf(SessionEntity.SOURCE_LOCAL, includeImported)
+
+    /**
+     * [observeSessions] for one world (plan F14): the sessions whose `source` is [world]
+     * ([SessionEntity.SOURCE_LOCAL] for the phone's own, [SessionEntity.SOURCE_DEMO] for Demo mode's),
+     * plus imported ones with [includeImported]. So Demo mode never lists the player's sessions, and
+     * the player's history never lists a demo one.
      */
     @Query(
         """
@@ -32,12 +42,15 @@ abstract class ShotHistoryDao {
                MAX(sh.timestamp) AS last_shot_at
         FROM sessions s
         INNER JOIN shots sh ON sh.session_id = s.id
-        WHERE :includeImported OR s.source = 'LOCAL'
+        WHERE s.source = :world OR (:includeImported AND s.source = 'IMPORTED')
         GROUP BY s.id
         ORDER BY last_shot_at DESC, s.started_at DESC
         """,
     )
-    abstract fun observeSessions(includeImported: Boolean): Flow<List<SessionSummaryRow>>
+    abstract fun observeSessionsOf(
+        world: String,
+        includeImported: Boolean,
+    ): Flow<List<SessionSummaryRow>>
 
     /** The phone's own sessions only (no imported ones): [observeSessions] for live history. */
     fun observeSessions(): Flow<List<SessionSummaryRow>> = observeSessions(includeImported = false)
@@ -62,7 +75,19 @@ abstract class ShotHistoryDao {
      * One club's shots across the sessions that count in stats (`include_in_stats`), newest session
      * first, then newest shot first. [club] is the wire value. Optionally only [profileId]'s shots,
      * only sessions started at or after [sinceEpochMillis], and only the [sessionLimit] most recent
-     * sessions holding such a shot (`-1`: no limit, SQLite's `LIMIT -1`).
+     * sessions holding such a shot (`-1`: no limit, SQLite's `LIMIT -1`). Demo sessions (plan F14)
+     * never count: see [observeShotsForClubIn].
+     */
+    fun observeShotsForClub(
+        club: String,
+        profileId: String?,
+        sinceEpochMillis: Long,
+        sessionLimit: Int,
+    ): Flow<List<ShotEntity>> = observeShotsForClubIn(club, profileId, sinceEpochMillis, sessionLimit, demo = false)
+
+    /**
+     * [observeShotsForClub] in one world (plan F14): only Demo mode's sessions with [demo], only the
+     * others without it, so demo shots never reach the player's bag stats and gapping.
      */
     @Query(
         """
@@ -70,11 +95,13 @@ abstract class ShotHistoryDao {
         INNER JOIN sessions s ON s.id = sh.session_id
         WHERE sh.club = :club AND s.include_in_stats = 1 AND s.started_at >= :sinceEpochMillis
           AND (:profileId IS NULL OR sh.profile_id = :profileId)
+          AND (s.source = 'DEMO') = :demo
           AND s.id IN (
             SELECT s2.id FROM sessions s2
             INNER JOIN shots sh2 ON sh2.session_id = s2.id
             WHERE sh2.club = :club AND s2.include_in_stats = 1 AND s2.started_at >= :sinceEpochMillis
               AND (:profileId IS NULL OR sh2.profile_id = :profileId)
+              AND (s2.source = 'DEMO') = :demo
             GROUP BY s2.id
             ORDER BY s2.started_at DESC, s2.id DESC
             LIMIT :sessionLimit
@@ -82,11 +109,12 @@ abstract class ShotHistoryDao {
         ORDER BY s.started_at DESC, s.id DESC, sh.timestamp DESC, sh.id DESC
         """,
     )
-    abstract fun observeShotsForClub(
+    abstract fun observeShotsForClubIn(
         club: String,
         profileId: String?,
         sinceEpochMillis: Long,
         sessionLimit: Int,
+        demo: Boolean,
     ): Flow<List<ShotEntity>>
 
     /**
@@ -119,9 +147,19 @@ abstract class ShotHistoryDao {
      * own sessions: an imported session's shots may carry the same timestamps, and the Pi's
      * deletes are not about them (plan F3, A8).
      */
+    suspend fun deleteByTimestamps(timestamps: List<String>) =
+        deleteByTimestampsIn(timestamps, SessionEntity.SOURCE_LOCAL)
+
+    /**
+     * [deleteByTimestamps] within the sessions whose `source` is [world] (plan F14: Demo mode
+     * deletes its own demo shots, never the player's).
+     */
     @Transaction
-    open suspend fun deleteByTimestamps(timestamps: List<String>) {
-        timestamps.chunked(MAX_BOUND_ARGUMENTS).forEach { chunk -> deleteShotsByTimestamp(chunk) }
+    open suspend fun deleteByTimestampsIn(
+        timestamps: List<String>,
+        world: String,
+    ) {
+        timestamps.chunked(MAX_BOUND_ARGUMENTS).forEach { chunk -> deleteShotsByTimestamp(chunk, world) }
         deleteEmptySessions()
     }
 
@@ -138,6 +176,17 @@ abstract class ShotHistoryDao {
         deleteShotsOfSource(SessionEntity.SOURCE_IMPORTED)
         deleteSessionsOfSource(SessionEntity.SOURCE_IMPORTED)
     }
+
+    /** Plan F14: deletes every Demo mode session and its shots ("Clear demo data"). */
+    @Transaction
+    open suspend fun clearDemo() {
+        deleteShotsOfSource(SessionEntity.SOURCE_DEMO)
+        deleteSessionsOfSource(SessionEntity.SOURCE_DEMO)
+    }
+
+    /** Plan F14: how many sessions of [source] are stored (Demo mode seeds its history only once). */
+    @Query("SELECT COUNT(*) FROM sessions WHERE source = :source")
+    abstract suspend fun sessionCountOf(source: String): Int
 
     /**
      * Stores an imported session with its [shots] (in their given order) in one transaction:
@@ -213,10 +262,13 @@ abstract class ShotHistoryDao {
     @Query(
         """
         DELETE FROM shots WHERE timestamp IN (:timestamps)
-          AND session_id IN (SELECT id FROM sessions WHERE source = 'LOCAL')
+          AND session_id IN (SELECT id FROM sessions WHERE source = :world)
         """,
     )
-    protected abstract suspend fun deleteShotsByTimestamp(timestamps: List<String>)
+    protected abstract suspend fun deleteShotsByTimestamp(
+        timestamps: List<String>,
+        world: String,
+    )
 
     @Query("DELETE FROM sessions WHERE id NOT IN (SELECT DISTINCT session_id FROM shots)")
     protected abstract suspend fun deleteEmptySessions()

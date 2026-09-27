@@ -6,6 +6,8 @@ import androidx.lifecycle.viewModelScope
 import dev.openflight.companion.core.data.AppLifecycle
 import dev.openflight.companion.core.data.AppLifecycleState
 import dev.openflight.companion.core.data.CalloutTrigger
+import dev.openflight.companion.core.data.DemoModeOff
+import dev.openflight.companion.core.data.DemoModeRepository
 import dev.openflight.companion.core.data.PiSessionRepository
 import dev.openflight.companion.core.data.SettingsRepository
 import dev.openflight.companion.core.data.ShotRepository
@@ -69,6 +71,8 @@ class SettingsViewModel(
     // Plan F7: audio call-outs, added at the end to keep this constructor's diff mergeable (§4a A7).
     private val speechEngine: SpeechEngine,
     private val screenReader: ScreenReaderMonitor,
+    // Plan F14: Demo mode, added at the end to keep this constructor's diff mergeable (§4a A7).
+    private val demoMode: DemoModeRepository = DemoModeOff,
 ) : ViewModel() {
     private val shutdownPhase = MutableStateFlow<ShutdownPhase>(ShutdownPhase.Idle)
     private var shutdownJob: Job? = null
@@ -125,19 +129,29 @@ class SettingsViewModel(
             ShotTrailUiState(selected = style, keepLast = keepLast, landingEffect = effect)
         }
 
+    // Plan F14: Settings › Device › Demo mode.
+    private val demoClearConfirming = MutableStateFlow(false)
+    private val demoSettings =
+        combine(demoMode.enabled, demoMode.autoFireSeconds, demoClearConfirming) { enabled, seconds, confirming ->
+            DemoSettingsUiState(enabled = enabled, autoFireSeconds = seconds, confirmingClear = confirming)
+        }
+
     val uiState: StateFlow<SettingsUiState> =
         combine(
             baseState,
             callout,
             settings.rangeTheme,
             shotTrail,
-            settings.showTotalDistance,
-        ) { base, calloutState, theme, trail, showTotal ->
+            // Plan F8f + F14: paired so combine stays at five flows.
+            combine(settings.showTotalDistance, demoSettings) { showTotal, demo -> showTotal to demo },
+        ) { base, calloutState, theme, trail, extras ->
+            val (showTotal, demo) = extras
             buildState(base.phone, base.link, base.device, base.radar, base.phase, calloutState)
                 .copy(
                     rangeTheme = RangeThemeUiState(selected = theme),
                     shotTrail = trail,
                     showTotalDistance = showTotal,
+                    demo = demo,
                 )
         }.stateIn(
             scope = viewModelScope,
@@ -227,24 +241,70 @@ class SettingsViewModel(
                 onCalloutEvent(event)
             }
 
-            is SettingsEvent.SetRangeTheme -> {
-                viewModelScope.launch { settings.setRangeTheme(event.theme) }
+            is SettingsEvent.SetRangeTheme,
+            is SettingsEvent.SetShotTrail,
+            is SettingsEvent.SetShotTrailKeepLast,
+            is SettingsEvent.SetLandingEffect,
+            is SettingsEvent.SetShowTotalDistance,
+            -> {
+                onPracticeEvent(event)
             }
 
-            is SettingsEvent.SetShotTrail -> {
-                viewModelScope.launch { settings.setShotTrail(event.style) }
+            is SettingsEvent.SetDemoMode,
+            is SettingsEvent.SetDemoAutoFire,
+            SettingsEvent.RequestClearDemoData,
+            SettingsEvent.ConfirmClearDemoData,
+            SettingsEvent.CancelClearDemoData,
+            -> {
+                onDemoEvent(event)
+            }
+        }
+    }
+
+    // Plans F8a2a/F8a2t/F8f: the Practice group's range preferences, stored as they're picked.
+    private fun onPracticeEvent(event: SettingsEvent) {
+        viewModelScope.launch {
+            when (event) {
+                is SettingsEvent.SetRangeTheme -> settings.setRangeTheme(event.theme)
+                is SettingsEvent.SetShotTrail -> settings.setShotTrail(event.style)
+                is SettingsEvent.SetShotTrailKeepLast -> settings.setShotTrailKeepLast(event.count)
+                is SettingsEvent.SetLandingEffect -> settings.setLandingEffect(event.effect)
+                is SettingsEvent.SetShowTotalDistance -> settings.setShowTotalDistance(event.show)
+                else -> Unit // Every other SettingsEvent is dispatched by onEvent's own when.
+            }
+        }
+    }
+
+    // Plan F14: Demo mode, added here (not at the file's end) to sit beside onEvent's other handlers.
+    private fun onDemoEvent(event: SettingsEvent) {
+        when (event) {
+            is SettingsEvent.SetDemoMode -> {
+                viewModelScope.launch { demoMode.setEnabled(event.enabled) }
             }
 
-            is SettingsEvent.SetShotTrailKeepLast -> {
-                viewModelScope.launch { settings.setShotTrailKeepLast(event.count) }
+            is SettingsEvent.SetDemoAutoFire -> {
+                viewModelScope.launch { demoMode.setAutoFireSeconds(event.seconds) }
             }
 
-            is SettingsEvent.SetLandingEffect -> {
-                viewModelScope.launch { settings.setLandingEffect(event.effect) }
+            SettingsEvent.RequestClearDemoData -> {
+                demoClearConfirming.value = true
             }
 
-            is SettingsEvent.SetShowTotalDistance -> {
-                viewModelScope.launch { settings.setShowTotalDistance(event.show) }
+            SettingsEvent.CancelClearDemoData -> {
+                demoClearConfirming.value = false
+            }
+
+            SettingsEvent.ConfirmClearDemoData -> {
+                if (!demoClearConfirming.value) return
+                demoClearConfirming.value = false
+                viewModelScope.launch {
+                    demoMode.clearDemoData()
+                    settingsEffects.send(SettingsEffect.Message(DemoSettingsUiState.CLEARED_MESSAGE))
+                }
+            }
+
+            else -> {
+                // Every other SettingsEvent is dispatched by onEvent's own when, never reaches here.
             }
         }
     }
