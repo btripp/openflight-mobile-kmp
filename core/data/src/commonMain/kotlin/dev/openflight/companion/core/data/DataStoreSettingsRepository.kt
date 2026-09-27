@@ -153,6 +153,17 @@ internal class DataStoreSettingsRepository(
         dataStore.edit { it[CALLOUT_TRIGGER_KEY] = trigger.storageValue }
     }
 
+    // Plan F8a2a: the range theme, added at the end to keep this file's diff mergeable (§4a A7).
+
+    override val rangeTheme: Flow<RangeThemeSetting> =
+        preferences
+            .map { RangeThemeSetting.fromStorageValue(it[RANGE_THEME_KEY]) ?: RangeThemeSetting.DEFAULT }
+            .distinctUntilChanged()
+
+    override suspend fun setRangeTheme(theme: RangeThemeSetting) {
+        dataStore.edit { it[RANGE_THEME_KEY] = theme.storageValue }
+    }
+
     companion object {
         /** DataStore requires the `.preferences_pb` extension for preferences files. */
         const val FILE_NAME = "openflight.preferences_pb"
@@ -174,6 +185,9 @@ internal class DataStoreSettingsRepository(
         private val CALLOUT_RATE_KEY = floatPreferencesKey("calloutRate")
         private val CALLOUT_FIELDS_KEY = stringPreferencesKey("calloutFields")
         private val CALLOUT_TRIGGER_KEY = stringPreferencesKey("calloutTrigger")
+
+        // Plan F8a2a: the range theme.
+        private val RANGE_THEME_KEY = stringPreferencesKey("rangeTheme")
     }
 }
 

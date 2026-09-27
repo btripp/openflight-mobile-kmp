@@ -10,10 +10,16 @@ import kotlin.math.sqrt
  * near plane rather than dropped, so the visible part stays one line running to the screen edge.
  * The platform fills [path] with [RangeVisualStyle.tracer] and draws the ball at ([tipX], [tipY]).
  *
- * [build] rewrites the same [path] and scratch arrays every frame; it allocates nothing.
+ * Plan F8a2a: with a [glow] sink, the same run is also written there [glowWidthFactor] times as
+ * wide; the platform fills it with [RangeVisualStyle.tracerGlow] under the core, the broadcast
+ * look of a bright line in a soft halo.
+ *
+ * [build] rewrites the same paths and scratch arrays every frame; it allocates nothing.
  */
 class TracerRibbon<P : PathSink>(
     val path: P,
+    val glow: P? = null,
+    private val glowWidthFactor: Float = 1f,
 ) {
     /** The tracer's tip, where the ball is drawn; NaN when it is behind the camera. */
     var tipX = Float.NaN
@@ -46,6 +52,7 @@ class TracerRibbon<P : PathSink>(
         at: Float,
     ) {
         path.rewind()
+        glow?.rewind()
         runLength = 0
         val whole = at.toInt().coerceIn(0, geometry.segments)
         val fraction = (at - whole).toDouble()
@@ -160,17 +167,27 @@ class TracerRibbon<P : PathSink>(
             normalX[k] = lastNormalX
             normalY[k] = lastNormalY
         }
+        writeRibbon(path, n, 1f)
+        glow?.let { writeRibbon(it, n, glowWidthFactor) }
+    }
+
+    /** The run's [n] points as one closed ribbon in [sink], [widthFactor] times the sample widths. */
+    private fun writeRibbon(
+        sink: P,
+        n: Int,
+        widthFactor: Float,
+    ) {
         for (k in 0 until n) {
-            val half = runWidth[k] / 2
+            val half = runWidth[k] * widthFactor / 2
             val x = runX[k] + normalX[k] * half
             val y = runY[k] + normalY[k] * half
-            if (k == 0) path.moveTo(x, y) else path.lineTo(x, y)
+            if (k == 0) sink.moveTo(x, y) else sink.lineTo(x, y)
         }
         for (k in n - 1 downTo 0) {
-            val half = runWidth[k] / 2
-            path.lineTo(runX[k] - normalX[k] * half, runY[k] - normalY[k] * half)
+            val half = runWidth[k] * widthFactor / 2
+            sink.lineTo(runX[k] - normalX[k] * half, runY[k] - normalY[k] * half)
         }
-        path.close()
+        sink.close()
     }
 
     private companion object {

@@ -60,7 +60,8 @@ import kotlin.math.roundToInt
  * today.
  *
  * Plan F1d: the cards are grouped into Device (connection, calibrate, camera, radar, simulators,
- * shutdown), Practice (units, audio call-outs) and Data (debug logging, cloud upload). The Device
+ * shutdown), Practice (units, audio call-outs, and plan F8a2a's range theme) and Data (debug
+ * logging, cloud upload). The Device
  * group's "Calibrate radar" and "Camera" rows push those screens; each row only shows when its
  * [onOpenCalibration] / [onOpenCamera] is given.
  */
@@ -106,6 +107,7 @@ fun SettingsScreen(
                 GroupHeader("Practice", SettingsTestTags.GROUP_PRACTICE)
                 UnitsCard(uiState.units, onEvent)
                 AudioCalloutsCard(uiState.callouts, onEvent, windowClass)
+                RangeThemeCard(uiState.rangeTheme, onEvent)
                 GroupHeader("Data", SettingsTestTags.GROUP_DATA)
                 // Hidden until the Pi reports its debug mode: never offer "Start" before that is known.
                 if (uiState.debug.loaded) DebugCard(uiState.debug, onEvent)
@@ -186,6 +188,31 @@ private fun UnitsCard(
                 if (picked != units) onEvent(SettingsEvent.SetUnits(picked))
             },
             modifier = Modifier.fillMaxWidth().testTag(SettingsTestTags.UNITS),
+        )
+    }
+}
+
+/** Plan F8a2a: how the driving range looks (Day, Dusk, Night, Links). */
+@Composable
+private fun RangeThemeCard(
+    theme: RangeThemeUiState,
+    onEvent: (SettingsEvent) -> Unit,
+) {
+    OfCard(modifier = Modifier.fillMaxWidth(), contentSpacing = OfSpacing.Md) {
+        SectionTitle("RANGE THEME")
+        val selected =
+            theme.options
+                .firstOrNull { it.theme == theme.selected }
+                ?.label
+                .orEmpty()
+        OfSegmentedPicker(
+            options = theme.options.map { it.label },
+            selected = selected,
+            onSelect = { label ->
+                val picked = theme.options.first { it.label == label }.theme
+                if (picked != theme.selected) onEvent(SettingsEvent.SetRangeTheme(picked))
+            },
+            modifier = Modifier.fillMaxWidth().testTag(SettingsTestTags.RANGE_THEME),
         )
     }
 }

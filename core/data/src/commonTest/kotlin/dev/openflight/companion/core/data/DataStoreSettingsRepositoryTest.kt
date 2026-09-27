@@ -259,4 +259,39 @@ class DataStoreSettingsRepositoryTest {
 
             assertThat(settings.calloutTrigger.first()).isEqualTo(CalloutTrigger.EVERY_SHOT)
         }
+
+    // Plan F8a2a: the range theme, added at the end to keep this file's diff mergeable (§4a A7).
+
+    @Test
+    fun theRangeThemeDefaultsToDay() =
+        runTest {
+            val settings = DataStoreSettingsRepository(backgroundScope.dataStore())
+
+            assertThat(settings.rangeTheme.first()).isEqualTo(RangeThemeSetting.DAY)
+        }
+
+    @Test
+    fun everyRangeThemeRoundTripsAndSurvivesANewRepository() =
+        runTest {
+            val dataStore = backgroundScope.dataStore()
+            val settings = DataStoreSettingsRepository(dataStore)
+
+            for (theme in RangeThemeSetting.entries) {
+                settings.setRangeTheme(theme)
+                assertThat(settings.rangeTheme.first()).isEqualTo(theme)
+                assertThat(DataStoreSettingsRepository(dataStore).rangeTheme.first()).isEqualTo(theme)
+                assertThat(dataStore.data.first()[stringPreferencesKey("rangeTheme")]).isEqualTo(theme.storageValue)
+            }
+        }
+
+    @Test
+    fun anUnrecognizedStoredRangeThemeFallsBackToDay() =
+        runTest {
+            val dataStore = backgroundScope.dataStore()
+            dataStore.edit { it[stringPreferencesKey("rangeTheme")] = "vaporwave" }
+
+            val settings = DataStoreSettingsRepository(dataStore)
+
+            assertThat(settings.rangeTheme.first()).isEqualTo(RangeThemeSetting.DAY)
+        }
 }

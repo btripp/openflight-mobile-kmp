@@ -61,8 +61,13 @@ import kotlin.math.roundToInt
  * trajectories are drawn (re-projected only when the camera moves) and a tap near a landing
  * selects it through [onSelectLanding]. [rollOut] draws the estimated roll-out to the total dot
  * once the ball has landed (or for the selected overlay shot).
+ *
+ * Plan F8a2a: [theme] picks the palette (the renderer is rebuilt when it changes). Debug
+ * [freezeProgress] (the `range_freeze_progress` launch extra, iOS's `--range-freeze-progress`)
+ * holds every flight at that playback progress for screenshots; at 1 the flight lands and the
+ * follow camera is shown fully settled.
  */
-@Suppress("LongParameterList") // The scene's state plus its gesture callbacks.
+@Suppress("LongParameterList", "CyclomaticComplexMethod") // The scene's state plus its gesture callbacks.
 @Composable
 fun RangeCanvas(
     flight: ActiveFlight?,
@@ -78,6 +83,8 @@ fun RangeCanvas(
     onViewChanged: (ViewTransform) -> Unit = {},
     onResetView: () -> Unit = {},
     onSelectLanding: (String) -> Unit = {},
+    theme: RangeTheme = RangeTheme.DAY,
+    freezeProgress: Float? = null,
 ) {
     var shown by remember { mutableStateOf<ActiveFlight?>(null) }
     val progress = remember { mutableFloatStateOf(0f) }
@@ -92,8 +99,8 @@ fun RangeCanvas(
     val viewChanged by rememberUpdatedState(onViewChanged)
     val resetView by rememberUpdatedState(onResetView)
     val selectLanding by rememberUpdatedState(onSelectLanding)
-    // Plan F8c1: the shared palette and sizes; F8a2 makes the theme selectable.
-    val style = RangeTheme.DAY.style
+    // Plan F8c1: the shared palette and sizes; plan F8a2a: the user's theme.
+    val style = theme.style
     val rig = remember { RangeCameraRig() }
     val renderer =
         remember(style) { RangeRenderer(RangeFrame(style, OfClubPalette.colors.size, ::ComposePathSink)) }
@@ -110,6 +117,15 @@ fun RangeCanvas(
             shown = playing
             progress.floatValue = 0f
             landedSeconds.floatValue = 0f
+            if (freezeProgress != null) {
+                // Debug: hold the flight (or, at 1, its fully settled landing) for screenshots.
+                progress.floatValue = freezeProgress.coerceIn(0f, 1f)
+                if (freezeProgress >= 1f) {
+                    landedSeconds.floatValue = rig.settleSeconds.toFloat()
+                    completed()
+                }
+                return@LaunchedEffect
+            }
             val durationNanos =
                 playbackSeconds(playing.trajectory, reduceMotion) / playing.speed.coerceAtLeast(MIN_SPEED) *
                     NANOS_PER_SECOND

@@ -138,6 +138,14 @@ interface SettingsRepository {
 
     /** Default no-op, see [calloutsEnabled]. */
     suspend fun setCalloutTrigger(trigger: CalloutTrigger) {}
+
+    // Plan F8a2a: the range theme, added at the end to keep this file's diff mergeable (§4a A7).
+
+    /** The driving range's look, defaulting to [RangeThemeSetting.DAY]. */
+    val rangeTheme: Flow<RangeThemeSetting> get() = flowOf(RangeThemeSetting.DEFAULT)
+
+    /** Default no-op, see [calloutsEnabled]. */
+    suspend fun setRangeTheme(theme: RangeThemeSetting) {}
 }
 
 /**
@@ -154,5 +162,26 @@ enum class CalloutTrigger(
 
     companion object {
         fun fromStorageValue(value: String?): CalloutTrigger? = entries.firstOrNull { it.storageValue == value }
+    }
+}
+
+/**
+ * Which look the driving range draws (plan F8a2a). `feature:range` maps each to its
+ * `RangeTheme` palette; this is only the persisted choice.
+ */
+enum class RangeThemeSetting(
+    /** The value persisted in settings. */
+    val storageValue: String,
+) {
+    DAY("day"),
+    DUSK("dusk"),
+    NIGHT("night"),
+    LINKS("links"),
+    ;
+
+    companion object {
+        val DEFAULT: RangeThemeSetting = DAY
+
+        fun fromStorageValue(value: String?): RangeThemeSetting? = entries.firstOrNull { it.storageValue == value }
     }
 }

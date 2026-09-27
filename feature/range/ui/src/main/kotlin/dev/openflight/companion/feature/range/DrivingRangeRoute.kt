@@ -27,6 +27,8 @@ import org.koin.androidx.compose.koinViewModel
  * @param windowClass injectable so device tests can force the phone or the tablet layout.
  * @param replayShotId plan F8d: with [replaySessionId], open paused on this shot ("View on range");
  *   any id [RangeLaunch.shotId] accepts.
+ * @param freezeProgress debug (plan F8a2a, the `range_freeze_progress` launch extra): hold every
+ *   flight at this playback progress, 0..1, for screenshots.
  */
 @Composable
 fun DrivingRangeRoute(
@@ -37,6 +39,7 @@ fun DrivingRangeRoute(
     replaySessionId: String? = null,
     windowClass: OfWindowClass = rememberOfWindowClass(),
     replayShotId: String? = null,
+    freezeProgress: Double? = null,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     LifecycleResumeEffect(viewModel) {
@@ -64,5 +67,6 @@ fun DrivingRangeRoute(
             onExit()
         },
         windowClass = windowClass,
+        freezeProgress = freezeProgress?.toFloat(),
     )
 }

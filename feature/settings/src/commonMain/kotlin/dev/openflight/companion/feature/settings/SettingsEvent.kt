@@ -2,6 +2,7 @@
 package dev.openflight.companion.feature.settings
 
 import dev.openflight.companion.core.data.CalloutTrigger
+import dev.openflight.companion.core.data.RangeThemeSetting
 import dev.openflight.companion.core.insights.CalloutField
 import dev.openflight.companion.core.insights.UnitSystem
 
@@ -77,6 +78,11 @@ sealed interface SettingsEvent {
 
     /** The voice picker's "Preview" button: speaks [CalloutSettingsUiState.previewText]. */
     data object PreviewCallout : SettingsEvent
+
+    /** Plan F8a2a: the range theme picker; persisted for the driving range. */
+    data class SetRangeTheme(
+        val theme: RangeThemeSetting,
+    ) : SettingsEvent
 }
 
 /** One-shot signals from [SettingsViewModel]. */

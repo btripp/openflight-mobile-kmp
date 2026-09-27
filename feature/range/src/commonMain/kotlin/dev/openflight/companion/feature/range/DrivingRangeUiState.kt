@@ -73,10 +73,13 @@ data class RangeClubState(
  * @property mode the camera to render with: the user's choice, or [RangeCameraMode.FIXED] while
  *   reduced motion is on. Renderers get the pose for it from [RangeCameraRig].
  * @property locked reduced motion is on, so the camera is fixed and the toggle is disabled.
+ * @property theme plan F8a2a: the look the renderers paint the scene with, the persisted
+ *   [SettingsRepository.rangeTheme].
  */
 data class RangeCameraState(
     val mode: RangeCameraMode = SettingsRepository.DEFAULT_RANGE_CAMERA_MODE,
     val locked: Boolean = false,
+    val theme: RangeTheme = RangeTheme.DAY,
 )
 
 /** What the range renders. */

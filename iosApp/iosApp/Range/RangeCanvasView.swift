@@ -33,6 +33,8 @@ struct RangeCanvasView: View {
     let flight: ActiveFlight?
     let cameraMode: RangeCameraMode
     let reduceMotion: Bool
+    /// Plan F8a2a: the look to paint with (the persisted range theme).
+    var theme: RangeTheme = .day
     var view: ViewTransform = ViewTransform.companion.IDENTITY
     var rollOut: RangeRollOut?
     var overlay: [OverlayFlight] = []
@@ -58,6 +60,7 @@ struct RangeCanvasView: View {
                     now: timeline.date,
                     displayScale: displayScale,
                     inputs: RangeCanvasPlayer.Inputs(
+                        theme: theme,
                         cameraMode: cameraMode,
                         view: view,
                         rollOut: rollOut,
@@ -124,6 +127,7 @@ struct RangeCanvasView: View {
 @MainActor
 final class RangeCanvasPlayer: ObservableObject {
     struct Inputs {
+        let theme: RangeTheme
         let cameraMode: RangeCameraMode
         let view: ViewTransform
         let rollOut: RangeRollOut?
@@ -148,8 +152,10 @@ final class RangeCanvasPlayer: ObservableObject {
     private var markersScale: CGFloat = 1
 
     let rig = RangeCameraRig()
-    let style = RangeTheme.day.style
-    let frame: RangeFrame<CGPathSink>
+    /// Plan F8a2a: the theme the frame and palette were built for; a new theme rebuilds both.
+    private var theme: RangeTheme
+    private(set) var style: RangeVisualStyle
+    private(set) var frame: RangeFrame<CGPathSink>
 
     private var shown: ActiveFlight?
     private var playingId: Int64?
@@ -166,47 +172,81 @@ final class RangeCanvasPlayer: ObservableObject {
     private var frameRollOut: RangeRollOut?
     private var frameRollOutTrajectory: FlightTrajectory?
 
-    // The static scene, read once from the frame, with its colours resolved once.
-    private let polygons: [WorldPolygon<CGPathSink>]
-    private let polygonColors: [Color]
-    private let trees: [WorldTree<CGPathSink>]
-    private let treeColors: [(trunk: Color, crown: Color, crownTop: Color)]
-    private let labels: [WorldLabel]
-    private let skyGradient: Gradient
-    private let colors: Palette
+    // The static scene, read once from the frame, with its colours resolved once per theme.
+    private var scene: ScenePalette
 
     private let frameCounter = RangeFrameCounter()
 
     private struct Palette {
-        let ground, tracer, ball, shadow, label, selected, rollOut, landingOuter, landingInner: Color
+        let ground, tracer, tracerGlow, ball, shadow, label, selected, rollOut, landingOuter, landingInner, sunDisc: Color
     }
 
-    init() {
-        let style = RangeTheme.day.style
-        let frame = RangeFrame<CGPathSink>(
+    /// Everything drawn from the shared scene, with the theme's colours resolved to SwiftUI once.
+    private struct ScenePalette {
+        let polygons: [WorldPolygon<CGPathSink>]
+        let trees: [WorldTree<CGPathSink>]
+        let labels: [WorldLabel]
+        let ridges: [RangeSkyRidge<CGPathSink>]
+        let ridgeColors: [Color]
+        let skyGradient: Gradient
+        let sunGlow: Gradient
+        let colors: Palette
+
+        init(frame: RangeFrame<CGPathSink>, style: RangeVisualStyle) {
+            polygons = frame.scene.polygons
+            trees = frame.scene.trees
+            labels = frame.scene.labels
+            ridges = frame.scene.sky.ridges
+            ridgeColors = ridges.map { $0.color.swiftUI }
+            skyGradient = style.sky.gradient
+            sunGlow = style.sun.glow.gradient
+            colors = Palette(
+                ground: style.distantGround.swiftUI,
+                tracer: style.tracer.swiftUI,
+                tracerGlow: style.tracerGlow.swiftUI,
+                ball: style.ball.swiftUI,
+                shadow: style.shadow.swiftUI,
+                label: style.label.swiftUI,
+                selected: style.overlaySelected.swiftUI,
+                rollOut: style.rollOut.swiftUI,
+                landingOuter: style.landingOuter.swiftUI,
+                landingInner: style.landingInner.swiftUI,
+                sunDisc: style.sun.disc.swiftUI
+            )
+        }
+    }
+
+    init(theme: RangeTheme = .day) {
+        let frame = Self.makeFrame(theme.style)
+        self.theme = theme
+        style = theme.style
+        self.frame = frame
+        scene = ScenePalette(frame: frame, style: theme.style)
+    }
+
+    private static func makeFrame(_ style: RangeVisualStyle) -> RangeFrame<CGPathSink> {
+        RangeFrame<CGPathSink>(
             style: style,
             clubPaletteSize: Int32(Theme.clubColors.count),
             newPath: { CGPathSink() },
             description: RangeSceneDescription.companion.standard(treeCount: RangeFrameCompanion.shared.QUALITY.treeCount)
         )
-        self.frame = frame
-        polygons = frame.scene.polygons
-        polygonColors = polygons.map { $0.color.swiftUI }
-        trees = frame.scene.trees
-        treeColors = trees.map { ($0.trunk.color.swiftUI, $0.crown.color.swiftUI, $0.crownTop.color.swiftUI) }
-        labels = frame.scene.labels
-        skyGradient = Gradient(colors: [style.skyTop.swiftUI, style.skyHorizon.swiftUI])
-        colors = Palette(
-            ground: style.ground.swiftUI,
-            tracer: style.tracer.swiftUI,
-            ball: style.ball.swiftUI,
-            shadow: style.shadow.swiftUI,
-            label: style.label.swiftUI,
-            selected: style.overlaySelected.swiftUI,
-            rollOut: style.rollOut.swiftUI,
-            landingOuter: style.landingOuter.swiftUI,
-            landingInner: style.landingInner.swiftUI
-        )
+    }
+
+    /// Plan F8a2a: rebuilds the frame and its palette for a new theme; the same render then resizes
+    /// it and hands it the flight, overlay and roll-out again.
+    private func use(theme next: RangeTheme) {
+        guard next !== theme else { return }
+        theme = next
+        style = next.style
+        frame = Self.makeFrame(next.style)
+        scene = ScenePalette(frame: frame, style: next.style)
+        canvasSize = .zero
+        frameFlight = nil
+        frameOverlay = []
+        frameSelectedId = nil
+        frameRollOut = nil
+        frameRollOutTrajectory = nil
     }
 
     // MARK: Playback
@@ -314,6 +354,7 @@ final class RangeCanvasPlayer: ObservableObject {
         advance(to: now)
         if case .idle = clock {} else { frameCounter.tick(now) }
         guard size.width > 0, size.height > 0 else { return }
+        use(theme: inputs.theme)
         let scale = max(displayScale, 1)
         if size != canvasSize {
             canvasSize = size
@@ -339,7 +380,7 @@ final class RangeCanvasPlayer: ObservableObject {
         let height = size.height * scale
 
         drawBackdrop(pixels, width: width, height: height)
-        drawPolygons(pixels, polygons, colors: polygonColors)
+        drawPolygons(pixels, scene.polygons)
         drawTrees(pixels)
         drawLabels(context, scale: scale)
         let overlay = frame.overlay
@@ -408,26 +449,44 @@ final class RangeCanvasPlayer: ObservableObject {
         }
     }
 
-    /// Sky down to the horizon, distant ground below it (the ground plane is finite).
+    /// Sky down to the horizon, then (plan F8a2a) the sun and the far ridges, then the distant
+    /// ground below the horizon (past the ground plane's far end). Android's order.
     private func drawBackdrop(_ context: GraphicsContext, width: CGFloat, height: CGFloat) {
         let horizon = CGFloat(frame.scene.backdropHorizon(height: Float(height)))
-        if horizon < height {
-            context.fill(
-                Path(CGRect(x: 0, y: horizon, width: width, height: height - horizon)),
-                with: .color(colors.ground)
-            )
-        }
         if horizon > 0 {
             context.fill(
                 Path(CGRect(x: 0, y: 0, width: width, height: horizon)),
-                with: .linearGradient(skyGradient, startPoint: .zero, endPoint: CGPoint(x: 0, y: horizon))
+                with: .linearGradient(scene.skyGradient, startPoint: .zero, endPoint: CGPoint(x: 0, y: horizon))
+            )
+        }
+        let sky = frame.scene.sky
+        if sky.sunVisible {
+            let center = CGPoint(x: CGFloat(sky.sunX), y: CGFloat(sky.sunY))
+            let glow = CGFloat(sky.sunGlowRadius)
+            context.fill(
+                circle(x: sky.sunX, y: sky.sunY, radius: glow),
+                with: .radialGradient(scene.sunGlow, center: center, startRadius: 0, endRadius: glow)
+            )
+            context.fill(
+                circle(x: sky.sunX, y: sky.sunY, radius: CGFloat(sky.sunDiscRadius)),
+                with: .color(scene.colors.sunDisc)
+            )
+        }
+        for (index, ridge) in scene.ridges.enumerated() where ridge.visible {
+            if let path = ridge.path.cgPath { context.fill(Path(path), with: .color(scene.ridgeColors[index])) }
+        }
+        if horizon < height {
+            context.fill(
+                Path(CGRect(x: 0, y: horizon, width: width, height: height - horizon)),
+                with: .color(scene.colors.ground)
             )
         }
     }
 
-    private func drawPolygons(_ context: GraphicsContext, _ polygons: [WorldPolygon<CGPathSink>], colors: [Color]) {
-        for (index, polygon) in polygons.enumerated() where polygon.visible {
-            if let path = polygon.path.cgPath { context.fill(Path(path), with: .color(colors[index])) }
+    /// Plan F8a2a: each shape's colour for this pose (hazed by its distance from the camera).
+    private func drawPolygons(_ context: GraphicsContext, _ polygons: [WorldPolygon<CGPathSink>]) {
+        for polygon in polygons where polygon.visible {
+            if let path = polygon.path.cgPath { context.fill(Path(path), with: .color(Color(argb: polygon.argb))) }
         }
     }
 
@@ -435,7 +494,7 @@ final class RangeCanvasPlayer: ObservableObject {
         let landing = frame.landing
         for (index, polygon) in landing.enumerated() where polygon.visible {
             if let path = polygon.path.cgPath {
-                context.fill(Path(path), with: .color(index == 0 ? colors.landingOuter : colors.landingInner))
+                context.fill(Path(path), with: .color(index == 0 ? scene.colors.landingOuter : scene.colors.landingInner))
             }
         }
     }
@@ -444,29 +503,22 @@ final class RangeCanvasPlayer: ObservableObject {
         let order = frame.scene.treeOrder
         for position in 0 ..< Int(order.size) {
             let index = Int(order.get(index: Int32(position)))
-            let tree = trees[index]
-            let color = treeColors[index]
+            let tree = scene.trees[index]
             if tree.trunk.visible, let path = tree.trunk.path.cgPath {
-                context.fill(Path(path), with: .color(color.trunk))
+                context.fill(Path(path), with: .color(Color(argb: tree.trunk.argb)))
             }
-            drawSphere(context, tree.crown, color.crown)
-            drawSphere(context, tree.crownTop, color.crownTop)
+            // Plan F8a2a: the crown's shaded underside, body and sunlit top.
+            for crown in tree.crowns where crown.visible {
+                if let path = crown.path.cgPath { context.fill(Path(path), with: .color(Color(argb: crown.argb))) }
+            }
         }
-    }
-
-    private func drawSphere(_ context: GraphicsContext, _ sphere: WorldSphere, _ color: Color) {
-        guard sphere.visible else { return }
-        context.fill(
-            circle(x: sphere.screenX, y: sphere.screenY, radius: CGFloat(sphere.screenRadius)),
-            with: .color(color)
-        )
     }
 
     /// Yardage labels, laid out at the style's largest size, bottom-centred on their anchor and
     /// scaled about it to the size the marker's depth gives. Drawn in points.
     private func drawLabels(_ context: GraphicsContext, scale: CGFloat) {
         let maxPoints = CGFloat(style.maxLabelSize)
-        for label in labels where label.visible {
+        for label in scene.labels where label.visible {
             let fontPixels = label.fontPixels(
                 heightMeters: style.labelHeightMeters,
                 minPixels: style.minLabelSize * Float(scale),
@@ -479,7 +531,7 @@ final class RangeCanvasPlayer: ObservableObject {
             let text = labelContext.resolve(
                 Text(label.text)
                     .font(.system(size: maxPoints, weight: .bold))
-                    .foregroundColor(colors.label)
+                    .foregroundColor(scene.colors.label)
             )
             labelContext.draw(text, at: .zero, anchor: .bottom)
         }
@@ -510,7 +562,7 @@ final class RangeCanvasPlayer: ObservableObject {
         if let path = overlay.selectedPath.cgPath {
             context.stroke(
                 Path(path),
-                with: .color(colors.selected),
+                with: .color(scene.colors.selected),
                 style: StrokeStyle(lineWidth: CGFloat(style.selectedStrokeWidth) * scale, lineCap: .round, lineJoin: .round)
             )
         }
@@ -518,7 +570,7 @@ final class RangeCanvasPlayer: ObservableObject {
         if !x.isNaN {
             context.fill(
                 circle(x: x, y: overlay.landingYs.get(index: Int32(selected)), radius: dotRadius * 2),
-                with: .color(colors.selected)
+                with: .color(scene.colors.selected)
             )
         }
     }
@@ -538,19 +590,19 @@ final class RangeCanvasPlayer: ObservableObject {
         line.addLine(to: end)
         context.stroke(
             line,
-            with: .color(colors.rollOut),
+            with: .color(scene.colors.rollOut),
             style: StrokeStyle(
                 lineWidth: CGFloat(style.rollOutStrokeWidth) * scale,
                 dash: [CGFloat(style.rollOutDashPixels), CGFloat(style.rollOutGapPixels)]
             )
         )
         let dotRadius = CGFloat(style.rollOutDotRadius) * scale
-        context.fill(circle(x: frame.rollOutEndX, y: frame.rollOutEndY, radius: dotRadius), with: .color(colors.rollOut))
+        context.fill(circle(x: frame.rollOutEndX, y: frame.rollOutEndY, radius: dotRadius), with: .color(scene.colors.rollOut))
         guard let rollOut else { return }
         let text = points.resolve(
             Text(rollOut.totalLabel)
                 .font(.system(size: CGFloat(style.rollOutLabelSize), weight: .semibold))
-                .foregroundColor(colors.label)
+                .foregroundColor(scene.colors.label)
         )
         points.draw(
             text,
@@ -571,13 +623,18 @@ final class RangeCanvasPlayer: ObservableObject {
                     width: radiusX * 2,
                     height: radiusY * 2
                 )),
-                with: .color(colors.shadow)
+                with: .color(scene.colors.shadow)
             )
         }
         let tracer = frame.tracer
-        if let path = tracer.path.cgPath { context.fill(Path(path), with: .color(colors.tracer)) }
+        // Plan F8a2a: the soft glow under the tracer's core.
+        if let path = tracer.glow?.cgPath { context.fill(Path(path), with: .color(scene.colors.tracerGlow)) }
+        if let path = tracer.path.cgPath { context.fill(Path(path), with: .color(scene.colors.tracer)) }
         if !tracer.tipX.isNaN {
-            context.fill(circle(x: tracer.tipX, y: tracer.tipY, radius: CGFloat(frame.ballRadius)), with: .color(colors.ball))
+            context.fill(
+                circle(x: tracer.tipX, y: tracer.tipY, radius: CGFloat(frame.ballRadius)),
+                with: .color(scene.colors.ball)
+            )
         }
     }
 
@@ -752,6 +809,27 @@ extension RangeColor {
     /// A shared palette colour (sRGB, straight alpha).
     var swiftUI: Color {
         Color(.sRGB, red: Double(red), green: Double(green), blue: Double(blue), opacity: Double(alpha))
+    }
+}
+
+extension Color {
+    /// Plan F8a2a: a shared packed `0xAARRGGBB` colour (a shape's hazed colour for the pose).
+    init(argb: Int32) {
+        let bits = UInt32(bitPattern: argb)
+        self.init(
+            .sRGB,
+            red: Double((bits >> 16) & 0xFF) / 255,
+            green: Double((bits >> 8) & 0xFF) / 255,
+            blue: Double(bits & 0xFF) / 255,
+            opacity: Double(bits >> 24) / 255
+        )
+    }
+}
+
+extension Array where Element == RangeGradientStop {
+    /// Plan F8a2a: shared gradient stops (the sky's, the sun's glow) as a SwiftUI gradient.
+    var gradient: Gradient {
+        Gradient(stops: map { Gradient.Stop(color: $0.color.swiftUI, location: CGFloat($0.offset)) })
     }
 }
 

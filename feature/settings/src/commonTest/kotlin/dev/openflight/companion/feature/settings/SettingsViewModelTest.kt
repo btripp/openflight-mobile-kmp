@@ -11,6 +11,7 @@ import assertk.assertions.isFalse
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
 import dev.openflight.companion.core.data.AppLifecycle
+import dev.openflight.companion.core.data.RangeThemeSetting
 import dev.openflight.companion.core.data.TransportType
 import dev.openflight.companion.core.insights.CalloutField
 import dev.openflight.companion.core.insights.UnitSystem
@@ -365,6 +366,37 @@ class SettingsViewModelTest {
             viewModel.onEvent(SettingsEvent.PreviewCallout)
 
             assertThat(speech.spoken).isEmpty()
+        }
+
+    // Plan F8a2a: the range theme, added at the end to keep this file's diff mergeable (§4a A7).
+
+    @Test
+    fun theRangeThemeDefaultsToDayAndOffersEveryThemeInOrder() =
+        runTest {
+            viewModel.uiState.testIgnoringRest {
+                val state = awaitUntil { it.host == "pi.local:8080" }
+
+                assertThat(state.rangeTheme.selected).isEqualTo(RangeThemeSetting.DAY)
+                assertThat(state.rangeTheme.options.map { it.theme }).containsExactly(
+                    RangeThemeSetting.DAY,
+                    RangeThemeSetting.DUSK,
+                    RangeThemeSetting.NIGHT,
+                    RangeThemeSetting.LINKS,
+                )
+                assertThat(state.rangeTheme.options.map { it.label }).containsExactly("Day", "Dusk", "Night", "Links")
+            }
+        }
+
+    @Test
+    fun pickingARangeThemePersistsItAndShowsIt() =
+        runTest {
+            viewModel.uiState.testIgnoringRest {
+                viewModel.onEvent(SettingsEvent.SetRangeTheme(RangeThemeSetting.NIGHT))
+
+                assertThat(awaitUntil { it.rangeTheme.selected == RangeThemeSetting.NIGHT }.rangeTheme.selected)
+                    .isEqualTo(RangeThemeSetting.NIGHT)
+                assertThat(settings.rangeTheme.value).isEqualTo(RangeThemeSetting.NIGHT)
+            }
         }
 
     /** Like `test`, but tolerates the extra intermediate states `combine` may emit after the assertions. */

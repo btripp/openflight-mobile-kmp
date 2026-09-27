@@ -52,6 +52,10 @@ class RangeProjection(
     private var centerX = 0.0
     private var centerY = 0.0
 
+    /** Plan F8a2a: the camera's position on the ground (scene x and z), where haze is measured from. */
+    val cameraX: Double get() = originX
+    val cameraZ: Double get() = originZ
+
     /** Pixels per unit of (camera-space offset / depth). */
     var focalLengthPixels: Double = 0.0
         private set
@@ -219,6 +223,37 @@ class RangeProjection(
         val z = originZ + forwardZ / length * HORIZON_DISTANCE_METERS
         val depth = depth(x, 0.0, z)
         return if (depth <= NEAR_PLANE_METERS) Float.NEGATIVE_INFINITY else screenY(x, 0.0, z, depth)
+    }
+
+    /**
+     * Plan F8a2a: [projectInto] for a direction at infinity rather than a point: the horizontal
+     * unit direction ([directionX], [directionZ]) raised by an angle whose tangent is
+     * [elevationTangent]. Like [horizonY] it's measured from the ground far away, so it turns with
+     * the camera but never moves as the camera travels. Returns false (and NaN) when the direction
+     * is less than [minCosine] in front of the camera's view axis, which keeps near-sideways
+     * directions from projecting to absurd coordinates.
+     */
+    @Suppress("LongParameterList") // A direction, its output slot and a cutoff.
+    fun projectDirectionInto(
+        directionX: Double,
+        directionZ: Double,
+        elevationTangent: Double,
+        out: FloatArray,
+        index: Int,
+        minCosine: Double,
+    ): Boolean {
+        val x = originX + directionX * HORIZON_DISTANCE_METERS
+        val y = elevationTangent * HORIZON_DISTANCE_METERS
+        val z = originZ + directionZ * HORIZON_DISTANCE_METERS
+        val depth = depth(x, y, z)
+        if (depth <= minCosine * HORIZON_DISTANCE_METERS || depth <= NEAR_PLANE_METERS) {
+            out[index] = Float.NaN
+            out[index + 1] = Float.NaN
+            return false
+        }
+        out[index] = screenX(x, y, z, depth)
+        out[index + 1] = screenY(x, y, z, depth)
+        return true
     }
 
     companion object {
