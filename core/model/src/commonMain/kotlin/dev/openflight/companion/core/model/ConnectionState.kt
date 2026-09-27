@@ -59,4 +59,11 @@ enum class ConnectionErrorKind {
 
     /** iOS: the user denied Local Network access, so every LAN request fails: open Settings. */
     LOCAL_NETWORK_DENIED,
+
+    /**
+     * Plan R8j: the Pi answered the SSE shot stream with HTTP 404. A stock upstream backend has no
+     * SSE route, so its live shots come over Socket.IO instead. The Wi-Fi transport stops retrying
+     * and `core:data` shows the Socket.IO link's state in its place.
+     */
+    STREAM_UNAVAILABLE,
 }

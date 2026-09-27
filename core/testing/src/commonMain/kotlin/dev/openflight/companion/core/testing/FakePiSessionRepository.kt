@@ -126,6 +126,8 @@ class FakePiSessionRepository(
 
     override suspend fun simulateShot() = record("simulate_shot")
 
+    override suspend fun setClub(club: String) = record("set_club:$club")
+
     override suspend fun setTrainingImplement(implement: String) = record("set_training_implement:$implement")
 
     override suspend fun refreshCameraCaptureSettings() = record("get_camera_capture_settings")

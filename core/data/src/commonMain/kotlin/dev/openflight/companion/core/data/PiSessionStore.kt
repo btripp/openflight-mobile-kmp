@@ -136,13 +136,15 @@ internal class PiSessionStore(
                 shotProcessing.value = null
                 onShot(event.detail)
                 event.stats?.let { stats.value = it }
-                liveShots.tryEmit(PiLiveShot(event.detail, event.raw?.toString()))
+                liveShots.tryEmit(PiLiveShot(event.detail, event.raw?.toString(), provisional = event.provisional))
             }
 
             is PiEvent.ShotUpdate -> {
                 upsert(event.detail)
                 event.stats?.let { stats.value = it }
-                liveShots.tryEmit(PiLiveShot(event.detail, event.raw?.toString()))
+                liveShots.tryEmit(
+                    PiLiveShot(event.detail, event.raw?.toString(), isUpdate = true, enrichment = event.enrichment),
+                )
             }
 
             is PiEvent.Processing -> {
@@ -297,8 +299,13 @@ internal class PiSessionStore(
      */
     private fun upsert(detail: ShotDetail) {
         sessionShots.update { shots ->
-            val byNumber = detail.shotNumber?.let { number -> shots.indexOfFirst { it.shotNumber == number } } ?: -1
-            val index = if (byNumber >= 0) byNumber else shots.indexOfFirst { it.timestamp == detail.timestamp }
+            val index =
+                shots.indexOfShot(
+                    detail.shotNumber,
+                    detail.timestamp,
+                    ShotDetail::shotNumber,
+                    ShotDetail::timestamp,
+                )
             if (index >= 0) {
                 shots.toMutableList().also { it[index] = detail }
             } else {
