@@ -5,3 +5,8 @@ PRODUCT_BUNDLE_IDENTIFIER=dev.openflight.companion
 
 CURRENT_PROJECT_VERSION=1
 MARKETING_VERSION=0.1.0
+
+// Personal signing values (TEAM_ID, and a bundle ID or build number override if you need one)
+// go in Local.xcconfig next to this file. It's gitignored; copy Local.xcconfig.example.
+// `#include?` makes it optional, so CI and simulator builds work without it.
+#include? "Local.xcconfig"
