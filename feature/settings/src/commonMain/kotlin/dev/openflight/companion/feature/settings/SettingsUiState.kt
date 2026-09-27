@@ -2,6 +2,7 @@
 package dev.openflight.companion.feature.settings
 
 import dev.openflight.companion.core.data.CalloutTrigger
+import dev.openflight.companion.core.data.RangeThemeSetting
 import dev.openflight.companion.core.data.TransportType
 import dev.openflight.companion.core.insights.CalloutField
 import dev.openflight.companion.core.insights.UnitSystem
@@ -49,6 +50,8 @@ data class SettingsUiState(
     val trigger: TriggerCard = TriggerCard.Waiting,
     // Plan F7: audio call-outs, added at the end to keep this file's diff mergeable (§4a A7).
     val callouts: CalloutSettingsUiState = CalloutSettingsUiState(),
+    // Plan F8a2a: the range theme, added at the end to keep this file's diff mergeable (§4a A7).
+    val rangeTheme: RangeThemeUiState = RangeThemeUiState(),
 )
 
 /** A simulator connector's severity bucket (`SimStatus.tsx`'s `severity`). */
@@ -224,3 +227,29 @@ data class CalloutFieldRow(
     val canMoveUp: Boolean,
     val canMoveDown: Boolean,
 )
+
+/**
+ * Plan F8a2a: the Practice group's range theme picker: the persisted choice, and every option in
+ * order with its label (so SwiftUI builds its picker tags from Kotlin instances, like
+ * [CalloutSettingsUiState.availableTriggers]).
+ */
+data class RangeThemeUiState(
+    val selected: RangeThemeSetting = RangeThemeSetting.DEFAULT,
+    val options: List<RangeThemeOption> = RangeThemeOption.ALL,
+)
+
+/** One range theme the picker offers. */
+data class RangeThemeOption(
+    val theme: RangeThemeSetting,
+    val label: String,
+) {
+    companion object {
+        val ALL: List<RangeThemeOption> =
+            listOf(
+                RangeThemeOption(RangeThemeSetting.DAY, "Day"),
+                RangeThemeOption(RangeThemeSetting.DUSK, "Dusk"),
+                RangeThemeOption(RangeThemeSetting.NIGHT, "Night"),
+                RangeThemeOption(RangeThemeSetting.LINKS, "Links"),
+            )
+    }
+}

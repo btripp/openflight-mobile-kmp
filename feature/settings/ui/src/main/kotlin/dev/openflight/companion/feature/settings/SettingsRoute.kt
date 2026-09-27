@@ -94,4 +94,7 @@ object SettingsTestTags {
     const val GROUP_DATA = "settings.group.data"
     const val OPEN_CALIBRATION = "settings.openCalibration"
     const val OPEN_CAMERA = "settings.openCamera"
+
+    // Plan F8a2a: the range theme picker (Practice group).
+    const val RANGE_THEME = "settings.rangeTheme"
 }

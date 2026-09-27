@@ -10,6 +10,7 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.scale
+import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.unit.dp
@@ -34,11 +35,15 @@ internal class RangeRenderer(
     /** The camera of the last drawn frame: gestures pan along the ground and taps select through it. */
     val currentProjection: RangeProjection? get() = frame.projection
 
-    private val skyGradient =
-        listOf(RangeGradientStop(0f, style.skyTop), RangeGradientStop(1f, style.skyHorizon))
-            .toVerticalBrush(startY = 0f, endY = 1f)
-    private val groundColor = style.ground.toColor()
+    private val skyGradient = style.sky.toVerticalBrush(startY = 0f, endY = 1f)
+    private val groundColor = style.distantGround.toColor()
+
+    /** Plan F8a2a: the sun's glow on a unit circle at the origin, moved and scaled onto the sun per frame. */
+    private val sunGlow = style.sun.glow.toUnitRadialBrush()
+    private val sunDiscColor = style.sun.disc.toColor()
+    private val ridgeColors = scene.sky.ridges.map { it.color.toColor() }
     private val tracerColor = style.tracer.toColor()
+    private val tracerGlowColor = style.tracerGlow.toColor()
     private val ballColor = style.ball.toColor()
     private val shadowColor = style.shadow.toColor()
     private val selectedColor = style.overlaySelected.toColor()
@@ -136,23 +141,40 @@ internal class RangeRenderer(
         }
     }
 
-    /** Sky down to the horizon, distant ground below it (the ground plane is finite). */
+    /**
+     * Sky down to the horizon, then (plan F8a2a) the sun and the far ridges, then the distant
+     * ground below the horizon (past the ground plane's far end).
+     */
     private fun DrawScope.drawBackdrop(projection: RangeProjection) {
         val horizon = scene.backdropHorizon(projection.height)
-        if (horizon < projection.height) {
-            drawRect(groundColor, topLeft = Offset(0f, horizon), size = Size(size.width, size.height - horizon))
-        }
         if (horizon > 0f) {
             scale(scaleX = 1f, scaleY = horizon, pivot = Offset.Zero) {
                 drawRect(skyGradient, size = Size(size.width, 1f))
             }
+        }
+        val sky = scene.sky
+        if (sky.sunVisible) {
+            translate(sky.sunX, sky.sunY) {
+                scale(sky.sunGlowRadius, pivot = Offset.Zero) {
+                    drawCircle(sunGlow, radius = 1f, center = Offset.Zero)
+                }
+            }
+            drawCircle(sunDiscColor, radius = sky.sunDiscRadius, center = Offset(sky.sunX, sky.sunY))
+        }
+        val ridges = sky.ridges
+        for (index in ridges.indices) {
+            val ridge = ridges[index]
+            if (ridge.visible) drawPath(ridge.path.path, ridgeColors[index])
+        }
+        if (horizon < projection.height) {
+            drawRect(groundColor, topLeft = Offset(0f, horizon), size = Size(size.width, size.height - horizon))
         }
     }
 
     private fun DrawScope.drawPolygons(polygons: List<WorldPolygon<ComposePathSink>>) {
         for (index in polygons.indices) {
             val polygon = polygons[index]
-            if (polygon.visible) drawPath(polygon.path.path, polygon.color.toColor())
+            if (polygon.visible) drawPath(polygon.path.path, Color(polygon.argb))
         }
     }
 
@@ -160,19 +182,12 @@ internal class RangeRenderer(
         val order = scene.treeOrder
         for (position in order.indices) {
             val tree = scene.trees[order[position]]
-            if (tree.trunk.visible) drawPath(tree.trunk.path.path, tree.trunk.color.toColor())
-            drawSphere(tree.crown)
-            drawSphere(tree.crownTop)
-        }
-    }
-
-    private fun DrawScope.drawSphere(sphere: WorldSphere) {
-        if (sphere.visible) {
-            drawCircle(
-                sphere.color.toColor(),
-                radius = sphere.screenRadius,
-                center = Offset(sphere.screenX, sphere.screenY),
-            )
+            if (tree.trunk.visible) drawPath(tree.trunk.path.path, Color(tree.trunk.argb))
+            val crowns = tree.crowns
+            for (index in crowns.indices) {
+                val crown = crowns[index]
+                if (crown.visible) drawPath(crown.path.path, Color(crown.argb))
+            }
         }
     }
 
@@ -210,6 +225,7 @@ internal class RangeRenderer(
         }
 
         val tracer = frame.tracer
+        tracer.glow?.let { drawPath(it.path, tracerGlowColor) }
         drawPath(tracer.path.path, tracerColor)
 
         val tipX = tracer.tipX

@@ -2,6 +2,7 @@
 package dev.openflight.companion.feature.range
 
 import dev.openflight.companion.core.data.RangeCameraMode
+import dev.openflight.companion.core.data.RangeThemeSetting
 import dev.openflight.companion.core.data.SettingsRepository
 import dev.openflight.companion.core.data.ShotRepository
 import dev.openflight.companion.core.data.TransportType
@@ -47,6 +48,13 @@ internal class FakeSettingsRepository(
 
     override suspend fun setSelectedClub(club: GolfClub) {
         selectedClub.value = club
+    }
+
+    // Plan F8a2a: the range theme.
+    override val rangeTheme = MutableStateFlow(RangeThemeSetting.DEFAULT)
+
+    override suspend fun setRangeTheme(theme: RangeThemeSetting) {
+        rangeTheme.value = theme
     }
 }
 

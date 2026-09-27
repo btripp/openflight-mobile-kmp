@@ -13,14 +13,16 @@ import dev.openflight.companion.core.flight.Vec3
  * estimated roll-out. Shared by the Android Canvas and the iOS Canvas (plan F8c2), which only paint
  * what this holds, in this order:
  *
- * 1. the backdrop: sky gradient from 0 to [RangeScene.backdropHorizon], [RangeVisualStyle.ground]
- *    below it;
- * 2. [RangeScene.polygons], then the trees in [RangeScene.treeOrder], then the visible labels;
+ * 1. the backdrop: the [RangeVisualStyle.sky] gradient from 0 to [RangeScene.backdropHorizon];
+ *    the [RangeScene.sky]'s sun glow and disc, then its visible ridges far to near (plan F8a2a);
+ *    [RangeVisualStyle.distantGround] from the horizon down;
+ * 2. [RangeScene.polygons], then the trees in [RangeScene.treeOrder] (trunk, then each crown
+ *    tone), then the visible labels;
  * 3. the [overlay] (club-group strokes, landing dots, then the selection) when there is one;
  * 4. with no [geometry]: the roll-out if there's an overlay, and stop;
  * 5. once landed (progress ≥ 1): the [landing] polygons and the roll-out;
- * 6. the ball's shadow (an oval) when [shadowVisible], the [tracer] ribbon, and the ball at the
- *    tracer's tip when it's in front of the camera.
+ * 6. the ball's shadow (an oval) when [shadowVisible], the [tracer]'s glow then its core ribbon,
+ *    and the ball at the tracer's tip when it's in front of the camera.
  *
  * [prepare] re-projects only when the pose or the canvas changed since the last frame, and rewrites
  * the same [PathSink]s and arrays: nothing in it allocates.
@@ -48,7 +50,8 @@ class RangeFrame<P : PathSink>(
     var landing: List<WorldPolygon<P>> = emptyList()
         private set
 
-    val tracer: TracerRibbon<P> = TracerRibbon(newPath())
+    /** The tracer's core and (plan F8a2a) its glow. */
+    val tracer: TracerRibbon<P> = TracerRibbon(newPath(), newPath(), style.tracerGlowWidthFactor)
 
     /** Plan F8a1: the overlay's static trajectories, when overlaying. */
     var overlay: OverlayGeometry<P>? = null

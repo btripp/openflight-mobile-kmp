@@ -9,6 +9,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import dev.openflight.companion.core.data.RangeThemeSetting
 import dev.openflight.companion.core.data.TransportType
 import kotlinx.coroutines.runBlocking
 import org.koin.mp.KoinPlatform
@@ -57,6 +58,13 @@ class MainActivity : ComponentActivity() {
             previewHistoryStuck = getBooleanExtra(EXTRA_PREVIEW_HISTORY_STUCK, false),
             previewPiSession = getBooleanExtra(EXTRA_PREVIEW_PI_SESSION, false),
             previewPiSessionStuck = getBooleanExtra(EXTRA_PREVIEW_PI_SESSION_STUCK, false),
+            // Plan F8a2a: screenshots of each theme, with the flight held (iOS's arguments).
+            rangeFreezeProgress =
+                getFloatExtra(EXTRA_RANGE_FREEZE_PROGRESS, Float.NaN)
+                    .takeIf { it.isFinite() }
+                    ?.coerceIn(0f, 1f)
+                    ?.toDouble(),
+            rangeTheme = RangeThemeSetting.fromStorageValue(getStringExtra(EXTRA_RANGE_THEME)),
         )
 
     private companion object {
@@ -71,6 +79,8 @@ class MainActivity : ComponentActivity() {
         const val EXTRA_PREVIEW_HISTORY_STUCK = "preview_history_stuck"
         const val EXTRA_PREVIEW_PI_SESSION = "preview_pi_session"
         const val EXTRA_PREVIEW_PI_SESSION_STUCK = "preview_pi_session_stuck"
+        const val EXTRA_RANGE_FREEZE_PROGRESS = "range_freeze_progress"
+        const val EXTRA_RANGE_THEME = "range_theme"
 
         var launchOptionsApplied = false
     }

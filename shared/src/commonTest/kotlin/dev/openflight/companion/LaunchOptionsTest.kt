@@ -5,6 +5,7 @@ import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isTrue
+import dev.openflight.companion.core.data.RangeThemeSetting
 import dev.openflight.companion.core.data.TransportType
 import kotlin.test.Test
 
@@ -120,5 +121,17 @@ class LaunchOptionsTest {
         assertThat(options.previewPiMock).isTrue()
         assertThat(options.usesFakeRepository).isTrue()
         assertThat(LaunchOptions.fromArguments(listOf("app")).previewPiMock).isFalse()
+    }
+
+    @Test
+    fun rangeThemeSeedsAKnownThemeAndIgnoresAnythingElse() {
+        fun theme(vararg arguments: String) = LaunchOptions.fromArguments(listOf("app") + arguments).rangeTheme
+
+        assertThat(theme("--range-theme", "night")).isEqualTo(RangeThemeSetting.NIGHT)
+        assertThat(theme("--range-theme", "links")).isEqualTo(RangeThemeSetting.LINKS)
+        assertThat(theme("--range-theme", "vaporwave")).isEqualTo(null)
+        assertThat(theme("--range-theme")).isEqualTo(null)
+        assertThat(theme()).isEqualTo(null)
+        assertThat(LaunchOptions.fromArguments(listOf("app", "--range-theme", "dusk")).usesFakeRepository).isFalse()
     }
 }

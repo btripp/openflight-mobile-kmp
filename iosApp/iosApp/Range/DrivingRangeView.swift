@@ -126,7 +126,7 @@ struct DrivingRangeContent: View {
                 scene
                     .ignoresSafeArea()
 
-                RangeTheme.day.style.shadeGradient
+                state.camera.theme.style.shadeGradient
                     .ignoresSafeArea()
                     .allowsHitTesting(false)
 
@@ -179,6 +179,7 @@ struct DrivingRangeContent: View {
                 flight: state.activeFlight,
                 cameraMode: state.cameraMode,
                 reduceMotion: reduceMotion,
+                theme: state.camera.theme,
                 view: browse.view,
                 rollOut: state.rollOut,
                 overlay: browse.overlayFlights,

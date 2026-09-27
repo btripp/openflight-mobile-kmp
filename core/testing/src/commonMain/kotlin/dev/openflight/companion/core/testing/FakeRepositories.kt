@@ -2,6 +2,7 @@
 package dev.openflight.companion.core.testing
 
 import dev.openflight.companion.core.data.CalloutTrigger
+import dev.openflight.companion.core.data.RangeThemeSetting
 import dev.openflight.companion.core.data.SettingsRepository
 import dev.openflight.companion.core.data.ShotRepository
 import dev.openflight.companion.core.data.TransportType
@@ -69,6 +70,14 @@ class FakeSettingsRepository(
 
     override suspend fun setCalloutTrigger(trigger: CalloutTrigger) {
         calloutTrigger.value = trigger
+    }
+
+    // Plan F8a2a: the range theme, added at the end to keep this file's diff mergeable (§4a A7).
+
+    override val rangeTheme = MutableStateFlow(RangeThemeSetting.DEFAULT)
+
+    override suspend fun setRangeTheme(theme: RangeThemeSetting) {
+        rangeTheme.value = theme
     }
 }
 

@@ -8,7 +8,7 @@ import SwiftUI
 /// state.
 ///
 /// Plan F1d: grouped into Device (connection, calibrate, camera, launch monitor, power, simulators,
-/// radar, shutdown), Practice (units, audio call-outs) and Data (cloud upload, debug logging), like
+/// radar, shutdown), Practice (units, audio call-outs, range theme) and Data (cloud upload, debug logging), like
 /// Android. The Device group's "Calibrate radar" and "Camera" rows push `AppRoute`s onto the
 /// Settings tab's own `NavigationStack`.
 struct SettingsView: View {
@@ -48,6 +48,7 @@ struct SettingsContent: View {
             // Practice
             unitsSection
             calloutsSection
+            rangeThemeSection
             // Data
             cloudSection
             // Hidden until the Pi reports its debug mode: never offer "Start" before that is known.
@@ -94,6 +95,28 @@ struct SettingsContent: View {
             .accessibilityIdentifier("settings.units")
         } header: {
             header("UNITS", group: "Practice")
+        }
+        .listRowBackground(Theme.bgCard)
+    }
+
+    // MARK: Range theme
+
+    /// Plan F8a2a: how the driving range looks. The tags are the Kotlin options' own instances.
+    private var rangeThemeBinding: Binding<RangeThemeSetting> {
+        Binding(get: { state.rangeTheme.selected }, set: { send(SettingsEventSetRangeTheme(theme: $0)) })
+    }
+
+    private var rangeThemeSection: some View {
+        Section {
+            Picker("Range theme", selection: rangeThemeBinding) {
+                ForEach(state.rangeTheme.options, id: \.theme.storageValue) { option in
+                    Text(option.label).tag(option.theme)
+                }
+            }
+            .pickerStyle(.segmented)
+            .accessibilityIdentifier("settings.rangeTheme")
+        } header: {
+            header("RANGE THEME")
         }
         .listRowBackground(Theme.bgCard)
     }

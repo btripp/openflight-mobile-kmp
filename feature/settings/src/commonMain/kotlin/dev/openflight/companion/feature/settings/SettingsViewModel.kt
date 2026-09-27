@@ -120,8 +120,9 @@ class SettingsViewModel(
         )
 
     val uiState: StateFlow<SettingsUiState> =
-        combine(baseState, callout) { base, calloutState ->
+        combine(baseState, callout, settings.rangeTheme) { base, calloutState, theme ->
             buildState(base.phone, base.link, base.device, base.radar, base.phase, calloutState)
+                .copy(rangeTheme = RangeThemeUiState(selected = theme))
         }.stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
@@ -208,6 +209,10 @@ class SettingsViewModel(
             SettingsEvent.PreviewCallout,
             -> {
                 onCalloutEvent(event)
+            }
+
+            is SettingsEvent.SetRangeTheme -> {
+                viewModelScope.launch { settings.setRangeTheme(event.theme) }
             }
         }
     }

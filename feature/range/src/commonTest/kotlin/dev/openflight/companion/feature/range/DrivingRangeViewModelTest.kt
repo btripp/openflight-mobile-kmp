@@ -12,6 +12,7 @@ import assertk.assertions.isNotNull
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
 import dev.openflight.companion.core.data.RangeCameraMode
+import dev.openflight.companion.core.data.RangeThemeSetting
 import dev.openflight.companion.core.model.ConnectionState
 import dev.openflight.companion.core.model.GolfClub
 import dev.openflight.companion.core.testing.FakeConditionsRepository
@@ -417,6 +418,37 @@ class DrivingRangeViewModelTest {
             viewModel.uiState.test {
                 shots.emit(makeDrivingRangeShot())
                 assertThat(awaitUntil { it.phase == RangePhase.Flying }.cameraMode).isEqualTo(RangeCameraMode.FIXED)
+            }
+        }
+
+    @Test
+    fun theRangeOpensInDayAndFollowsThePersistedTheme() =
+        runTest(scheduler) {
+            val viewModel = makeViewModel(FakeShotRepository(settings))
+
+            viewModel.uiState.test {
+                advanceUntilIdle()
+                assertThat(expectMostRecentItem().camera.theme).isEqualTo(RangeTheme.DAY)
+
+                // Each change once, ending back on DAY (a StateFlow doesn't re-emit an equal value).
+                val changes = RangeThemeSetting.entries.drop(1) + RangeThemeSetting.DAY
+                for (setting in changes) {
+                    settings.setRangeTheme(setting)
+                    assertThat(awaitUntil { it.camera.theme == RangeTheme.of(setting) }.camera.theme)
+                        .isEqualTo(RangeTheme.of(setting))
+                }
+            }
+        }
+
+    @Test
+    fun reducedMotionKeepsTheTheme() =
+        runTest(scheduler) {
+            settings.rangeTheme.value = RangeThemeSetting.NIGHT
+            val viewModel = makeViewModel(FakeShotRepository(settings))
+
+            viewModel.uiState.test {
+                viewModel.onEvent(DrivingRangeEvent.ReduceMotionChanged(enabled = true))
+                assertThat(awaitUntil { it.cameraModeLocked }.camera.theme).isEqualTo(RangeTheme.NIGHT)
             }
         }
 

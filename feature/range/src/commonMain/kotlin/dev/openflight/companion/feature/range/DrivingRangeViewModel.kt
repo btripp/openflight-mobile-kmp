@@ -84,8 +84,12 @@ class DrivingRangeViewModel(
     private val reduceMotion = MutableStateFlow(false)
     private val browse = MutableStateFlow(RangeBrowseState())
     private val camera =
-        combine(settings.rangeCameraMode, reduceMotion) { preferred, reduced ->
-            RangeCameraState(mode = if (reduced) RangeCameraMode.FIXED else preferred, locked = reduced)
+        combine(settings.rangeCameraMode, reduceMotion, settings.rangeTheme) { preferred, reduced, theme ->
+            RangeCameraState(
+                mode = if (reduced) RangeCameraMode.FIXED else preferred,
+                locked = reduced,
+                theme = RangeTheme.of(theme),
+            )
         }
     private val clubState =
         combine(settings.selectedClub, shots.connectionState, clubRequest) { club, connection, request ->

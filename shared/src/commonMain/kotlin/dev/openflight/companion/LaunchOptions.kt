@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 package dev.openflight.companion
 
+import dev.openflight.companion.core.data.RangeThemeSetting
 import dev.openflight.companion.core.data.TransportType
 
 /**
@@ -33,9 +34,10 @@ import dev.openflight.companion.core.data.TransportType
  * @property previewPiSession swap in [PreviewPiSessionRepository]: a connected Pi whose deletes and
  *   clears are confirmed after a short delay (plan R8f). Use with [uiTesting].
  * @property previewPiSessionStuck like [previewPiSession], but the Pi never answers.
- * @property rangeFreezeProgress iOS only (plan F8c2), for screenshots: `--range-freeze-progress
- *   0.5` holds every range flight at that playback progress (0..1, clamped). At 1 the flight lands
- *   and the follow camera is shown fully settled.
+ * @property rangeFreezeProgress plan F8c2 (iOS) and F8a2a (Android), for screenshots:
+ *   `--range-freeze-progress 0.5` (Android `--ef range_freeze_progress 0.5`) holds every range
+ *   flight at that playback progress (0..1, clamped). At 1 the flight lands and the follow camera
+ *   is shown fully settled.
  * @property rangeRealityKit iOS only (plan F8c2): `--range-realitykit` draws the range with the
  *   previous RealityKit scene instead of the Canvas renderer. Kept for one release (ADR 0002).
  * @property previewLiveShots plan F8b: with [usesFakeRepository], the preview Pi "hits" a new copy
@@ -48,6 +50,8 @@ import dev.openflight.companion.core.data.TransportType
  *   the range, Session and Games offer "Simulate shot"; each simulate delivers a new, different
  *   preview shot ([PreviewShotRepository.simulatedShot]) through the live path, with no server.
  *   `--preview-pi-mock`.
+ * @property rangeTheme plan F8a2a: persisted as the range theme before the UI starts (a settings
+ *   seed like [transport]). `--range-theme day|dusk|night|links` (Android `--es range_theme night`).
  */
 data class LaunchOptions(
     val uiTesting: Boolean = false,
@@ -66,6 +70,7 @@ data class LaunchOptions(
     val previewLiveShots: Boolean = false,
     val previewHistoryBulk: Boolean = false,
     val previewPiMock: Boolean = false,
+    val rangeTheme: RangeThemeSetting? = null,
 ) {
     val usesFakeRepository: Boolean
         get() = uiTesting || previewShot || previewPi || previewPiMock
@@ -87,6 +92,7 @@ data class LaunchOptions(
         const val PREVIEW_LIVE_SHOTS = "--preview-live-shots"
         const val PREVIEW_HISTORY_BULK = "--preview-history-bulk"
         const val PREVIEW_PI_MOCK = "--preview-pi-mock"
+        const val RANGE_THEME = "--range-theme"
 
         /** How often `--preview-live-shots` delivers a shot. */
         const val PREVIEW_LIVE_SHOT_INTERVAL_MILLIS = 5_000L
@@ -121,6 +127,7 @@ data class LaunchOptions(
                 previewLiveShots = PREVIEW_LIVE_SHOTS in arguments,
                 previewHistoryBulk = PREVIEW_HISTORY_BULK in arguments,
                 previewPiMock = PREVIEW_PI_MOCK in arguments,
+                rangeTheme = valueAfter(RANGE_THEME)?.let(RangeThemeSetting::fromStorageValue),
             )
         }
     }

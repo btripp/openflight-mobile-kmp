@@ -63,6 +63,7 @@ import dev.openflight.companion.core.designsystem.rememberOfWindowClass
  * @param windowClass injectable for tests and previews; defaults to [rememberOfWindowClass]. On an
  *   [OfWindowClass.EXPANDED] window in landscape the metrics move into a docked side panel
  *   ([MetricsDock]) instead of overlaying the scene (plan F1b, §4a A3).
+ * @param freezeProgress debug: hold every flight at this playback progress ([RangeCanvas]).
  */
 @Composable
 fun DrivingRangeScreen(
@@ -72,6 +73,7 @@ fun DrivingRangeScreen(
     onExit: () -> Unit,
     modifier: Modifier = Modifier,
     windowClass: OfWindowClass = rememberOfWindowClass(),
+    freezeProgress: Float? = null,
 ) {
     var showSessions by rememberSaveable { mutableStateOf(false) }
     val browse = uiState.browse
@@ -91,6 +93,7 @@ fun DrivingRangeScreen(
                     onExit,
                     windowClass,
                     onOpenSessions = { showSessions = true },
+                    freezeProgress = freezeProgress,
                 )
             },
         )
@@ -103,6 +106,7 @@ fun DrivingRangeScreen(
             windowClass,
             onOpenSessions = { showSessions = true },
             modifier,
+            freezeProgress,
         )
     }
     if (showSessions) {
@@ -120,6 +124,7 @@ private fun RangeStage(
     windowClass: OfWindowClass,
     onOpenSessions: () -> Unit,
     modifier: Modifier = Modifier,
+    freezeProgress: Float? = null,
 ) {
     BoxWithConstraints(modifier = modifier.fillMaxSize().background(OfColorTokens.BgDeep)) {
         val isLandscape = maxWidth > maxHeight
@@ -133,6 +138,7 @@ private fun RangeStage(
                     onExit = onExit,
                     onOpenSessions = onOpenSessions,
                     modifier = Modifier.fillMaxSize(),
+                    freezeProgress = freezeProgress,
                 )
             }
 
@@ -147,6 +153,7 @@ private fun RangeStage(
                         onOpenSessions = onOpenSessions,
                         showMetrics = false,
                         modifier = Modifier.weight(1f).fillMaxHeight(),
+                        freezeProgress = freezeProgress,
                     )
                     MetricsDock(
                         uiState = uiState,
@@ -174,6 +181,7 @@ private fun SceneLayer(
     onOpenSessions: () -> Unit,
     modifier: Modifier = Modifier,
     showMetrics: Boolean = true,
+    freezeProgress: Float? = null,
 ) {
     val browse = uiState.browse
     Box(modifier = modifier) {
@@ -191,6 +199,8 @@ private fun SceneLayer(
             onViewChanged = { onEvent(DrivingRangeEvent.ViewChanged(it)) },
             onResetView = { onEvent(DrivingRangeEvent.ResetView) },
             onSelectLanding = { onEvent(DrivingRangeEvent.SelectShot(it)) },
+            theme = uiState.camera.theme,
+            freezeProgress = freezeProgress,
         )
         Box(modifier = Modifier.fillMaxSize().background(Shade))
         Box(modifier = Modifier.fillMaxSize().safeDrawingPadding()) {
@@ -436,7 +446,7 @@ private fun RangePhase.tone(): StatusTone =
         is RangePhase.Unavailable -> StatusTone.Negative
     }
 
-/** The scrim over the scene that keeps the controls readable (plan F8c1: shared with iOS). */
+/** The scrim that keeps the controls readable (plan F8c1: shared with iOS; the same in every theme). */
 private val Shade =
     RangeTheme.DAY.style.shade
         .toVerticalBrush()

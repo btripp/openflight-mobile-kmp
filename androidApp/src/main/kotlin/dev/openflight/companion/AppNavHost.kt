@@ -220,7 +220,13 @@ private fun AppGraph(
             )
         }
         composable<Calibration> { CalibrationRoute(onBack = onBack) }
-        composable<Range> { DrivingRangeRoute(onExit = onBack, autoplay = launchOptions.previewFlight) }
+        composable<Range> {
+            DrivingRangeRoute(
+                onExit = onBack,
+                autoplay = launchOptions.previewFlight,
+                freezeProgress = launchOptions.rangeFreezeProgress,
+            )
+        }
         composable<Session> {
             SessionRoute(
                 onBack = onBack,
