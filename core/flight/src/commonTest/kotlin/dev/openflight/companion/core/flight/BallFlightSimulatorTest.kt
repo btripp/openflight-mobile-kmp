@@ -47,11 +47,23 @@ class BallFlightSimulatorTest {
     }
 
     @Test
-    fun spinDecayIsOffByDefaultSoLandingSpinIsLaunchSpin() {
+    fun referenceStandardModelHasNoSpinDecaySoLandingSpinIsLaunchSpin() {
         val input = makeInput(speed = 67.0, launch = 13.0, spin = 2_500.0, carry = 245.0)
+        val standard = BallFlightSimulator(BallFlightSimulator.Configuration.standard)
 
         assertThat(BallFlightSimulator.Configuration.standard.spinDecayPerSecond).isEqualTo(0.0)
-        assertThat(BallFlightSimulator().simulate(input).landingSpinRpm).isEqualTo(2_500.0)
+        assertThat(standard.simulate(input).landingSpinRpm).isEqualTo(2_500.0)
+    }
+
+    @Test
+    fun renderModelIsTheConditionsPhysicsWithSpinDecayAndADragFit() {
+        val render = BallFlightSimulator.Configuration.render
+        val conditions = BallFlightSimulator.Configuration.conditions
+
+        assertThat(render.copy(outputFramesPerSecond = 0.0, carryConstraint = conditions.carryConstraint))
+            .isEqualTo(conditions)
+        assertThat(render.carryConstraint).isEqualTo(BallFlightSimulator.CarryConstraint.DRAG_FIT)
+        assertThat(render.outputFramesPerSecond).isEqualTo(60.0)
     }
 
     @Test
@@ -66,7 +78,10 @@ class BallFlightSimulatorTest {
 
     @Test
     fun dragReducesUnconstrainedCarry() {
-        val aerodynamicConfiguration = BallFlightSimulator.Configuration.standard.copy(constrainToTargetCarry = false)
+        val aerodynamicConfiguration =
+            BallFlightSimulator.Configuration.standard.copy(
+                carryConstraint = BallFlightSimulator.CarryConstraint.NONE,
+            )
         val input = makeInput(speed = 60.0, launch = 14.0, spin = 0.0, carry = 240.0)
         val aerodynamic = BallFlightSimulator(aerodynamicConfiguration).simulate(input)
         val vacuum = BallFlightSimulator(BallFlightSimulator.Configuration.vacuum).simulate(input)
@@ -76,7 +91,10 @@ class BallFlightSimulatorTest {
 
     @Test
     fun backspinProducesMoreLiftThanNoSpin() {
-        val configuration = BallFlightSimulator.Configuration.standard.copy(constrainToTargetCarry = false)
+        val configuration =
+            BallFlightSimulator.Configuration.standard.copy(
+                carryConstraint = BallFlightSimulator.CarryConstraint.NONE,
+            )
         val simulator = BallFlightSimulator(configuration)
         val noSpin = simulator.simulate(makeInput(speed = 62.0, launch = 12.0, spin = 0.0, carry = 230.0))
         val backspin = simulator.simulate(makeInput(speed = 62.0, launch = 12.0, spin = 3_000.0, carry = 230.0))
@@ -87,7 +105,10 @@ class BallFlightSimulatorTest {
 
     @Test
     fun spinAxisControlsCurveDirection() {
-        val configuration = BallFlightSimulator.Configuration.standard.copy(constrainToTargetCarry = false)
+        val configuration =
+            BallFlightSimulator.Configuration.standard.copy(
+                carryConstraint = BallFlightSimulator.CarryConstraint.NONE,
+            )
         val simulator = BallFlightSimulator(configuration)
         val fade = simulator.simulate(makeInput(spinAxis = 18.0))
         val draw = simulator.simulate(makeInput(spinAxis = -18.0))
@@ -111,7 +132,10 @@ class BallFlightSimulatorTest {
     @Test
     fun integrationConvergesAcrossReasonableTimeSteps() {
         val coarseConfiguration =
-            BallFlightSimulator.Configuration.standard.copy(timeStep = 1.0 / 60.0, constrainToTargetCarry = false)
+            BallFlightSimulator.Configuration.standard.copy(
+                timeStep = 1.0 / 60.0,
+                carryConstraint = BallFlightSimulator.CarryConstraint.NONE,
+            )
         val fineConfiguration = coarseConfiguration.copy(timeStep = 1.0 / 240.0)
         val input = makeInput()
         val coarse = BallFlightSimulator(coarseConfiguration).simulate(input)

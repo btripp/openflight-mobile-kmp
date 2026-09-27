@@ -2,6 +2,7 @@
 package dev.openflight.companion
 
 import dev.openflight.companion.core.data.AppLifecycle
+import dev.openflight.companion.core.data.ShotHistoryRepository
 import dev.openflight.companion.core.data.ShotRepository
 import dev.openflight.companion.feature.bag.BagViewModel
 import dev.openflight.companion.feature.bag.ClubAnalysisViewModel
@@ -110,4 +111,11 @@ class KoinHelper : KoinComponent {
 
     /** Plan F9a: the Activities hub (finished games). */
     fun activitiesViewModel(): ActivitiesViewModel = get()
+
+    /**
+     * Plan F8d-B: the history session live shots are filed under
+     * ([ShotHistoryRepository.currentSessionId]), for a live shot's "View on range"; `null` before
+     * the first connection.
+     */
+    fun currentHistorySessionId(): String? = get<ShotHistoryRepository>().currentSessionId.value
 }

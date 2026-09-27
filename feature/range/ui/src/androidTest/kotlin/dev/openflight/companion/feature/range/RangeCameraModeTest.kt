@@ -22,6 +22,7 @@ import dev.openflight.companion.core.data.SettingsRepository
 import dev.openflight.companion.core.designsystem.OfOutlinedButton
 import dev.openflight.companion.core.designsystem.OfTheme
 import dev.openflight.companion.core.testing.FakeConditionsRepository
+import dev.openflight.companion.core.testing.FakePiSessionRepository
 import dev.openflight.companion.core.testing.FakeSettingsRepository
 import dev.openflight.companion.core.testing.FakeShotHistoryRepository
 import dev.openflight.companion.core.testing.FakeShotRepository
@@ -93,6 +94,7 @@ class RangeCameraModeTest {
                                 settings,
                                 FakeShotHistoryRepository(),
                                 FakeConditionsRepository(),
+                                FakePiSessionRepository(),
                             )
                         }
                     DrivingRangeRoute(onExit = { inRange = false }, viewModel = viewModel, reduceMotion = false)
@@ -132,6 +134,7 @@ class RangeCameraModeTest {
                             settings,
                             FakeShotHistoryRepository(),
                             FakeConditionsRepository(),
+                            FakePiSessionRepository(),
                         )
                     }
                 DrivingRangeRoute(onExit = {}, viewModel = viewModel, reduceMotion = true)

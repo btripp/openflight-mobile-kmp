@@ -66,6 +66,7 @@ import dev.openflight.companion.core.model.GolfClub
  * @param windowClass injectable for tests and previews; defaults to [rememberOfWindowClass]. On an
  *   [OfWindowClass.EXPANDED] window the live metrics and the connection/club card sit side by side
  *   in two independently-scrolling columns (plan F1b) instead of stacking in one.
+ * @param onViewOnRange plan F8d: the latest shot's "View on range", by its event id; `null` hides it.
  */
 @Composable
 fun DashboardScreen(
@@ -77,6 +78,7 @@ fun DashboardScreen(
     shotFlashes: Int = 0,
     windowClass: OfWindowClass = rememberOfWindowClass(),
     onOpenTraining: (() -> Unit)? = null,
+    onViewOnRange: ((eventId: String) -> Unit)? = null,
 ) {
     OfScaffold(
         modifier = modifier,
@@ -131,10 +133,10 @@ fun DashboardScreen(
                         modifier = if (expanded) Modifier.testTag(DashboardTestTags.METRICS_COLUMN) else Modifier,
                     ) {
                         if (expanded) {
-                            MetricsContent(uiState, shotFlashes)
+                            MetricsContent(uiState, shotFlashes, onViewOnRange)
                         } else {
                             ConnectionCard(uiState.connection, onEvent, onOpenCalibration)
-                            MetricsContent(uiState, shotFlashes)
+                            MetricsContent(uiState, shotFlashes, onViewOnRange)
                         }
                     }
                 },
@@ -170,6 +172,7 @@ private fun ColumnContent(
 private fun MetricsContent(
     uiState: DashboardUiState,
     shotFlashes: Int,
+    onViewOnRange: ((eventId: String) -> Unit)?,
 ) {
     when (uiState) {
         is DashboardUiState.Waiting -> {
@@ -178,7 +181,12 @@ private fun MetricsContent(
 
         is DashboardUiState.Live -> {
             Box {
-                ShotCard(uiState.latest, uiState.units, uiState.latestEnrichment)
+                ShotCard(
+                    uiState.latest,
+                    uiState.units,
+                    uiState.latestEnrichment,
+                    onViewOnRange = onViewOnRange?.let { view -> { view(uiState.latest.eventId) } },
+                )
                 ShotFlash(trigger = shotFlashes, modifier = Modifier.matchParentSize())
             }
             if (uiState.clubChips.isNotEmpty()) ClubChipsCard(uiState.clubChips)

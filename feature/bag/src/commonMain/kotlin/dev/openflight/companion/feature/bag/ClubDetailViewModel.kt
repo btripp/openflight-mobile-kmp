@@ -80,7 +80,10 @@ data class ClubDispersionState(
     val accessibilitySummary: String,
 )
 
-/** One recent shot. [totalLabel] is an estimate, badged "est.". */
+/**
+ * One recent shot. [totalLabel] is an estimate, badged "est.". [sessionId] and [id] (the stored
+ * row) open it on the range (plan F8d).
+ */
 data class RecentShotRow(
     val id: Long,
     val timeLabel: String,
@@ -88,6 +91,7 @@ data class RecentShotRow(
     val totalLabel: String?,
     val sideLabel: String?,
     val possibleBadRead: Boolean,
+    val sessionId: String,
 )
 
 /** Club Detail's state holder for [wireValue] (a [GolfClub] wire value). */
@@ -158,6 +162,7 @@ class ClubDetailViewModel(
                         totalLabel = shot.totalYards?.let { BagCopy.distance(it, units) },
                         sideLabel = shot.offlineYards?.let { BagCopy.side(it, units) },
                         possibleBadRead = index in outliers,
+                        sessionId = shot.shot.sessionId,
                     )
                 },
             adjustedForConditions = stats.shots.any { it.carryAdjusted },

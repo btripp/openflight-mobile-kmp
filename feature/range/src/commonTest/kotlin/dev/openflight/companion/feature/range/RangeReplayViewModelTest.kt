@@ -17,6 +17,7 @@ import assertk.assertions.isTrue
 import dev.openflight.companion.core.flight.FlightInput
 import dev.openflight.companion.core.flight.FlightTrajectory
 import dev.openflight.companion.core.testing.FakeConditionsRepository
+import dev.openflight.companion.core.testing.FakePiSessionRepository
 import dev.openflight.companion.core.testing.FakeShotHistoryRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -38,6 +39,7 @@ class RangeReplayViewModelTest {
     private val scheduler = TestCoroutineScheduler()
     private val settings = FakeSettingsRepository()
     private val history = FakeShotHistoryRepository()
+    private val piSession = FakePiSessionRepository()
     private val simulated = mutableListOf<String>()
 
     @BeforeTest
@@ -50,13 +52,22 @@ class RangeReplayViewModelTest {
         Dispatchers.resetMain()
     }
 
-    private fun makeViewModel(shots: FakeShotRepository = FakeShotRepository(settings)): DrivingRangeViewModel =
+    private fun makeViewModel(
+        shots: FakeShotRepository = FakeShotRepository(settings),
+        cheap: Boolean = false,
+    ): DrivingRangeViewModel =
         DrivingRangeViewModel(
             shots = shots,
             settings = settings,
             history = history,
             conditions = FakeConditionsRepository(),
-            simulation = ::countingSimulation,
+            piSession = piSession,
+            flightPlan =
+                if (cheap) {
+                    ::cheapFlightPlan
+                } else {
+                    { m, c, b -> testFlightPlan(m, c, b, ::countingSimulation) }
+                },
             computeDispatcher = StandardTestDispatcher(scheduler),
             distanceEstimate = { _, _, _ -> null },
         )
@@ -215,7 +226,8 @@ class RangeReplayViewModelTest {
                     )
                 },
             )
-            val viewModel = makeViewModel()
+            // 250 stored shots: no physics here (see cheapFlightPlan), only the cap and the order.
+            val viewModel = makeViewModel(cheap = true)
 
             viewModel.uiState.test {
                 viewModel.onEvent(DrivingRangeEvent.StartOverlay(sessionId = "big"))
@@ -324,7 +336,8 @@ class RangeReplayViewModelTest {
                     settings = settings,
                     history = history,
                     conditions = FakeConditionsRepository(),
-                    simulation = ::makeTestTrajectory,
+                    piSession = piSession,
+                    flightPlan = { m, c, b -> testFlightPlan(m, c, b) },
                     computeDispatcher = StandardTestDispatcher(scheduler),
                 )
 

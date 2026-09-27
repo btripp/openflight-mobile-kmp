@@ -13,6 +13,9 @@ struct RangeMetricsOverlay: View {
     /// Plan F1c: true in regular landscape (an iPad), where the metrics dock to one side instead
     /// of spanning the top and bottom of the scene.
     var docksToSide: Bool = false
+    /// Plan F8d-B: the portrait top padding that keeps the metrics clear of the range controls,
+    /// which take two rows when the status pill doesn't fit beside the buttons. At least 72 pt.
+    var topInset: CGFloat = 72
     let onSelectClub: (GolfClub) -> Void
 
     private var shot: ShotEvent? { state.displayedShot }
@@ -33,7 +36,7 @@ struct RangeMetricsOverlay: View {
             secondaryMetrics
         }
         .padding(.horizontal, isLandscape ? 28 : 16)
-        .padding(.top, isLandscape ? 16 : 72)
+        .padding(.top, isLandscape ? 16 : max(72, topInset))
         .padding(.bottom, 14)
     }
 

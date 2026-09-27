@@ -79,5 +79,80 @@ internal class PreviewShotRepository(
                 clubPathDeg = 2.1,
                 spinAxisDeg = -3.4,
             )
+
+        /**
+         * `--preview-live-shots` shot [number] (1-based): [PREVIEW_SHOT] with its own event id (a
+         * UUID ending in [number], as `ShotEvent` requires) and a later timestamp, one second apart,
+         * so each one is a new shot.
+         */
+        fun liveShot(number: Int): ShotEvent =
+            PREVIEW_SHOT.copy(
+                eventId = "00000000-0000-4000-8000-${number.toString().padStart(UUID_TAIL_DIGITS, '0')}",
+                timestamp =
+                    "2026-07-29T20:${twoDigits(number / SECONDS_PER_MINUTE % MINUTES_PER_HOUR)}:" +
+                        twoDigits(number % SECONDS_PER_MINUTE),
+            )
+
+        /**
+         * `--preview-pi-mock` simulated shot [number] (1-based, plan F8d-B): a new event id and
+         * timestamp, like [liveShot], and numbers that differ from [PREVIEW_SHOT] and from the
+         * previous simulated shot: the club, speeds, carry and direction cycle through
+         * [SIMULATED_SHOTS], so each one flies a visibly different flight.
+         */
+        fun simulatedShot(number: Int): ShotEvent =
+            SIMULATED_SHOTS[(number - 1).mod(SIMULATED_SHOTS.size)].copy(
+                eventId = "00000000-0000-4000-9000-${number.toString().padStart(UUID_TAIL_DIGITS, '0')}",
+                timestamp =
+                    "2026-07-29T21:${twoDigits(number / SECONDS_PER_MINUTE % MINUTES_PER_HOUR)}:" +
+                        twoDigits(number % SECONDS_PER_MINUTE),
+            )
+
+        @Suppress("MagicNumber") // Made-up shots, like PREVIEW_SHOT.
+        private val SIMULATED_SHOTS: List<ShotEvent> by lazy {
+            listOf(
+                PREVIEW_SHOT.copy(
+                    club = "7-iron",
+                    ballSpeedMph = 118.2,
+                    clubSpeedMph = 86.0,
+                    smashFactor = 1.37,
+                    estimatedCarryYards = 165.0,
+                    launchAngleVertical = 17.8,
+                    launchAngleHorizontal = 2.4,
+                    spinRpm = 6_400.0,
+                    clubPathDeg = 1.2,
+                    spinAxisDeg = 4.1,
+                ),
+                PREVIEW_SHOT.copy(
+                    club = "driver",
+                    ballSpeedMph = 158.6,
+                    clubSpeedMph = 107.5,
+                    smashFactor = 1.48,
+                    estimatedCarryYards = 281.0,
+                    launchAngleVertical = 11.2,
+                    launchAngleHorizontal = -3.0,
+                    spinRpm = 2_150.0,
+                    clubPathDeg = -2.4,
+                    spinAxisDeg = -6.2,
+                ),
+                PREVIEW_SHOT.copy(
+                    club = "pw",
+                    ballSpeedMph = 98.4,
+                    clubSpeedMph = 78.1,
+                    smashFactor = 1.26,
+                    estimatedCarryYards = 124.0,
+                    launchAngleVertical = 24.5,
+                    launchAngleHorizontal = 0.6,
+                    spinRpm = 8_900.0,
+                    clubPathDeg = 0.4,
+                    spinAxisDeg = 1.0,
+                ),
+            )
+        }
+
+        private const val UUID_TAIL_DIGITS = 12
+        private const val SECONDS_PER_MINUTE = 60
+        private const val MINUTES_PER_HOUR = 60
+
+        private fun twoDigits(value: Int): String = value.toString().padStart(2, '0')
     }
 }

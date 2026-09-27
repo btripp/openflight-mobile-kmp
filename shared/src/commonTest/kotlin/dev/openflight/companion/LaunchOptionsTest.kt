@@ -101,4 +101,24 @@ class LaunchOptionsTest {
         assertThat(LaunchOptions.fromArguments(listOf("app", "--range-realitykit")).rangeRealityKit).isTrue()
         assertThat(LaunchOptions.fromArguments(listOf("app")).rangeRealityKit).isFalse()
     }
+
+    @Test
+    fun previewLiveShotsAndBulkHistoryAreFlags() {
+        val options = LaunchOptions.fromArguments(listOf("app", "--preview-live-shots", "--preview-history-bulk"))
+
+        assertThat(options.previewLiveShots).isTrue()
+        assertThat(options.previewHistoryBulk).isTrue()
+        assertThat(options.usesFakeRepository).isFalse()
+        assertThat(LaunchOptions.fromArguments(listOf("app")).previewLiveShots).isFalse()
+        assertThat(LaunchOptions.fromArguments(listOf("app")).previewHistoryBulk).isFalse()
+    }
+
+    @Test
+    fun previewPiMockIsAFlagThatSwapsInTheFakeRepository() {
+        val options = LaunchOptions.fromArguments(listOf("app", "--preview-pi-mock"))
+
+        assertThat(options.previewPiMock).isTrue()
+        assertThat(options.usesFakeRepository).isTrue()
+        assertThat(LaunchOptions.fromArguments(listOf("app")).previewPiMock).isFalse()
+    }
 }

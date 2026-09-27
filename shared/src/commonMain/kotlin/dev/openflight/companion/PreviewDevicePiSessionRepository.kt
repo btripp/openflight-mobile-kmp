@@ -39,9 +39,17 @@ import kotlinx.coroutines.flow.update
  * and a swing being calculated. Profile commands follow the server's rules (profiles.py): add
  * makes the new profile active; removing the active or last profile is refused silently (the
  * roster doesn't change), like the Pi. Everything else is a no-op. Debug launch hooks only.
+ *
+ * Plan F8d-B (`--preview-pi-mock`): with [mockMode] the Pi reports `mock_mode`, and each
+ * [simulateShot] calls [onSimulateShot] with its 1-based count, which delivers a simulated shot.
  */
 @Suppress("TooManyFunctions") // Mirrors the PiSessionRepository surface.
-internal class PreviewDevicePiSessionRepository : PiSessionRepository {
+internal class PreviewDevicePiSessionRepository(
+    mockMode: Boolean = false,
+    private val onSimulateShot: (number: Int) -> Unit = {},
+) : PiSessionRepository {
+    private var simulated = 0
+
     override val linkState: StateFlow<PiLinkState> = MutableStateFlow(PiLinkState.Connected)
     override val bluetoothSchemaV2: StateFlow<Boolean> = MutableStateFlow(false)
     override val sessionShots: StateFlow<List<ShotDetail>> = MutableStateFlow(emptyList())
@@ -96,7 +104,7 @@ internal class PreviewDevicePiSessionRepository : PiSessionRepository {
         MutableStateFlow(RadarConfig(minSpeed = 10, maxSpeed = 120, minMagnitude = 400, transmitPower = 0))
     override val debugState: StateFlow<DebugState> = MutableStateFlow(DebugState(enabled = false, loaded = true))
     override val cloudUploadStatus: StateFlow<CloudUploadStatus> = MutableStateFlow(CloudUploadStatus())
-    override val mockMode: StateFlow<Boolean?> = MutableStateFlow(false)
+    override val mockMode: StateFlow<Boolean?> = MutableStateFlow(mockMode)
     override val notices: SharedFlow<PiNotice> = MutableSharedFlow()
 
     override fun start() = Unit
@@ -147,7 +155,10 @@ internal class PreviewDevicePiSessionRepository : PiSessionRepository {
         }
     }
 
-    override suspend fun simulateShot() = Unit
+    override suspend fun simulateShot() {
+        simulated += 1
+        onSimulateShot(simulated)
+    }
 
     override suspend fun setTrainingImplement(implement: String) = Unit
 

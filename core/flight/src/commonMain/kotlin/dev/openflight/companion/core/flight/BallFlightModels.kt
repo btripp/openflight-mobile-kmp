@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 package dev.openflight.companion.core.flight
 
+import kotlin.math.abs
+
 /**
  * The flight parameters that can come from a measured [dev.openflight.companion.core.model.ShotEvent]
  * or fall back to a per-club default, ported from `ios/OpenFlight/DrivingRange/BallFlightModels.swift`.
@@ -53,6 +55,31 @@ data class FlightPoint(
 )
 
 /**
+ * How a flight was made to land at its target carry (plan F2b), the trajectory's shape provenance.
+ *
+ * @property dragScale the fitted Cd multiplier k (1 when the unconstrained flight already landed
+ *   within 0.1 yd; clamped to [BallFlightSimulator.DRAG_SCALE_MIN] ..
+ *   [BallFlightSimulator.DRAG_SCALE_MAX]).
+ * @property residualScale the uniform x/z scale applied after the fit (target / fitted carry): ~1
+ *   when the fit converged, further from 1 when k was clamped.
+ */
+data class CarryFit(
+    val dragScale: Double,
+    val residualScale: Double,
+) {
+    /** The shape leans on a large fudge: |k − 1| > 0.15, or the residual needed real scaling. */
+    val shapeEstimated: Boolean
+        get() =
+            abs(dragScale - 1.0) > SHAPE_ESTIMATED_DRAG_DEVIATION ||
+                abs(residualScale - 1.0) > SHAPE_ESTIMATED_RESIDUAL
+
+    private companion object {
+        const val SHAPE_ESTIMATED_DRAG_DEVIATION = 0.15
+        const val SHAPE_ESTIMATED_RESIDUAL = 0.005
+    }
+}
+
+/**
  * A full simulated ball flight: a resampled list of [FlightPoint]s plus the derived summary
  * values the driving-range UI reads. Ported from `BallFlightModels.swift`'s `FlightTrajectory`.
  *
@@ -63,6 +90,8 @@ data class FlightPoint(
  *
  * [landingSpinRpm] is the spin when the ball lands (the launch spin when spin decay is off), or
  * `null` for a trajectory that didn't come from [BallFlightSimulator].
+ *
+ * [carryFit] records how the flight was constrained to its target carry, or `null` when it wasn't.
  */
 data class FlightTrajectory(
     val eventId: String,
@@ -70,6 +99,7 @@ data class FlightTrajectory(
     val provenance: FlightInputProvenance,
     val id: String = eventId,
     val landingSpinRpm: Double? = null,
+    val carryFit: CarryFit? = null,
 ) {
     val apexMeters: Double = points.maxOfOrNull { it.positionMeters.y } ?: 0.0
     val flightTime: Double = points.lastOrNull()?.time ?: 0.0

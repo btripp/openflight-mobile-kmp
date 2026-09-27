@@ -61,12 +61,15 @@ import org.koin.androidx.compose.koinViewModel
 /**
  * The My Bag destination (plan F5): owns the [BagViewModel], the selected club and the
  * conditions editor. On one pane, back closes the club detail before leaving the bag.
+ *
+ * @param onViewOnRange plan F8d: the club detail's recent shots open on the driving range.
  */
 @Composable
 fun BagRoute(
     onOpenAnalysis: () -> Unit,
     windowClass: OfWindowClass = rememberOfWindowClass(),
     viewModel: BagViewModel = koinViewModel(),
+    onViewOnRange: ((sessionId: String, shotId: String) -> Unit)? = null,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var selectedClub by rememberSaveable { mutableStateOf<String?>(null) }
@@ -86,7 +89,7 @@ fun BagRoute(
         editingConditions = editingConditions,
         onEditConditions = { editingConditions = it },
         windowClass = windowClass,
-        detail = { wireValue -> ClubDetailPane(wireValue) },
+        detail = { wireValue -> ClubDetailPane(wireValue, onViewOnRange = onViewOnRange) },
     )
 }
 

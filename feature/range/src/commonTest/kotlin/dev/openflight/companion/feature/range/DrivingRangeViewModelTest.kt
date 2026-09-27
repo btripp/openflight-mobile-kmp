@@ -15,6 +15,7 @@ import dev.openflight.companion.core.data.RangeCameraMode
 import dev.openflight.companion.core.model.ConnectionState
 import dev.openflight.companion.core.model.GolfClub
 import dev.openflight.companion.core.testing.FakeConditionsRepository
+import dev.openflight.companion.core.testing.FakePiSessionRepository
 import dev.openflight.companion.core.testing.FakeShotHistoryRepository
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -60,7 +61,8 @@ class DrivingRangeViewModelTest {
             settings = settings,
             history = FakeShotHistoryRepository(),
             conditions = FakeConditionsRepository(),
-            simulation = ::makeTestTrajectory,
+            piSession = FakePiSessionRepository(),
+            flightPlan = { m, c, b -> testFlightPlan(m, c, b) },
             computeDispatcher = computeDispatcher,
         )
 

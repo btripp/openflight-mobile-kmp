@@ -93,6 +93,15 @@ sealed interface DrivingRangeUiState {
     /** The displayed shot's estimated roll-out (plan F2/F8a1), once computed. */
     val rollOut: RangeRollOut?
 
+    /**
+     * Plan F8d: the Simulate button. `true` only while the Pi's Socket.IO link is connected over
+     * Wi-Fi and it runs `--mock` (the same availability as Session's and Games' simulate).
+     */
+    val canSimulate: Boolean
+
+    /** Why the last [DrivingRangeEvent.SimulateShot] failed; cleared by the next one. */
+    val simulateError: String?
+
     val mode: RangeMode get() = browse.mode
 
     /** The camera to render with; see [RangeCameraState.mode]. */
@@ -106,7 +115,16 @@ sealed interface DrivingRangeUiState {
         override val club: RangeClubState = RangeClubState(),
         override val camera: RangeCameraState = RangeCameraState(),
         override val browse: RangeBrowseState = RangeBrowseState(),
+        override val canSimulate: Boolean = false,
+        override val simulateError: String? = null,
     ) : DrivingRangeUiState {
+        /** The pre-F8d shape, kept so Swift callers of `init(club:camera:browse:)` still compile. */
+        constructor(
+            club: RangeClubState,
+            camera: RangeCameraState,
+            browse: RangeBrowseState,
+        ) : this(club, camera, browse, canSimulate = false, simulateError = null)
+
         override val rollOut: RangeRollOut? get() = null
         override val phase: RangePhase get() = RangePhase.Waiting
         override val displayedShot: ShotEvent? get() = null
@@ -122,7 +140,21 @@ sealed interface DrivingRangeUiState {
         override val camera: RangeCameraState = RangeCameraState(),
         override val browse: RangeBrowseState = RangeBrowseState(),
         override val rollOut: RangeRollOut? = null,
+        override val canSimulate: Boolean = false,
+        override val simulateError: String? = null,
     ) : DrivingRangeUiState {
+        /** The pre-F8d shape, kept so Swift callers of the seven-argument init still compile. */
+        @Suppress("LongParameterList") // The primary constructor's shape before plan F8d.
+        constructor(
+            shot: ShotEvent,
+            phase: RangePhase,
+            activeFlight: ActiveFlight?,
+            club: RangeClubState,
+            camera: RangeCameraState,
+            browse: RangeBrowseState,
+            rollOut: RangeRollOut?,
+        ) : this(shot, phase, activeFlight, club, camera, browse, rollOut, canSimulate = false, simulateError = null)
+
         override val displayedShot: ShotEvent get() = shot
     }
 }

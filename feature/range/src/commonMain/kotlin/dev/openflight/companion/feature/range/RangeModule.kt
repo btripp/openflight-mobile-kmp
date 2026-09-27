@@ -8,5 +8,13 @@ import org.koin.dsl.module
 /** Koin bindings for this feature. Needs `core:data`'s `dataModule` in the same graph. */
 val rangeModule: Module =
     module {
-        viewModel { DrivingRangeViewModel(shots = get(), settings = get(), history = get(), conditions = get()) }
+        viewModel {
+            DrivingRangeViewModel(
+                shots = get(),
+                settings = get(),
+                history = get(),
+                conditions = get(),
+                piSession = get(),
+            )
+        }
     }

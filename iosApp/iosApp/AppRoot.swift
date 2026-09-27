@@ -9,6 +9,16 @@ enum AppRoute: Hashable {
     case range
     case training
     case camera
+    /// Plan F8d-B: Practice's "View on range", opened on that shot.
+    case rangeAt(RangeTarget)
+
+    /// Either range route: the iPad sidebar collapses under both.
+    var isRange: Bool {
+        switch self {
+        case .range, .rangeAt: true
+        default: false
+        }
+    }
 }
 
 /// The app's top-level destinations (plan F1d): Practice · Sessions · Bag · Settings, the same
@@ -76,6 +86,8 @@ struct AppRoot: View {
         .tint(Theme.gold)
         .font(.of(.body))
         .preferredColorScheme(.dark)
+        // Plan F8d-B: "View on range" from any tab opens the range full screen over it.
+        .rangePresenter()
     }
 }
 
@@ -93,6 +105,9 @@ private struct AppRouteDestination: View {
         case .range:
             // Full screen, like the reference: no navigation or tab bar.
             DrivingRangeView(autoplay: launchOptions.previewFlight)
+                .toolbar(.hidden, for: .tabBar)
+        case let .rangeAt(target):
+            DrivingRangeView(autoplay: false, launch: target.launch)
                 .toolbar(.hidden, for: .tabBar)
         case .training:
             TrainingView()
@@ -118,6 +133,7 @@ private struct TabRootView: View {
         case .practice:
             NavigationStack(path: $path) {
                 DashboardView(onOpenTraining: { path.append(.training) })
+                    .rangePusher(path: $path)
                     .navigationDestination(for: AppRoute.self) { route in
                         AppRouteDestination(route: route, launchOptions: launchOptions)
                     }
@@ -172,7 +188,7 @@ private struct AppSidebarShell: View {
 
     /// Plan F1d: the Range is full screen on an iPad too, so the sidebar collapses while it's on
     /// Practice's stack (a `--range-mode` launch included) and comes back once it's popped.
-    private var showsRange: Bool { tab == .practice && path.contains(.range) }
+    private var showsRange: Bool { tab == .practice && path.contains(where: \.isRange) }
 
     /// `.detailOnly` for as long as the Range is up, whatever the split view writes back meanwhile
     /// (it resets the visibility when it first lays out, which a one-off `onChange` would lose on a

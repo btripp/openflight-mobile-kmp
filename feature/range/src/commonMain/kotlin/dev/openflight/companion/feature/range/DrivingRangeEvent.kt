@@ -72,4 +72,19 @@ sealed interface DrivingRangeEvent {
     data object ResetView : DrivingRangeEvent
 
     // endregion
+
+    // region Plan F8d: range everywhere.
+
+    /** Open [launch]'s session, paused on its shot when it names one ("View on range"). */
+    data class Launch(
+        val launch: RangeLaunch,
+    ) : DrivingRangeEvent
+
+    /**
+     * Ask a `--mock` Pi for a simulated shot (only while [DrivingRangeUiState.canSimulate]). The
+     * shot arrives through the normal live path; nothing is made up locally.
+     */
+    data object SimulateShot : DrivingRangeEvent
+
+    // endregion
 }
