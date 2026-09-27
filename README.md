@@ -6,93 +6,168 @@ An Android + iOS companion app for [OpenFlight](https://openflight.dev), the DIY
 monitor. It talks to the Pi over Wi-Fi (the Pi's own Socket.IO API, plus Server-Sent Events on
 backends that have them) or Bluetooth LE (schema v1 and v2). See
 [Backend compatibility](#backend-compatibility) for which backend offers what. Each platform has a
-**native UI** — Jetpack Compose on Android, SwiftUI on iOS — over the same shared Kotlin
-Multiplatform ViewModels, repositories and transports
-([ADR 0001](docs/adr/0001-native-ui-shared-viewmodels.md)).
+**native UI**, Jetpack Compose on Android and SwiftUI on iOS, over the same shared Kotlin
+Multiplatform ViewModels, repositories, transports and ball-flight geometry
+([ADR 0001](docs/adr/0001-native-ui-shared-viewmodels.md),
+[ADR 0002](docs/adr/0002-ios-range-canvas-renderer.md)).
 
 <br clear="left"/>
 
+## Screenshots
+
+iOS, connected to `openflight-server --mock` (22 simulated shots across six clubs):
+
+| Practice | Driving range | Session and dispersion |
+|---|---|---|
+| <img src="docs/images/ios-practice.jpg" width="240" alt="Practice tab: the latest shot's ball speed, carry and detail metrics, with the session's club chips" /> | <img src="docs/images/ios-range.jpg" width="240" alt="Driving range: the latest shot's flight with ball speed, carry and a metrics panel" /> | <img src="docs/images/ios-session.jpg" width="240" alt="Session tab: the Pi session with a dispersion ellipse for the driver" /> |
+
+| My Bag | Club analysis | Stored session |
+|---|---|---|
+| <img src="docs/images/ios-bag.jpg" width="240" alt="My Bag: playing conditions and each club's average carry" /> | <img src="docs/images/ios-club-analysis.jpg" width="240" alt="Club analysis: ranked carry bars per club with spread and shot counts" /> | <img src="docs/images/ios-history-detail.jpg" width="240" alt="A stored session from history with its stats, CSV export and replay on the range" /> |
+
+Android, same build and server:
+
+| Practice | Session | My Bag | Settings |
+|---|---|---|---|
+| <img src="docs/images/android-practice.jpg" width="180" alt="Android Practice tab" /> | <img src="docs/images/android-session.jpg" width="180" alt="Android Session tab with the dispersion map" /> | <img src="docs/images/android-bag.jpg" width="180" alt="Android My Bag" /> | <img src="docs/images/android-settings.jpg" width="180" alt="Android Settings: device, practice and data" /> |
+
+Phones get a bottom bar (Android) or tab bar (iOS); tablets get a navigation rail (Android)
+or a sidebar (iPad), with list-detail layouts for Sessions, history and Bag.
+
 ## Features
 
+The app has four tabs on both platforms: **Practice · Sessions · Bag · Settings**.
+
+### Practice (live)
 - **Live shots over Wi-Fi or Bluetooth LE.** On Wi-Fi the app keeps one Socket.IO connection to
   the Pi (the API the Pi's own web UI uses) and, on backends that serve it, the SSE shot stream
-  (`/api/shots/stream?schema=2`); without that stream the Socket.IO `shot`/`shot_update` events
-  feed the live shots instead. Both reconnect on their own with capped exponential backoff
-  (Socket.IO 0.5 s → 5 s, SSE 1 s → 15 s). An automatic reconnect doesn't re-add the shot the
-  Pi replays on connect; an explicit Retry does, so a fresh install shows the latest shot at
-  once. Over Bluetooth the app negotiates schema v2 when the Pi offers it and falls back to v1
-  ([Bluetooth LE](#bluetooth-le-schema-v1-and-v2)).
-- **Dashboard**: transport picker, a live connection-status chip, the latest shot's primary
-  metrics (ball speed, carry) and detail metrics (club speed, smash, launch vertical/horizontal,
-  spin, spin axis, club path), confidence indicators and a carry range when the Pi reports them,
-  and previous shots (newest first, capped at 100, deduplicated across transport switches). A
-  haptic and a gold flash mark each new shot.
-  - A **processing indicator** shows the Pi's `shot_processing` state (capturing, calculating,
-    failed) until the next shot arrives. A schema v2 provisional shot is replaced in place by
-    its final version.
-  - **Connection problems** each get their own message and action: an unreachable Pi, an
-    address the endpoint policy refuses, iOS Local Network access denied, and Android's
-    `ACCESS_LOCAL_NETWORK` denied (both with a button to open Settings). The connection card
-    links to the build docs while idle and to troubleshooting on an error, and offers
-    `192.168.4.1:8080` (the Pi's access point) and `192.168.1.100:8080` as tap-to-fill hosts.
-  - **Simulate shot** appears only when the Pi runs `--mock`.
+  (`/api/shots/stream?schema=2`); on a Pi without that stream, such as stock upstream, the
+  Socket.IO `shot`/`shot_update` events feed the live shots instead. Both reconnect on their own
+  with capped exponential backoff
+  (Socket.IO 0.5 s → 5 s, SSE 1 s → 15 s). Over Bluetooth the app negotiates schema v2 when the
+  Pi offers it and falls back to v1 ([Bluetooth LE](#bluetooth-le-schema-v1-and-v2)).
+- **The latest shot**: ball speed and carry (or the carry range), club speed, smash, launch,
+  direction, spin, club path and spin axis, with confidence dots and the spin source. A haptic
+  and a gold flash mark each new shot, and "View on range" flies it.
+- A **processing indicator** shows the Pi's `shot_processing` state (capturing, calculating,
+  failed). A schema v2 provisional shot is replaced in place by its final version.
+- **Club selection**, synced both ways with the Pi and the kiosk (`POST /api/club`, or Socket.IO
+  `set_club` on a Pi without that route). The phone never shows a club
+  the Pi hasn't confirmed, and asks once per launch whether the Pi's club is right. Per-club shot
+  chips with counts show the session so far.
 - **Profiles**: a picker beside the club selects the Pi's active profile, and adds, renames and
-  removes profiles under the server's rules (at most 12 and never zero; names trimmed and at
-  most 40 characters; the active profile and a profile with shots can't be removed). The
-  dashboard, Session and stats show the active profile's shots. Over Bluetooth v2 the picker is
-  select-only.
-- **Club selection**, synced both ways: pick a club on the phone and it round-trips to the Pi
-  (`POST /api/club` on Wi-Fi, or Socket.IO `set_club` on a Pi without that route, see
-  [Backend compatibility](#backend-compatibility)); change it on
-  the kiosk or a simulator and the phone follows the Pi's `club_changed`. The phone never shows
-  a club the Pi hasn't confirmed, and asks once per launch, after the first connect, whether the
-  Pi's club is the right one. Per-club shot chips with counts sit on the dashboard.
-- **Phone-assisted TI radar tilt calibration**: sample the phone's gravity sensor at 60 Hz,
-  wait for a stable 2-second average, and submit it to calibrate the TI IWR6843 radar's mount
-  tilt, with no external level needed.
-- **Driving range**: a ball-flight view (Compose `Canvas` 2.5D on Android, RealityKit 3D on
-  iOS) that resolves missing launch/spin values from per-club defaults, simulates the
-  trajectory with the reference's RK4 model, and plays it back with a replay button, a club
-  selector, and a **camera mode toggle**: a fixed tee-side view, or a **follow camera** that
-  chases the ball, frames the landing area in the final approach, and settles on a raised view
-  of the landing spot lined up with the nearest yardage marker.
-- **Units**: an Imperial (mph/yds) or Metric (km/h/m) toggle, applied everywhere metrics are
-  shown. It's a phone setting; it doesn't follow the kiosk's (see [Future work](#future-work)).
-- **Session**: the Pi's session for the active profile, grouped by club, with per-club stats
-  (count, average/min/max ball speed with a sample standard deviation, average carry, club
-  speed and smash), a **shot dispersion map** (one dot per shot, a scatter ellipse per club and
-  distance arcs, with a selected-shot card) and CSV export through the Android share sheet or
-  the iOS `ShareLink`. While disconnected it says it shows the last session received.
-  - **Delete and Clear are server-confirmed** on Wi-Fi: the row shows a pending state until the
-    Pi confirms, and fails after 10 s, on a `delete_shot_error` or when the link drops. Clear
-    removes only the active profile's rows. Without a Pi link both are local edits.
-- **Session history**: every connection to the Pi starts a session that is stored on the phone
-  (Room, survives relaunches), listed newest first with its date, shot count and first/last
-  shot time, and filterable by profile. Each stored session opens with the same club tabs,
-  stats, rows and per-session CSV export. Deleting a stored session or "Clear all history" asks
-  first.
-- **Device** (Settings): cards for power (a Pi started with `--battery`), trigger, radar and
-  debug, each hidden until the Pi reports it. **Shut down the Pi** goes confirm → pending →
-  done or failed, with a 10 s timeout and the host captured when you confirm, so a retry can't
-  reach a Pi you switched to since. The link drop after the Pi answers is expected, not an
-  error.
-- **Camera** (Wi-Fi): the Pi's high-speed capture settings, a preview still
-  (`/api/camera/preview.jpg`) polled only while the screen is visible, and each shot's replay
-  video when the Pi recorded one.
-- **More Wi-Fi-only features over Socket.IO**: a swing-speed training mode with implement
-  selection, simulator (GSPro) status, the radar/debug panel and cloud-upload status. Over
-  Bluetooth the UI disables what BLE can't carry, with an explanation, instead of hiding it.
-- **Endpoint policy**: `http://` only to loopback, `.local` names, private (RFC 1918),
-  link-local and IPv6 unique-local addresses; `https://` to any host. An address with a user
-  name or password, or another scheme, is refused before any request. The app remembers a host
-  only after it connected.
-- **Lifecycle**: every transport disconnects when the app goes to the background and reconnects
-  when it returns. A delete, clear or shutdown still pending then fails with "connection
-  dropped" instead of hanging.
-- **Accessibility**: metric tiles and shot-history rows announce as one merged phrase for
-  TalkBack/VoiceOver (e.g. "Ball speed, 139.1 miles per hour"), the connection status chip is a
-  live region that announces state changes on its own, touch targets are at least 48 dp / 44 pt,
-  no status relies on colour alone, and reduced motion is respected.
+  removes profiles under the server's rules (at most 12, never zero; names trimmed to 40
+  characters; the active profile and one with shots can't be removed). Over Bluetooth v2 the
+  picker is select-only.
+- **Connection problems** each get their own message and action: an unreachable Pi, an address
+  the endpoint policy refuses, and denied local-network access on iOS or Android 17 (with a
+  button to open Settings). Tap-to-fill hosts cover the Pi's access point and a home network.
+- **Simulate shot** appears only when the Pi runs `--mock`.
+- The overflow menu opens **speed training** (swing-speed mode with implement selection, Wi-Fi).
+
+### Driving range
+- A ball-flight view drawn from **shared Kotlin geometry** on both platforms: Compose `Canvas`
+  on Android and SwiftUI `Canvas` on iOS, so the two look the same by construction.
+- **Accurate flight**: the backend's aerodynamics (Ferguson, McNally & McPhee 2022 drag and
+  lift with spin decay), with the carry matched by a drag fit, so the drawn landing equals the
+  displayed carry. Validated against tour-average launch data.
+- A **fixed** tee-side camera or a **follow camera** that chases the ball and settles on the
+  landing spot. Reduced motion forces the fixed view.
+- **Replay and overlay**: step through a session shot by shot at 0.5x/1x/2x, or overlay up to
+  200 shots from one session or all of them, filtered by club. A session picker opens any stored
+  session. Gestures: pinch to zoom, pan, orbit, double-tap to reset, tap a landing to select it.
+- **View any shot on the range** from Practice, Sessions, history and Bag.
+- The estimated roll-out and total show with an "est." label.
+
+### Sessions
+- **The Pi's session** for the active profile, grouped by club, with per-club stats (count,
+  average/min/max ball speed and its standard deviation, average carry, club speed and smash).
+- A **dispersion map**: one dot per shot, a scatter ellipse per club and distance arcs, with a
+  selected-shot card.
+- **CSV export** through the Android share sheet or the iOS `ShareLink`.
+- **Delete and Clear are server-confirmed** on Wi-Fi: a row shows a pending state until the Pi
+  confirms, and fails after 10 s, on `delete_shot_error` or when the link drops.
+- **History**: every connection to the Pi starts a session stored on the phone (Room; survives
+  relaunches), listed newest first and filterable by profile. Each stored session has the same
+  stats, a CSV export and "Replay on range".
+
+### Bag
+- **My Bag**: 14 default clubs to start, which you can add to, remove and reorder, each with
+  make, model and loft. More than one bag, with one active. Each club shows its average carry,
+  its spread and the gap to the next club.
+- **Club analysis**: ranked carry bars over your lifetime or the last 5 or 10 sessions, a
+  Carry | Total (est.) toggle, and gapping insights (overlaps and gaps between clubs).
+- **Club detail**: a carry histogram, the dispersion ellipse and recent shots with "View on
+  range".
+- **Playing conditions**: altitude, temperature, wind, turf firmness and target bearing adjust
+  the estimated carry and roll through air density and wind. Every adjusted number is labelled
+  "est."; the Pi's carry stays the anchor.
+
+### Settings
+- **Device**: connection and transport, the live link, and cards for power (a Pi started with
+  `--battery`), trigger, radar tuning and debug recording, each hidden until the Pi reports it.
+  From here: **Calibrate radar** and **Camera**.
+- **Stop OpenFlight** goes confirm → pending → done or failed, with a 10 s timeout, and never
+  reaches a Pi you switched to since confirming.
+- **Phone-assisted radar tilt calibration**: sample the phone's gravity sensor at 60 Hz, wait
+  for a stable 2-second average, and send it to calibrate the TI IWR6843's mount tilt.
+- **Camera** (Wi-Fi): the Pi's capture settings, a preview still polled only while visible, and
+  each shot's replay video.
+- **Audio call-outs**: the phone reads out each shot (or games only) with the fields and order
+  you choose (carry, total, ball speed, club speed, smash, launch, spin, …), a voice picker and a
+  speech rate. Off by default, and silent while TalkBack or VoiceOver is running.
+- **Units** (Imperial or Metric), simulator (GSPro) status, cloud-upload status.
+
+### Everywhere
+- **Endpoint policy**: `http://` only to loopback, `.local` names and private addresses;
+  `https://` to any host. The app remembers a host only after it connected.
+- **Lifecycle**: every transport disconnects in the background and reconnects on return; a
+  pending delete, clear or shutdown then fails with "connection dropped" instead of hanging.
+- **Accessibility**: metric tiles and rows announce as one phrase for TalkBack/VoiceOver, the
+  connection chip announces changes on its own, touch targets are at least 48 dp / 44 pt, no
+  status relies on colour alone, and reduced motion is respected.
+- **Bluetooth carries less than Wi-Fi**: what BLE can't carry is disabled with an explanation,
+  not hidden (see [Known limitations](#known-limitations)).
+
+## Status and roadmap
+
+Done and on `main`:
+
+- [x] Live shots over Wi-Fi (Socket.IO + SSE) and Bluetooth LE schema v1/v2
+- [x] Live shots and club changes on a stock upstream Pi (Socket.IO only, no SSE or `/api/club`)
+- [x] Practice: latest shot, confidence, processing indicator, connection problems, club sync
+- [x] Profiles: select, add, rename, remove
+- [x] Driving range on shared geometry (Compose `Canvas` / SwiftUI `Canvas`), follow camera
+- [x] Accurate ball flight (drag and lift model, drag-fit carry)
+- [x] Range replay, overlay, gestures and "view any shot on the range"
+- [x] Session stats, dispersion map, CSV export, server-confirmed delete and clear
+- [x] Stored session history (Room), with replay on the range
+- [x] My Bag, club analysis and gapping
+- [x] Conditions-adjusted carry, wind and estimated roll (manual conditions)
+- [x] Audio call-outs
+- [x] Device cards, radar calibration, camera, speed training, Pi shutdown
+- [x] Tablet layouts: Android navigation rail, iPad sidebar, list-detail screens
+- [x] CI on Linux and macOS, `MockServerIT` against two pinned backends, Dependabot
+- [x] `v0.1.0-sim` tagged (verified on simulators and emulators)
+
+Next:
+
+- [ ] Estimated total and roll on Practice, Sessions, history and CSV, plus a "show total" toggle
+- [ ] Automatic conditions from location and Open-Meteo weather in the UI (the engine is done;
+      the Bag screen only offers manual conditions so far)
+- [ ] Games and activities: a **Play** tab with target call-out, closest to the pin, bullseye,
+      golf pong and iconic shots (the engine is done; no screens yet)
+- [ ] Range themes and atmosphere (dusk, night, links), a top-down view, and your own range
+      photo as a backdrop
+- [ ] Session sharing and ghost play against a shared session
+- [ ] Real course and driving-range layouts from OpenStreetMap
+- [ ] Extras such as starred shots, personal bests and a wedge matrix (to be chosen)
+- [ ] Tablet QA sweep and documentation pass
+- [ ] Hardware test matrix on a real Pi (see [`docs/hardware-test-matrix.md`](docs/hardware-test-matrix.md)), then `v0.1.0`
+- [ ] The phone-connectivity backend (SSE, `/api/club`, BLE, phone calibration) upstream
+- [ ] Kiosk features not in the app yet: editing camera capture settings and exposure, live
+      trigger diagnostics, languages other than English, a light theme, finding the Pi by mDNS
+- [ ] Units synced with the kiosk (needs the server to own the setting)
 
 ## Backend compatibility
 
@@ -102,7 +177,7 @@ runs:
 | | Upstream `main` ([open-flight/openflight](https://github.com/open-flight/openflight)) | Fork branch `feat/phone-connectivity` ([btripp/openflight](https://github.com/btripp/openflight/tree/feat/phone-connectivity)) |
 |---|---|---|
 | Socket.IO session: snapshot, profiles, Session screen, server-confirmed delete/clear, stats, stored history, device cards, power, camera, training, shutdown | Yes | Yes |
-| Live shots on the dashboard's latest-shot card and the range | Yes, over Socket.IO: there's no SSE stream (`/api/shots/stream` answers 404), so the app feeds the live feed from the Pi's `shot`/`shot_update` and shows Connected while the Socket.IO link is up. It probes SSE once per connection, not on a retry loop | Yes, over the SSE stream with schema v2 (`?schema=2`); Socket.IO only enriches it |
+| Live shots on the Practice latest-shot card and the range | Yes, over Socket.IO: there's no SSE stream (`/api/shots/stream` answers 404), so the app feeds the live feed from the Pi's `shot`/`shot_update` and shows Connected while the Socket.IO link is up. It probes SSE once per connection, not on a retry loop | Yes, over the SSE stream with schema v2 (`?schema=2`); Socket.IO only enriches it |
 | Change the club from the phone over Wi-Fi | Yes, over Socket.IO `set_club` (there's no `/api/club`); the phone shows the club once the Pi's `club_changed` confirms it | Yes, `POST /api/club` |
 | Phone calibration (`/api/calibration/iwr6843/orientation`) | No | Yes |
 | Bluetooth LE | None | Schema v1 and v2 |
@@ -164,47 +239,39 @@ through `shot_deleted` and `session_cleared`. The frame format is specified in t
   browser while the phone does the controlling. The display follows the same broadcasts.
 
 The units toggle is the one setting that doesn't cross over: the kiosk and `/display` keep
-their own (see [Future work](#future-work)). Each setup has a row in
-[`docs/hardware-test-matrix.md`](docs/hardware-test-matrix.md).
+their own. Each setup has a row in [`docs/hardware-test-matrix.md`](docs/hardware-test-matrix.md).
 
 ## Module map
 
 | Path | What |
 |---|---|
-| `androidApp/` | Android application: `MainActivity`, the Jetpack `navigation-compose` nav host and bottom bar (Dashboard/Session/Training/Camera/Settings, plus Calibrate and Range), runtime permission prompts, launch-option intent extras, Koin start, the app icon |
-| `shared/` | KMP, no UI: common Koin bootstrap (`initKoin`), `LaunchOptions`, the preview repository, and the iOS umbrella framework `Shared.framework` (exports `core:model`/`core:data`/`core:insights`/`core:flight` and every `feature:*` ViewModel module, plus `KoinHelper` and the `NativeViewModels` bridge for Swift) |
-| `iosApp/` | Xcode project (SwiftUI), embeds `Shared.framework` through a Gradle build phase; `Bridge/ViewModelHost.swift` collects shared `StateFlow`s via KMP-NativeCoroutines; the `AppIcon` asset catalog |
+| `androidApp/` | Android application: `MainActivity`, the Jetpack `navigation-compose` nav host (Practice/Sessions/Bag/Settings on a bottom bar or navigation rail; Range, Calibrate, Training, Camera and history pushed), runtime permission prompts, launch-option intent extras, Koin start, the app icon |
+| `shared/` | KMP, no UI: common Koin bootstrap (`initKoin`), `LaunchOptions`, the preview repositories, and the iOS umbrella framework `Shared.framework` (exports `core:*` and every `feature:*` ViewModel module, plus `KoinHelper` and the `NativeViewModels` bridge for Swift) |
+| `iosApp/` | Xcode project (SwiftUI): a `TabView` on iPhone and a `NavigationSplitView` sidebar on iPad; embeds `Shared.framework` through a Gradle build phase; `Bridge/ViewModelHost.swift` collects shared `StateFlow`s via KMP-NativeCoroutines |
 | `core/model` | Pure data types: `ShotEvent`, `GolfClub`, `ConnectionState`, calibration and Pi (`pi.*`) models. No I/O. |
 | `core/protocol` | The wire-protocol codec: BLE frame encoder/reassembler, `ShotEventDecoder`, SSE parsing, control envelopes, the `ShotTransport` interface. No I/O. |
 | `core/ble`, `core/network` | The BLE (Kable-backed) and Wi-Fi/SSE transports, both implementing `core/protocol`'s `ShotTransport` |
 | `core/socketio` | A minimal Engine.IO v4 / Socket.IO v5 client over a Ktor WebSocket, which `core/data`'s `PiSessionRepository` uses for the Pi's session API |
-| `core/data` | `ShotRepository`/`SettingsRepository`/`PiSessionRepository`/`ShotHistoryRepository` — the single source of truth the UI observes as `Flow`s; enriches SSE/BLE shots with Socket.IO detail by timestamp and writes every shot through to the persistent history |
-| `core/database` | The persistent multi-session shot history: a Room 3 KMP database (bundled SQLite) with sessions and shots, used only by `core/data`. Exported schemas live in `core/database/schemas/` |
-| `core/flight` | Pure ball-flight math for the driving range: the RK4 simulator, the fixed-camera planner, and `FollowCameraPlanner` |
-| `core/sensors` | Gravity sensor `expect`/`actual` and the phone-orientation calibration math (converts Android's `TYPE_GRAVITY` into iOS CoreMotion's convention) |
-| `core/insights` | Units, per-club stats, CSV export, shot enrichment/confidence formatting — pure, depends only on `core:model` |
-| `core/designsystem` | Android-only (Jetpack Compose): the `Of*` component wrappers every feature UI must use instead of raw Material3; bundles DM Serif Display + Outfit (OFL) |
+| `core/data` | The repositories the UI observes as `Flow`s (shots, settings, Pi session, history, bag, conditions); enriches SSE/BLE shots with Socket.IO detail and writes every shot through to the history |
+| `core/database` | Room 3 KMP (bundled SQLite): sessions, shots, bags, activities and imported sessions, used only by `core/data`. Exported schemas live in `core/database/schemas/` |
+| `core/flight` | Ball-flight physics (drag, lift, spin decay, air density, wind, roll) and the camera planners |
+| `core/insights` | Units, per-club stats, gapping analysis, CSV export, shot formatting |
+| `core/speech` | Text-to-speech engine and the shot call-out composer |
+| `core/location`, `core/geodata` | A one-shot coarse location fix, and the Open-Meteo weather and elevation client, for automatic conditions |
+| `core/sensors` | Gravity sensor `expect`/`actual` and the phone-orientation calibration math |
+| `core/designsystem` | Android-only (Jetpack Compose): the `Of*` component wrappers every feature UI must use instead of raw Material3, including the adaptive scaffold; bundles DM Serif Display + Outfit (OFL) |
 | `core/testing` | Fake repositories shared by VM tests |
-| `feature/dashboard`, `feature/calibration`, `feature/range`, `feature/session`, `feature/training`, `feature/camera`, `feature/settings` | KMP, shared presentation: each screen's `ViewModel`, `UiState`, events and pure helpers (no Compose in `commonMain`, enforced by `verifyNoComposeInCommonMain`) |
+| `feature/dashboard`, `range`, `session`, `bag`, `calibration`, `training`, `camera`, `settings`, `games` | KMP, shared presentation: each screen's `ViewModel`, `UiState`, events and pure helpers (no Compose in `commonMain`, enforced by `verifyNoComposeInCommonMain`). `games` has no screens yet |
 | `feature/<name>/ui` | Android-only (Jetpack Compose): that screen's composables and its device UI tests |
 | `build-logic/` | Gradle convention plugins (`openflight.*`) |
 | `gradle/libs.versions.toml` | Single source of truth for versions |
 | `tools/` | Dev helpers (`fire-mock-shot.py`, the BLE frame-golden generator) |
-| `docs/hardware-test-matrix.md` | The human-gated checklist for real Pi/Android/iOS hardware |
+| `docs/` | ADRs, the hardware test matrix, and the README images |
 | `plans/openflight-kmp-app.md` | The build plan: **§0 is the wire-protocol reference, and §9.1 supersedes it for the current backend** |
 
-```
-androidApp (Jetpack NavHost, permissions, launch extras, Koin start)
-    ├──> feature:dashboard:ui | feature:calibration:ui | feature:range:ui
-    │        feature:session:ui | feature:training:ui | feature:camera:ui | feature:settings:ui
-    │        └──> its own feature:<name> + core:designsystem + core:* (never another feature)
-    └──> shared (KMP: initKoin, LaunchOptions, PreviewShotRepository)
-iosApp (SwiftUI, Xcode) ──> Shared.framework = shared, exporting core:*/feature:* + KoinHelper
-shared ──> feature:dashboard | calibration | range | session | training | camera | settings
-             └──> core:data ──> core:ble / core:network / core:socketio ──> core:protocol ──> core:model
-                        └──> core:database (Room 3 KMP)
-feature:range, feature:session ──> core:flight ; feature:calibration ──> core:sensors ; others ──> core:insights
-```
+The dependency graph lives in [`CLAUDE.md`](CLAUDE.md#module-graph-arrows-point-from-a-module-to-its-dependencies-core-never-depends-on-featureapp).
+The rules: `core:*` never depends on a feature, `shared` or an app, and no feature depends on
+another feature.
 
 ## Building
 
@@ -250,14 +317,9 @@ Running on the simulator (`CODE_SIGNING_ALLOWED=NO`) needs none of this.
 ```bash
 ./gradlew allTests                                           # every module's host + iOS simulator tests
 ./gradlew :core:model:allTests :core:protocol:allTests        # a single module
-./gradlew :feature:dashboard:ui:connectedDebugAndroidTest     # Compose UI tests, needs a booted emulator/device
-./gradlew :feature:calibration:ui:connectedDebugAndroidTest
-./gradlew :feature:range:ui:connectedDebugAndroidTest
-./gradlew :feature:session:ui:connectedDebugAndroidTest
-./gradlew :feature:training:ui:connectedDebugAndroidTest
-./gradlew :feature:camera:ui:connectedDebugAndroidTest
-./gradlew :feature:settings:ui:connectedDebugAndroidTest
-./gradlew :androidApp:connectedDebugAndroidTest                # app-level flow (DrivingRangeFlowTest)
+./gradlew :feature:dashboard:ui:connectedDebugAndroidTest     # Compose UI tests, need a booted emulator/device
+./gradlew :feature:session:ui:connectedDebugAndroidTest       # likewise for range, bag, calibration, training, camera, settings
+./gradlew :androidApp:connectedDebugAndroidTest                # app-level navigation and flows
 OPENFLIGHT_BACKEND_DIR=~/Developer/oss/openflight ./gradlew mockServerIT   # against a live mock server, see below
 ```
 
@@ -265,9 +327,9 @@ OPENFLIGHT_BACKEND_DIR=~/Developer/oss/openflight ./gradlew mockServerIT   # aga
 `iosSimulatorArm64Test` on every KMP module, `testDebugUnitTest` on the Android-only modules,
 and `verifyNoComposeInCommonMain` (ADR 0001: shared code never mentions Compose). The
 `connectedDebugAndroidTest` tasks are Compose UI tests and need a running Android emulator or
-a connected device — CI doesn't run these; they run manually.
+a connected device. CI doesn't run these; they run manually.
 
-For iOS, first list the simulators actually installed on this Mac — **simulator names aren't
+For iOS, first list the simulators actually installed on this Mac. **Simulator names aren't
 portable**, so never hard-code one from another machine or from this README:
 
 ```bash
@@ -311,7 +373,8 @@ walks: connect → snapshot (`session_state`, `profiles`, `trigger_status`, debu
 camera commands → disconnect and reconnect → `POST /api/shutdown` and the expected link drop.
 On upstream `main`, which has no SSE or `/api/club`, the same steps assert the Socket.IO
 fallbacks instead (the shot reaches the live feed once, the club changes over `set_club`, and
-the status is Connected despite the SSE 404). The log ends with a PASS/SKIP summary. The server is killed on every path. CI runs it on
+the status is Connected despite the SSE 404). The log ends with a PASS/SKIP summary. The server
+is killed on every path. CI runs it on
 Linux against both pinned backends (`.github/workflows/mock-server-it.yml`) when app code
 changes.
 
@@ -329,7 +392,7 @@ actuals of Ktor, DataStore and Room; a separate JVM module would need a `jvm()` 
 - **v1 frame goldens** (`GoldenFrameTest`): regenerate with `tools/gen-frame-goldens.py` from
   the reference encoder; the script's header has the command.
 - Screenshots taken during manual or device checks are build artifacts, not source: don't
-  commit them.
+  commit them. The only committed screenshots are the README's, in `docs/images/`.
 
 ### Launch options for previews and UI tests
 
@@ -343,9 +406,11 @@ them as launch arguments; Android as intent extras (`--ez <name> true`, `--es tr
 | `--preview-shot` | `preview_shot` | Like `--ui-testing`, with one canned shot |
 | `--preview-pi` | `preview_pi` | Like `--ui-testing`, plus a fake Pi with a profile roster, power and trigger status and a swing being calculated (picker, device cards, shutdown) |
 | `--preview-pi-session` / `--preview-pi-session-stuck` | `preview_pi_session` / `preview_pi_session_stuck` | With `--ui-testing`: a connected fake Pi whose deletes and clears are confirmed after a short delay, or never |
-| `--preview-history` / `--preview-history-stuck` | `preview_history` / `preview_history_stuck` | Two stored sessions whose deletes land after a delay, or never |
+| `--preview-history` / `--preview-history-stuck` | `preview_history` / `preview_history_stuck` | Two stored sessions whose deletes land after a delay, or never (also feeds Bag stats and range replay) |
 | `--range-mode`, `--preview-flight` | `range_mode`, `preview_flight` | Open the driving range and fly the shot |
 | `--transport wifi\|bluetooth`, `--host <host:port>` | `transport`, `host` | Seed the settings before the UI starts |
+| `--preview-live-shots`, `--preview-history-bulk`, `--preview-pi-mock` | (iOS only) | A new shot every 5 s; a 220-shot stored session; a mock Pi, so "Simulate shot" shows |
+| `--range-freeze-progress <0…1>`, `--range-realitykit` | (iOS only) | Freeze the flight for screenshots; the old RealityKit renderer (kept for one release) |
 
 ```bash
 adb shell am start -n dev.openflight.companion/.MainActivity \
@@ -397,8 +462,8 @@ After building and pointing the app at a server (mock or real), confirm the core
 end:
 
 1. Reach **Connected** over the selected transport.
-2. Fire or hit a shot and confirm it appears on the dashboard.
-3. Open **Driving Range** and confirm the trajectory renders.
+2. Fire or hit a shot and confirm it appears on **Practice**.
+3. Open the **Range** and confirm the trajectory renders.
 4. Change **Club for next shot** and confirm the Pi accepts it.
 5. If an IWR6843 radar is attached and enabled (`--iwr6843`), run the phone calibration once
    on a physical device.
@@ -431,7 +496,7 @@ Adapted from the reference iOS app's own troubleshooting guide
   use `AppIntents.framework`.
 - **"Looking for OpenFlight" never resolves (BLE).** Confirm the Pi was started with `--ble`
   (or the mock server has BLE enabled) and that `bluetoothctl show` on the Pi reports
-  `Powered: yes`. Keep the app in the foreground during the initial scan — this app is
+  `Powered: yes`. Keep the app in the foreground during the initial scan; this app is
   foreground-only BLE by design (see Known limitations). Restart the app after changing the
   Pi's Bluetooth configuration.
 - **Wi-Fi doesn't connect.**
@@ -439,7 +504,7 @@ Adapted from the reference iOS app's own troubleshooting guide
      `curl "http://<host>:8080/socket.io/?EIO=4&transport=polling"` and confirm it answers
      with a `0{"sid":...}` handshake. On the fork branch, `curl -N http://<host>:8080/api/shots/stream`
      should also open with `: ping`.
-  2. If `<hostname>.local` fails, use the Pi's IP address instead — some networks block mDNS.
+  2. If `<hostname>.local` fails, use the Pi's IP address instead; some networks block mDNS.
   3. Put the phone and the Pi on the same network, and temporarily disable VPNs or client-
      isolation features that block local-device traffic.
   4. On iOS, re-enable OpenFlight under **Settings > Privacy & Security > Local Network**; on
@@ -459,31 +524,24 @@ Adapted from the reference iOS app's own troubleshooting guide
 ## Known limitations
 
 - **No authentication.** The app talks to the Pi with no auth of any kind, matching the
-  upstream project's own security posture — it assumes a trusted home LAN.
+  upstream project's own security posture; it assumes a trusted home LAN.
 - **Foreground-only BLE.** The BLE connection is torn down when the app leaves the foreground
   and rebuilt (via a fresh scan) when it returns. There is no background BLE session; this is
-  a deliberate v1 scope cut, not a bug.
+  a deliberate scope cut, not a bug.
 - **Android 17 (targetSdk 37) needs the local-network permission.** Reaching the Pi over Wi-Fi
-  requires the runtime `ACCESS_LOCAL_NETWORK` permission on Android 17+; without it,
-  connection attempts silently time out instead of failing fast. The app requests this at the
-  point of connecting, the same way it requests Bluetooth permissions.
-- **The driving-range flight arcs are flat by design, matching the upstream iOS app.** The
-  reference's `constrain()` scales a trajectory's carry distance (x/z) to match the server's
-  reported yardage but does **not** rescale its height (y). This app ports that behavior
-  faithfully rather than "fixing" it, since diverging from the reference here was flagged and
-  intentionally left alone.
-- **The mock server can show phantom clients for 15–35 seconds after a disconnect.** See
-  Troubleshooting above — this is `openflight-server`'s behavior, not this app's.
+  requires the runtime `ACCESS_LOCAL_NETWORK` permission on Android 17+. The app requests it
+  when connecting, and shows a button to open Settings if it's denied.
+- **Estimated distances are estimates.** Total, roll and conditions-adjusted carry are
+  computed on the phone from the Pi's carry and are always labelled "est.". The Pi's carry is
+  the anchor.
 - **Bluetooth carries less than Wi-Fi.** BLE schema v2 brings the club, profile selection,
   processing and power status, and provisional/final shots. The Pi's session and its stats,
   delete and clear, profile edits, the camera, training mode, simulator status, the radar/debug
   panel, cloud upload and Pi shutdown still need the Pi's Socket.IO API, which is Wi-Fi only;
   a v1 Pi carries only shots and the club. Over BLE the UI disables these with an explanation
   instead of hiding them.
-- **A specific Raspberry Pi kernel regresses BLE.** Kernel `6.18.34+rpt-rpi-2712` is known to
-  break BLE advertising/GATT on the Pi side. If BLE rows in
-  [`docs/hardware-test-matrix.md`](docs/hardware-test-matrix.md) fail, check `uname -r` on the
-  Pi before assuming an app defect.
+- **The mock server can show phantom clients for 15–35 seconds after a disconnect.** See
+  Troubleshooting above; this is `openflight-server`'s behavior, not this app's.
 - **No Raspberry Pi is available yet for hardware verification.** Everything in
   [`docs/hardware-test-matrix.md`](docs/hardware-test-matrix.md) is simulator/emulator-only
   until then; see that file for the pending checklist.
@@ -497,6 +555,8 @@ a bare IP), or HTTPS when the operator gives it a certificate.
   before SSE, HTTP control, the camera or Socket.IO sees it: `http://` only to loopback,
   `.local` names, RFC 1918, `169.254.0.0/16`, `fe80::/10` and `fc00::/7`; `https://` to any
   host; no user name or password in the address and no other scheme.
+- **Weather** is the one request that leaves the LAN: automatic conditions call Open-Meteo over
+  HTTPS with a coarse location, outside the Pi's endpoint policy.
 - **iOS** uses `NSAllowsLocalNetworking`, which allows cleartext only to local names and
   private address ranges.
 - **Android** has no equivalent: `network_security_config` can't allow-list IPs the user types
@@ -523,12 +583,6 @@ signed it. This path isn't verified on devices yet; it's a row in the hardware m
    **Settings > General > VPN & Device Management**, then turn on full trust for it under
    **Settings > General > About > Certificate Trust Settings**.
 5. Enter `https://raspberrypi.local:8080` (your host and port) in the app.
-
-## Future work
-
-- **Unit preference sync with the kiosk.** The phone's Imperial/Metric toggle is a phone
-  setting, and the Pi's web UI keeps its own per browser. Syncing them needs the server to own
-  the setting (a Socket.IO event or a profile setting) first.
 
 ## Working with Claude Code
 
@@ -573,6 +627,10 @@ Optional extras, not enabled by default:
   (commit `b053194`) is the reference implementation this app ports its behaviour from.
 - The app icon is built from the official OpenFlight logo/favicon
   (`ui/public/openflightlogo.svg` and `https://openflight.dev/icon.svg` in the upstream repo).
+- Ball-flight aerodynamics follow Ferguson, McNally & McPhee (2022), as used by the OpenFlight
+  backend.
+- Weather data by [Open-Meteo.com](https://open-meteo.com/) (CC BY 4.0).
+- Fonts: DM Serif Display and Outfit, under the SIL Open Font License.
 
 ## License
 
