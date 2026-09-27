@@ -2,6 +2,7 @@
 package dev.openflight.companion.feature.range
 
 import assertk.assertThat
+import assertk.assertions.isCloseTo
 import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isLessThan
@@ -63,6 +64,29 @@ class RangeCameraRigTest {
 
         for (progress in listOf(0.0, 0.5, 1.0)) {
             assertThat(rig.pose(RangeCameraMode.FIXED, flight, progress, 0.5)).isEqualTo(RangeCameraPlanner().pose)
+        }
+    }
+
+    /**
+     * Plan F8a2p: the tee view gives the scene room. On a portrait phone, a landscape phone and a
+     * tablet the horizon sits 35–45 % down, the tee box stays in frame, and the 50–250 yd markers
+     * spread over more than a tenth of the canvas (the reference camera: under 5 %).
+     */
+    @Test
+    fun theTeeCameraPutsTheHorizonHighAndSpreadsTheLandingZone() {
+        val canvases = listOf(1080f to 2400f, 2400f to 1080f, 1640f to 2360f, 2360f to 1640f)
+        for ((width, height) in canvases) {
+            val projection = RangeProjection(rig.fixedPose, width, height)
+            val label = "${width}x$height"
+            val horizon = projection.horizonY() / height
+
+            assertThat(horizon.toDouble(), label).isCloseTo(0.40, 0.05)
+            val tee = projection.project(Vec3(0.0, 0.0, 0.0)).y / height
+            assertThat(tee, label).isLessThan(0.9f)
+            val fifty = projection.project(scene.markerScenePositions.first()).y / height
+            val twoFifty = projection.project(scene.markerScenePositions.first { it.z < -228 }).y / height
+            assertThat(fifty - twoFifty, label).isGreaterThan(0.1f)
+            assertThat(twoFifty, label).isGreaterThan(horizon)
         }
     }
 

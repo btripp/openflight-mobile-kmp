@@ -10,16 +10,22 @@ import assertk.assertions.isLessThan
 import dev.openflight.companion.core.flight.FlightInputProvenance
 import dev.openflight.companion.core.flight.FlightPoint
 import dev.openflight.companion.core.flight.FlightTrajectory
-import dev.openflight.companion.core.flight.RangeCameraPlanner
+import dev.openflight.companion.core.flight.RangeCameraPose
 import dev.openflight.companion.core.flight.Vec3
 import kotlin.test.Test
 
 /**
  * The expected pixels were computed independently (a look-at pinhole camera in Python) for the
- * planner's pose, a 58° vertical field of view and a 1000 x 2000 px canvas.
+ * reference tee camera (3.4 m up, 8 m behind the tee, aimed 9 m up at 145 m; the tee camera
+ * before plan F8a2p raised it), a 58° vertical field of view and a 1000 x 2000 px canvas.
  */
 class RangeProjectionTest {
-    private val projection = RangeProjection(RangeCameraPlanner().pose, width = 1000f, height = 2000f)
+    private val projection =
+        RangeProjection(
+            RangeCameraPose(Vec3(0.0, 3.4, 8.0), Vec3(0.0, 9.0, -145.0)),
+            width = 1000f,
+            height = 2000f,
+        )
 
     @Test
     fun focalLengthComesFromTheVerticalFieldOfView() {

@@ -22,6 +22,25 @@ class DrivingRangeUiStateTest {
     }
 
     @Test
+    fun theDetailMetricsAreAStripInFlightAndADenseGridOverAPortraitSceneWhileWaiting() {
+        for (phase in listOf(RangePhase.Flying, RangePhase.Landed)) {
+            for (landscape in listOf(false, true)) {
+                for (docked in listOf(false, true)) {
+                    assertThat(showing(phase).detailLayout(landscape, docked)).isEqualTo(RangeDetailLayout.STRIP)
+                }
+            }
+        }
+        for (state in listOf(DrivingRangeUiState.Ready(), showing(RangePhase.Waiting), showing(RangePhase.Preparing))) {
+            assertThat(state.detailLayout(landscape = false, docked = false)).isEqualTo(RangeDetailLayout.DENSE_GRID)
+            assertThat(state.detailLayout(landscape = true, docked = false)).isEqualTo(RangeDetailLayout.ROW)
+            assertThat(state.detailLayout(landscape = true, docked = true)).isEqualTo(RangeDetailLayout.GRID)
+        }
+        // Eight cells (the club selector and seven metrics): two rows of four, half the old four rows of two.
+        assertThat(RangeDetailLayout.DENSE_GRID.columns).isEqualTo(4)
+        assertThat(RangeDetailLayout.GRID.columns).isEqualTo(2)
+    }
+
+    @Test
     fun theStripSummarisesClubSpeedLaunchAndSpin() {
         assertThat(showing(RangePhase.Flying).compactMetricsSummary)
             .isEqualTo("Club 103.2 mph · Launch 12.6° · Spin 2,380 rpm")

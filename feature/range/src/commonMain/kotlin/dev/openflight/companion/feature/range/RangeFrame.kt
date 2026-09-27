@@ -15,13 +15,17 @@ import dev.openflight.companion.core.flight.Vec3
  *
  * 1. the backdrop: the [RangeVisualStyle.sky] gradient from 0 to [RangeScene.backdropHorizon];
  *    the [RangeScene.sky]'s sun glow and disc, then its visible ridges far to near (plan F8a2a);
- *    [RangeVisualStyle.distantGround] from the horizon down;
- * 2. [RangeScene.polygons], then the trees in [RangeScene.treeOrder] (trunk, then each crown
- *    tone), then the visible labels;
- * 3. the [overlay] (club-group strokes, landing dots, then the selection) when there is one;
- * 4. with no [geometry]: the roll-out if there's an overlay, and stop;
- * 5. once landed (progress ≥ 1): the [landing] polygons and the roll-out;
- * 6. the ball's shadow (an oval) when [shadowVisible], the [tracer]'s glow then its core ribbon,
+ *    [RangeVisualStyle.ground] from the horizon down;
+ * 2. the ground (plan F8a2p): [RangeScene.fairway], [RangeScene.stripes] with
+ *    [RangeVisualStyle.stripeGradient], [RangeScene.groundPolygons], then the haze overlay
+ *    ([RangeHaze.overlayStops] from [RangeScene.hazeTopY] to [RangeScene.hazeBottomY]) from the
+ *    horizon down;
+ * 3. [RangeScene.polygons], then the trees in [RangeScene.treeOrder] (trunk, then each crown
+ *    tone), then the labels that are [WorldLabel.drawn] (not under the [setObstructions] UI);
+ * 4. the [overlay] (club-group strokes, landing dots, then the selection) when there is one;
+ * 5. with no [geometry]: the roll-out if there's an overlay, and stop;
+ * 6. once landed (progress ≥ 1): the [landing] polygons and the roll-out;
+ * 7. the ball's shadow (an oval) when [shadowVisible], the [tracer]'s glow then its core ribbon,
  *    and the ball at the tracer's tip when it's in front of the camera.
  *
  * [prepare] re-projects only when the pose or the canvas changed since the last frame, and rewrites
@@ -42,6 +46,12 @@ class RangeFrame<P : PathSink>(
         private set
     private var projectedPose: RangeCameraPose? = null
     private var dirty = true
+
+    /** Plan F8a2p: the overlaid UI the labels and far markers keep clear of. */
+    private val obstructions = RangeObstructions()
+    private var obstructionsDirty = true
+    private var minLabelPixels = style.minLabelSize
+    private var maxLabelPixels = style.maxLabelSize
 
     var geometry: FlightGeometry? = null
         private set
@@ -108,6 +118,29 @@ class RangeFrame<P : PathSink>(
         dirty = true
     }
 
+    /**
+     * Plan F8a2p: the overlaid UI's rectangles in canvas pixels (`left, top, right, bottom` each),
+     * which the yardage labels and far markers keep clear of ([RangeScene.obstruct]). Cheap to call
+     * every frame: only a change re-applies them.
+     */
+    fun setObstructions(packed: FloatArray) {
+        if (obstructions.set(packed)) obstructionsDirty = true
+    }
+
+    /**
+     * Plan F8a2p: the labels' font size range in pixels (the style's `minLabelSize` and
+     * `maxLabelSize` at the platform's density), for measuring their boxes against the obstructions.
+     */
+    fun setLabelPixels(
+        minPixels: Float,
+        maxPixels: Float,
+    ) {
+        if (minPixels == minLabelPixels && maxPixels == maxLabelPixels) return
+        minLabelPixels = minPixels
+        maxLabelPixels = maxPixels
+        obstructionsDirty = true
+    }
+
     /** The flight to show (the same instance keeps its geometry); needs a canvas ([resize]) first. */
     fun setFlight(
         flight: ActiveFlight?,
@@ -172,6 +205,11 @@ class RangeFrame<P : PathSink>(
             for (index in landing.indices) landing[index].project(projection, scene.scratch)
             projectRollOut(projection)
             dirty = false
+            obstructionsDirty = true
+        }
+        if (obstructionsDirty) {
+            scene.obstruct(obstructions, style.labelHeightMeters, minLabelPixels, maxLabelPixels)
+            obstructionsDirty = false
         }
         geometry?.let { prepareFlight(it, progress) }
         return true

@@ -4,12 +4,17 @@ import Shared
 import SwiftUI
 import UIKit
 
-/// Plan F8b: the range's view gestures, the iOS twin of Android's `rangeViewGestures`. A pinch
-/// zooms, a two-finger drag pans along the ground (the ground point under the fingers stays under
-/// them, through the shared `ViewTransform.pannedAlongGround`), a one-finger drag orbits, a double
-/// tap resets, and in the overlay a tap near a landing selects that shot (the shared
-/// `nearestOverlayLanding`). Each gesture reports the whole new `ViewTransform`, already clamped by
-/// the shared math.
+/// Plan F8b: the range's view gestures, the iOS twin of Android's `rangeViewGestures`, map-like
+/// since plan F8a2p:
+/// - a one-finger drag pans along the ground (the ground under the finger follows it, the shared
+///   `ViewTransform.draggedAlongGround`);
+/// - a pinch zooms about its centre (`zoomedAbout`);
+/// - a two-finger twist, or a two-finger sideways drag, orbits;
+/// - a double tap resets, and in the overlay a tap near a landing selects that shot (the shared
+///   `nearestOverlayLanding`).
+///
+/// Each gesture reports the whole new `ViewTransform`, built from the tee camera (`base`) and
+/// already clamped by the shared math.
 ///
 /// UIKit recognizers, because SwiftUI has no two-finger drag and its magnify and drag gestures
 /// can't be told apart by finger count. The layer sits over the Canvas and is invisible to
@@ -20,6 +25,8 @@ import UIKit
 struct RangeGestureLayer: UIViewRepresentable {
     /// The camera the scene was last drawn with (the shared `RangeFrame.projection`).
     let projection: () -> RangeProjection?
+    /// The tee camera the transform applies to (the shared `RangeCameraRig.fixedPose`).
+    let base: RangeCameraPose
     let view: ViewTransform
     let overlay: [OverlayFlight]
     let displayScale: CGFloat
@@ -41,22 +48,21 @@ struct RangeGestureLayer: UIViewRepresentable {
         let coordinator = context.coordinator
 
         let pinch = UIPinchGestureRecognizer(target: coordinator, action: #selector(Coordinator.pinched(_:)))
-        let pan = UIPanGestureRecognizer(target: coordinator, action: #selector(Coordinator.panned(_:)))
-        pan.minimumNumberOfTouches = 2
-        pan.maximumNumberOfTouches = 2
+        let twist = UIRotationGestureRecognizer(target: coordinator, action: #selector(Coordinator.twisted(_:)))
         let orbit = UIPanGestureRecognizer(target: coordinator, action: #selector(Coordinator.orbited(_:)))
-        orbit.maximumNumberOfTouches = 1
+        orbit.minimumNumberOfTouches = 2
+        orbit.maximumNumberOfTouches = 2
+        let drag = UIPanGestureRecognizer(target: coordinator, action: #selector(Coordinator.dragged(_:)))
+        drag.maximumNumberOfTouches = 1
         let doubleTap = UITapGestureRecognizer(target: coordinator, action: #selector(Coordinator.doubleTapped(_:)))
         doubleTap.numberOfTapsRequired = 2
         let tap = UITapGestureRecognizer(target: coordinator, action: #selector(Coordinator.tapped(_:)))
         tap.require(toFail: doubleTap)
 
-        for recognizer in [pinch, pan, orbit, doubleTap, tap] as [UIGestureRecognizer] {
+        for recognizer in [pinch, twist, orbit, drag, doubleTap, tap] as [UIGestureRecognizer] {
             recognizer.delegate = coordinator
             surface.addGestureRecognizer(recognizer)
         }
-        coordinator.pinch = pinch
-        coordinator.pan = pan
         return surface
     }
 
@@ -67,14 +73,11 @@ struct RangeGestureLayer: UIViewRepresentable {
     @MainActor
     final class Coordinator: NSObject, UIGestureRecognizerDelegate {
         var parent: RangeGestureLayer
-        weak var pinch: UIPinchGestureRecognizer?
-        weak var pan: UIPanGestureRecognizer?
 
         /// The transform the running gesture has built so far. Accumulated here, like Android's
         /// `local`: the view model's state can lag a touch event behind.
         private var local: ViewTransform?
         private var active = Set<ObjectIdentifier>()
-        private var lastCentroid: CGPoint?
         #if DEBUG
         /// The gesture's transform updates and when it began, for the `RangeCanvas` log: compared
         /// with the canvas's "range redraws" line it shows whether redraws keep up with the touches.
@@ -89,45 +92,71 @@ struct RangeGestureLayer: UIViewRepresentable {
 
         // MARK: Gestures
 
+        /// The canvas size and a point on it in the shared projection's pixels.
+        private func pixels(_ view: UIView?) -> (scale: CGFloat, width: Float, height: Float)? {
+            guard let view, view.bounds.width > 0, view.bounds.height > 0 else { return nil }
+            let scale = max(parent.displayScale, 1)
+            return (scale, Float(view.bounds.width * scale), Float(view.bounds.height * scale))
+        }
+
+        /// A pinch zooms about its centre: the ground under the fingers stays under them.
         @objc func pinched(_ recognizer: UIPinchGestureRecognizer) {
             track(recognizer) { current in
                 let factor = Double(recognizer.scale)
                 recognizer.scale = 1
-                return current.zoomedBy(factor: factor)
-            }
-        }
-
-        @objc func panned(_ recognizer: UIPanGestureRecognizer) {
-            if recognizer.state == .began { lastCentroid = recognizer.location(in: recognizer.view) }
-            track(recognizer) { current in
-                let centroid = recognizer.location(in: recognizer.view)
-                defer { lastCentroid = centroid }
-                // A finger lifted and landed again moves the centroid in a jump; skip that step.
-                guard recognizer.numberOfTouches == 2,
-                      let from = lastCentroid,
-                      let projection = parent.projection()
-                else { return current }
-                let scale = Float(max(parent.displayScale, 1))
-                return current.pannedAlongGround(
-                    projection: projection,
-                    fromX: Float(from.x) * scale,
-                    fromY: Float(from.y) * scale,
-                    toX: Float(centroid.x) * scale,
-                    toY: Float(centroid.y) * scale,
+                guard let canvas = pixels(recognizer.view) else { return current.zoomedBy(factor: factor) }
+                let centre = recognizer.location(in: recognizer.view)
+                return current.zoomedAbout(
+                    factor: factor,
+                    base: parent.base,
+                    width: canvas.width,
+                    height: canvas.height,
+                    x: Float(centre.x * canvas.scale),
+                    y: Float(centre.y * canvas.scale),
                     bounds: PanBounds.companion.STANDARD
                 )
             }
-            if recognizer.state != .changed && recognizer.state != .began { lastCentroid = nil }
         }
 
+        /// A two-finger twist orbits: clockwise swings the camera to the right, like Android.
+        @objc func twisted(_ recognizer: UIRotationGestureRecognizer) {
+            track(recognizer) { current in
+                let degrees = Double(recognizer.rotation) * 180 / .pi
+                recognizer.rotation = 0
+                return current.orbitedBy(deltaDegrees: degrees)
+            }
+        }
+
+        /// Two fingers dragging sideways orbit (a full width is `ORBIT_DEGREES_PER_WIDTH`).
         @objc func orbited(_ recognizer: UIPanGestureRecognizer) {
             track(recognizer) { current in
                 let width = recognizer.view?.bounds.width ?? 0
                 let dx = recognizer.translation(in: recognizer.view).x
                 recognizer.setTranslation(.zero, in: recognizer.view)
-                guard width > 0 else { return current }
+                guard width > 0, recognizer.numberOfTouches == 2 else { return current }
                 return current.orbitedBy(
                     deltaDegrees: Double(dx / width) * ViewTransform.companion.ORBIT_DEGREES_PER_WIDTH
+                )
+            }
+        }
+
+        /// One finger drags the range: the ground under it follows (up and down move the view
+        /// back and downrange, sideways slides it across).
+        @objc func dragged(_ recognizer: UIPanGestureRecognizer) {
+            track(recognizer) { current in
+                let step = recognizer.translation(in: recognizer.view)
+                recognizer.setTranslation(.zero, in: recognizer.view)
+                guard let canvas = pixels(recognizer.view), step != .zero else { return current }
+                let to = recognizer.location(in: recognizer.view)
+                return current.draggedAlongGround(
+                    base: parent.base,
+                    width: canvas.width,
+                    height: canvas.height,
+                    fromX: Float((to.x - step.x) * canvas.scale),
+                    fromY: Float((to.y - step.y) * canvas.scale),
+                    toX: Float(to.x * canvas.scale),
+                    toY: Float(to.y * canvas.scale),
+                    bounds: PanBounds.companion.STANDARD
                 )
             }
         }
@@ -155,7 +184,7 @@ struct RangeGestureLayer: UIViewRepresentable {
         }
 
         /// Runs one step of a continuous gesture on the shared `local` transform and reports it
-        /// when it changed. Pinch and pan run together, so `local` lives until both have ended.
+        /// when it changed. The two-finger gestures run together, so `local` lives until all have ended.
         private func track(_ recognizer: UIGestureRecognizer, step: (ViewTransform) -> ViewTransform) {
             let id = ObjectIdentifier(recognizer)
             switch recognizer.state {
@@ -194,14 +223,15 @@ struct RangeGestureLayer: UIViewRepresentable {
 
         // MARK: UIGestureRecognizerDelegate
 
-        /// Pinch and the two-finger pan run together (zoom while sliding); the orbit and the taps
-        /// stay exclusive.
+        /// The two-finger gestures (pinch, twist, sideways drag) run together; the one-finger drag
+        /// and the taps stay exclusive.
         func gestureRecognizer(
             _ gestureRecognizer: UIGestureRecognizer,
             shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer
         ) -> Bool {
             let twoFinger: (UIGestureRecognizer) -> Bool = {
-                $0 is UIPinchGestureRecognizer || (($0 as? UIPanGestureRecognizer)?.minimumNumberOfTouches == 2)
+                $0 is UIPinchGestureRecognizer || $0 is UIRotationGestureRecognizer
+                    || (($0 as? UIPanGestureRecognizer)?.minimumNumberOfTouches == 2)
             }
             return twoFinger(gestureRecognizer) && twoFinger(other)
         }

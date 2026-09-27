@@ -25,6 +25,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.path
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 
@@ -36,6 +37,8 @@ import androidx.compose.ui.unit.dp
  *
  * @param isBusy Shows a spinner in place of the chevron, for example while a
  * `setClub` request is in flight, and disables the menu along with [enabled].
+ * @param compact a narrow field (a smaller, one-line selection with less padding), for example
+ *   the driving range's dense metrics grid.
  */
 @Composable
 fun OfDropdownMenu(
@@ -46,6 +49,7 @@ fun OfDropdownMenu(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     isBusy: Boolean = false,
+    compact: Boolean = false,
 ) {
     var expanded by remember { mutableStateOf(false) }
     val interactive = enabled && !isBusy
@@ -56,19 +60,23 @@ fun OfDropdownMenu(
                 .fillMaxWidth()
                 .background(OfColorTokens.BgElevated, RoundedCornerShape(12.dp))
                 .clickable(enabled = interactive) { expanded = true }
-                .padding(horizontal = OfSpacing.Md, vertical = OfSpacing.Sm),
+                .padding(horizontal = if (compact) OfSpacing.Sm else OfSpacing.Md, vertical = OfSpacing.Sm),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(end = OfSpacing.Sm),
-        )
+        if (label.isNotEmpty() || !compact) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(end = OfSpacing.Sm),
+            )
+        }
         Text(
             text = selected,
-            style = MaterialTheme.typography.titleMedium,
+            style = if (compact) MaterialTheme.typography.labelLarge else MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onSurface,
+            maxLines = if (compact) 1 else Int.MAX_VALUE,
+            overflow = if (compact) TextOverflow.Ellipsis else TextOverflow.Clip,
             modifier = Modifier.weight(1f),
         )
         if (isBusy) {

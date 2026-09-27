@@ -21,8 +21,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -33,6 +35,8 @@ import androidx.compose.ui.layout.Measurable
 import androidx.compose.ui.layout.MeasurePolicy
 import androidx.compose.ui.layout.MeasureResult
 import androidx.compose.ui.layout.MeasureScope
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -184,13 +188,19 @@ private fun SceneLayer(
     freezeProgress: Float? = null,
 ) {
     val browse = uiState.browse
+    // Plan F8a2p: the overlaid UI's bounds, which the scene's labels and far markers keep clear of.
+    val obstructions = remember { RangeObstructionTracker() }
+    val obstructionRects by remember { derivedStateOf { obstructions.packed() } }
     Box(modifier = modifier) {
         RangeCanvas(
             flight = uiState.activeFlight,
             cameraMode = uiState.cameraMode,
             reduceMotion = reduceMotion,
             onFlightCompleted = { onEvent(DrivingRangeEvent.FlightCompleted) },
-            modifier = Modifier.fillMaxSize(),
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .onGloballyPositioned { obstructions.canvasBounds = it.boundsInRoot() },
             view = browse.view,
             rollOut = uiState.rollOut,
             overlay = browse.overlayFlights,
@@ -201,6 +211,7 @@ private fun SceneLayer(
             onSelectLanding = { onEvent(DrivingRangeEvent.SelectShot(it)) },
             theme = uiState.camera.theme,
             freezeProgress = freezeProgress,
+            obstructions = obstructionRects,
         )
         Box(modifier = Modifier.fillMaxSize().background(Shade))
         Box(modifier = Modifier.fillMaxSize().safeDrawingPadding()) {
@@ -216,14 +227,20 @@ private fun SceneLayer(
                     onToggleCamera = { onEvent(DrivingRangeEvent.ToggleCameraMode) },
                     onOpenSessions = onOpenSessions,
                     onExit = onExit,
+                    obstructions = obstructions,
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
                 )
-                BrowseChips(uiState, onEvent, Modifier.padding(horizontal = 14.dp))
+                BrowseChips(
+                    uiState,
+                    onEvent,
+                    Modifier.padding(horizontal = 14.dp).rangeObstruction("chips", obstructions),
+                )
                 if (showMetrics) {
                     RangeMetricsOverlay(
                         uiState = uiState,
                         isLandscape = isLandscape,
                         onSelectClub = { onEvent(DrivingRangeEvent.ClubSelected(it)) },
+                        obstructions = obstructions,
                         modifier = Modifier.weight(1f),
                     )
                 } else {
@@ -234,12 +251,15 @@ private fun SceneLayer(
                     RangeBrowseBar(
                         browse = browse,
                         onEvent = onEvent,
-                        modifier = Modifier.padding(start = 14.dp, end = 14.dp, bottom = 10.dp),
+                        modifier =
+                            Modifier
+                                .padding(start = 14.dp, end = 14.dp, bottom = 10.dp)
+                                .rangeObstruction("browseBar", obstructions),
                     )
                 }
             }
             if (uiState is DrivingRangeUiState.Ready && browse.isLive) {
-                ReadyCard(modifier = Modifier.align(Alignment.Center))
+                ReadyCard(modifier = Modifier.align(Alignment.Center).rangeObstruction("ready", obstructions))
             }
         }
     }
@@ -277,6 +297,7 @@ private fun Controls(
     onOpenSessions: () -> Unit,
     onExit: () -> Unit,
     modifier: Modifier = Modifier,
+    obstructions: RangeObstructionTracker? = null,
 ) {
     // Plan F8d-B: the status pill sits between Exit and the buttons only when its whole label fits
     // there on one line; otherwise it drops to its own line under them ([ControlsLayout]) instead
@@ -287,7 +308,11 @@ private fun Controls(
             OfOutlinedButton(
                 text = "Exit",
                 onClick = onExit,
-                modifier = Modifier.background(ControlBackground, PillShape).testTag(RangeTestTags.EXIT),
+                modifier =
+                    Modifier
+                        .background(ControlBackground, PillShape)
+                        .rangeObstruction("exit", obstructions)
+                        .testTag(RangeTestTags.EXIT),
             )
             OfStatusChip(
                 label = uiState.phase.label,
@@ -295,10 +320,11 @@ private fun Controls(
                 modifier =
                     Modifier
                         .background(ControlBackground, PillShape)
+                        .rangeObstruction("status", obstructions)
                         .padding(horizontal = 12.dp, vertical = 6.dp)
                         .testTag(RangeTestTags.STATUS),
             )
-            ControlButtons(uiState, onReplay, onToggleCamera, onOpenSessions)
+            ControlButtons(uiState, onReplay, onToggleCamera, onOpenSessions, obstructions)
         },
         measurePolicy = ControlsLayout(gap = 10.dp),
     )
@@ -349,8 +375,10 @@ private fun ControlButtons(
     onReplay: () -> Unit,
     onToggleCamera: () -> Unit,
     onOpenSessions: () -> Unit,
+    obstructions: RangeObstructionTracker?,
 ) {
     Row(
+        modifier = Modifier.rangeObstruction("buttons", obstructions),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {

@@ -142,6 +142,9 @@ val OfEyebrowTextStyle: TextStyle
 
 internal val OfMetricValueFontSize: TextUnit = 36.sp
 
+/** [OfMetricPrimary]'s value in a compact tile (plan F8a2p: the range's tee view). */
+internal val OfMetricCompactValueFontSize: TextUnit = 26.sp
+
 /**
  * The design-system theme every screen must be wrapped in. Composes Material3's
  * [MaterialTheme] with the OpenFlight color scheme, typography and shapes so that

@@ -66,8 +66,9 @@ class RangeThemeTest {
             val top = image.pixel(image.width / 2, 1)
             assertClose(style.sky.first().color, top, "${next.name} sky top")
             tops += top
-            // The fixed camera looks down onto the tee box at the bottom of a portrait canvas.
-            assertClose(style.tee, image.pixel(2, image.height - 2), "${next.name} tee box")
+            // Plan F8a2p: the raised tee camera looks down onto the rough just in front of it at the
+            // bottom of a portrait canvas (too near for any haze: the flat rough colour).
+            assertClose(style.ground, image.pixel(2, image.height - 2), "${next.name} rough")
             // Above the horizon the sky, the sun and the far ridges; below it the grass: the top
             // half is never one flat colour.
             assertTrue(image.distinctColors(column = image.width / 2, from = 0, to = image.height / 2) > 8, next.name)

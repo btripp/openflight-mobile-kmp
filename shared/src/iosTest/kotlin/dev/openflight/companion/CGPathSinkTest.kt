@@ -57,7 +57,7 @@ class CGPathSinkTest {
         frame.resize(1206f, 2622f, rig.fixedPose)
         assertThat(frame.prepare(rig.fixedPose, 0f)).isTrue()
 
-        val fairway = frame.scene.polygons[1]
+        val fairway = frame.scene.fairway
         assertThat(fairway.visible).isTrue()
         assertThat(fairway.path.path).isNotNull()
         assertThat(CGPathIsEmpty(fairway.path.path)).isFalse()

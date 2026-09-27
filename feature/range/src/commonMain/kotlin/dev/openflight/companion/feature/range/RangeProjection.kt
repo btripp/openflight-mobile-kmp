@@ -256,6 +256,35 @@ class RangeProjection(
         return true
     }
 
+    /**
+     * Plan F8a2p, the depth-fog distance of the ground point ([x], [z]): its distance along the
+     * camera's horizontal heading, plus the camera's height times its downward slope. It's the one
+     * distance whose inverse is linear in screen y ([groundPixelsBelowHorizon]), so a single
+     * vertical gradient hazes the whole ground exactly, and every hazed shape uses it too. On a
+     * screen row it's the same for every x: the haze never shows a seam across the range. Looking
+     * straight down it's the camera's height.
+     */
+    fun hazeDistance(
+        x: Double,
+        z: Double,
+    ): Double {
+        val length = sqrt(forwardX * forwardX + forwardZ * forwardZ)
+        if (length < MIN_HORIZONTAL_LENGTH) return abs(originY)
+        return ((x - originX) * forwardX + (z - originZ) * forwardZ - originY * forwardY) / length
+    }
+
+    /**
+     * Plan F8a2p: how far below the horizon ([horizonY]) the ground at [hazeDistance]
+     * [distanceMeters] appears, in pixels: `focal × height / (cos² pitch × distance)`. NaN when the
+     * horizon isn't on any canvas row (looking straight down or up) or the camera is at or below
+     * the ground.
+     */
+    fun groundPixelsBelowHorizon(distanceMeters: Double): Float {
+        val length = sqrt(forwardX * forwardX + forwardZ * forwardZ)
+        if (length < MIN_HORIZONTAL_LENGTH || originY <= 0.0 || distanceMeters <= 0.0) return Float.NaN
+        return (focalLengthPixels * originY / (length * length * distanceMeters)).toFloat()
+    }
+
     companion object {
         /** `camera.camera.fieldOfViewInDegrees = 58` (RangeSceneController.swift). */
         const val CAMERA_VERTICAL_FOV_DEGREES = RangeCameraPose.DEFAULT_VERTICAL_FOV_DEGREES
