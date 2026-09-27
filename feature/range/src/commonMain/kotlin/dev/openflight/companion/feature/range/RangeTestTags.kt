@@ -77,4 +77,7 @@ object RangeTestTags {
     const val SIMULATE_ERROR = "range.simulateError"
 
     // endregion
+
+    /** Plan F8a2t: the Settings "Shot trail" preview, drawn by the range's own renderer. */
+    const val TRAIL_PREVIEW = "range.trailPreview"
 }

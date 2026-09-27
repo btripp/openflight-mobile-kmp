@@ -7,6 +7,7 @@ import dev.openflight.companion.core.flight.Vec3
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.sqrt
 
 /**
  * One trajectory's tracer samples: their scene-space positions, computed once per flight, and
@@ -42,6 +43,13 @@ class FlightGeometry private constructor(
     val shadowYs = FloatArray(count)
     val shadowRadiiX = FloatArray(count)
     val shadowRadiiY = FloatArray(count)
+
+    /** Plan F8a2t: the ball's speed at each sample (m/s), for the speed-heat trail. */
+    val speeds = FloatArray(count)
+
+    /** Plan F8a2t: the flight's duration in seconds; sample `i` is at `flightTime * i / segments`. */
+    var flightTime = 0.0
+        private set
 
     private val scratch = FloatArray(2)
     private var projection: RangeProjection? = null
@@ -85,14 +93,7 @@ class FlightGeometry private constructor(
     ): Boolean {
         val projection = projection ?: return false
         val next = (index + 1).coerceAtMost(segments)
-        val t =
-            if (fraction == NEAR_PLANE_CROSSING) {
-                val near = RangeProjection.NEAR_PLANE_METERS * 2
-                val span = depths[next] - depths[index]
-                if (span == 0.0) 0.0 else ((near - depths[index]) / span).coerceIn(0.0, 1.0)
-            } else {
-                fraction
-            }
+        val t = if (fraction == NEAR_PLANE_CROSSING) nearCrossing(index).toDouble() else fraction
         return projection.projectInto(
             worldXs[index] + (worldXs[next] - worldXs[index]) * t,
             worldYs[index] + (worldYs[next] - worldYs[index]) * t,
@@ -100,6 +101,17 @@ class FlightGeometry private constructor(
             out,
             0,
         )
+    }
+
+    /**
+     * How far (0..1) from sample [index] to the next one the flight crosses (just in front of) the
+     * near plane: the fraction [projectBetween] uses for [NEAR_PLANE_CROSSING].
+     */
+    fun nearCrossing(index: Int): Float {
+        val next = (index + 1).coerceAtMost(segments)
+        val near = RangeProjection.NEAR_PLANE_METERS * 2
+        val span = depths[next] - depths[index]
+        return if (span == 0.0) 0f else ((near - depths[index]) / span).coerceIn(0.0, 1.0).toFloat()
     }
 
     private fun interpolate(
@@ -114,9 +126,14 @@ class FlightGeometry private constructor(
     }
 
     private fun sample(trajectory: FlightTrajectory) {
+        flightTime = trajectory.flightTime
         for (i in 0 until count) {
             val fraction = i.toDouble() / segments
-            val point = trajectory.point(trajectory.flightTime * fraction)?.positionMeters ?: Vec3.ZERO
+            val flightPoint = trajectory.point(trajectory.flightTime * fraction)
+            val point = flightPoint?.positionMeters ?: Vec3.ZERO
+            speeds[i] = flightPoint?.velocityMetersPerSecond?.let { velocity ->
+                sqrt(velocity.x * velocity.x + velocity.y * velocity.y + velocity.z * velocity.z).toFloat()
+            } ?: 0f
             val scene = RangeProjection.flightToScene(point)
             worldXs[i] = scene.x
             worldYs[i] = scene.y

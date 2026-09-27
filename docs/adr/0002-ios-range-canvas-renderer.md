@@ -112,3 +112,15 @@ re-baselined against the new look for every theme.
 - **Measured parity.** Android emulator vs iPhone 17 simulator, fixed pose and follow camera at
   p = 0.5, all four themes: worst sampled CIEDE2000 0.80.
 - **Vector only.** There are still no bundled raster assets; every shape is procedural.
+
+## Addendum: F8a2t shot trail styles
+
+- **Trails are shared layers.** The eleven shot trail styles, the kept earlier trails and the
+  landing effects are all written by the shared `ShotTrail` into a fixed list of `TrailLayer`s
+  (a `PathSink` plus a packed `0xAARRGGBB`, or a club palette index). Colour and alpha changes
+  along a trail (comet, smoke, speed heat, rainbow, the spin ribbon's two faces) are bands of
+  separate fills, never platform gradients, so each platform only fills the visible layers in order.
+- **No per-frame allocation.** The layers, run buffers and colours are preallocated; a frame only
+  rewrites paths and ints.
+- **Measured parity.** Android emulator vs iPhone 17 simulator, follow camera at p = 0.5, all
+  eleven styles on DAY and NIGHT: worst sampled CIEDE2000 0.99.

@@ -1,10 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 package dev.openflight.companion.feature.range
 
+import dev.openflight.companion.core.data.DEFAULT_SHOT_TRAIL_KEEP_LAST
+import dev.openflight.companion.core.data.LandingEffect
 import dev.openflight.companion.core.data.RangeCameraMode
 import dev.openflight.companion.core.data.RangeThemeSetting
 import dev.openflight.companion.core.data.SettingsRepository
 import dev.openflight.companion.core.data.ShotRepository
+import dev.openflight.companion.core.data.ShotTrailStyle
 import dev.openflight.companion.core.data.TransportType
 import dev.openflight.companion.core.flight.CarryAnchor
 import dev.openflight.companion.core.flight.FlightInput
@@ -55,6 +58,23 @@ internal class FakeSettingsRepository(
 
     override suspend fun setRangeTheme(theme: RangeThemeSetting) {
         rangeTheme.value = theme
+    }
+
+    // Plan F8a2t: the shot trail.
+    override val shotTrail = MutableStateFlow(ShotTrailStyle.DEFAULT)
+    override val shotTrailKeepLast = MutableStateFlow(DEFAULT_SHOT_TRAIL_KEEP_LAST)
+    override val landingEffect = MutableStateFlow(LandingEffect.DEFAULT)
+
+    override suspend fun setShotTrail(style: ShotTrailStyle) {
+        shotTrail.value = style
+    }
+
+    override suspend fun setShotTrailKeepLast(count: Int) {
+        shotTrailKeepLast.value = count
+    }
+
+    override suspend fun setLandingEffect(effect: LandingEffect) {
+        landingEffect.value = effect
     }
 }
 

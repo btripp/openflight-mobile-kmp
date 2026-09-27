@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.floatPreferencesKey
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import dev.openflight.companion.core.insights.CalloutField
 import dev.openflight.companion.core.insights.UnitSystem
@@ -164,6 +165,38 @@ internal class DataStoreSettingsRepository(
         dataStore.edit { it[RANGE_THEME_KEY] = theme.storageValue }
     }
 
+    // Plan F8a2t: the shot trail, added at the end to keep this file's diff mergeable (§4a A7).
+
+    override val shotTrail: Flow<ShotTrailStyle> =
+        preferences
+            .map { ShotTrailStyle.fromStorageValue(it[SHOT_TRAIL_KEY]) ?: ShotTrailStyle.DEFAULT }
+            .distinctUntilChanged()
+
+    override suspend fun setShotTrail(style: ShotTrailStyle) {
+        dataStore.edit { it[SHOT_TRAIL_KEY] = style.storageValue }
+    }
+
+    override val shotTrailKeepLast: Flow<Int> =
+        preferences
+            .map { stored ->
+                stored[SHOT_TRAIL_KEEP_LAST_KEY]?.takeIf { it in SHOT_TRAIL_KEEP_OPTIONS }
+                    ?: DEFAULT_SHOT_TRAIL_KEEP_LAST
+            }.distinctUntilChanged()
+
+    override suspend fun setShotTrailKeepLast(count: Int) {
+        if (count !in SHOT_TRAIL_KEEP_OPTIONS) return
+        dataStore.edit { it[SHOT_TRAIL_KEEP_LAST_KEY] = count }
+    }
+
+    override val landingEffect: Flow<LandingEffect> =
+        preferences
+            .map { LandingEffect.fromStorageValue(it[LANDING_EFFECT_KEY]) ?: LandingEffect.DEFAULT }
+            .distinctUntilChanged()
+
+    override suspend fun setLandingEffect(effect: LandingEffect) {
+        dataStore.edit { it[LANDING_EFFECT_KEY] = effect.storageValue }
+    }
+
     companion object {
         /** DataStore requires the `.preferences_pb` extension for preferences files. */
         const val FILE_NAME = "openflight.preferences_pb"
@@ -188,6 +221,11 @@ internal class DataStoreSettingsRepository(
 
         // Plan F8a2a: the range theme.
         private val RANGE_THEME_KEY = stringPreferencesKey("rangeTheme")
+
+        // Plan F8a2t: the shot trail.
+        private val SHOT_TRAIL_KEY = stringPreferencesKey("shotTrail")
+        private val SHOT_TRAIL_KEEP_LAST_KEY = intPreferencesKey("shotTrailKeepLast")
+        private val LANDING_EFFECT_KEY = stringPreferencesKey("landingEffect")
     }
 }
 

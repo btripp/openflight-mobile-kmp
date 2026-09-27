@@ -34,6 +34,8 @@ struct SettingsContent: View {
     var showDeviceLinks = false
 
     @State private var showingShutdown = false
+    /// Plan F8a2t: the shot trail preview is taller on a regular width (iPad).
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     var body: some View {
         Form {
@@ -49,6 +51,7 @@ struct SettingsContent: View {
             unitsSection
             calloutsSection
             rangeThemeSection
+            shotTrailSection
             // Data
             cloudSection
             // Hidden until the Pi reports its debug mode: never offer "Start" before that is known.
@@ -117,6 +120,66 @@ struct SettingsContent: View {
             .accessibilityIdentifier("settings.rangeTheme")
         } header: {
             header("RANGE THEME")
+        }
+        .listRowBackground(Theme.bgCard)
+    }
+
+    // MARK: Shot trail
+
+    /// Plan F8a2t: how the range draws a shot's trail, with a live preview drawn by the range's own
+    /// renderer. The tags are the Kotlin options' own instances (and counts).
+    private var shotTrailBinding: Binding<ShotTrailStyle> {
+        Binding(get: { state.shotTrail.selected }, set: { send(SettingsEventSetShotTrail(style: $0)) })
+    }
+
+    private var shotTrailKeepBinding: Binding<Int32> {
+        Binding(get: { state.shotTrail.keepLast }, set: { send(SettingsEventSetShotTrailKeepLast(count: $0)) })
+    }
+
+    private var landingEffectBinding: Binding<LandingEffect> {
+        Binding(get: { state.shotTrail.landingEffect }, set: { send(SettingsEventSetLandingEffect(effect: $0)) })
+    }
+
+    private var shotTrailSection: some View {
+        Section {
+            ShotTrailPreviewView(
+                style: state.shotTrail.selected,
+                keepLast: state.shotTrail.keepLast,
+                landingEffect: state.shotTrail.landingEffect,
+                theme: state.rangeTheme.selected
+            )
+            .frame(height: horizontalSizeClass == .regular ? 220 : 170)
+            .listRowInsets(EdgeInsets(top: 8, leading: 8, bottom: 8, trailing: 8))
+            .accessibilityIdentifier("settings.shotTrail.preview")
+            Picker("Style", selection: shotTrailBinding) {
+                ForEach(state.shotTrail.styles, id: \.style.storageValue) { option in
+                    Text(option.label).tag(option.style)
+                }
+            }
+            .pickerStyle(.menu)
+            .accessibilityIdentifier("settings.shotTrail")
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Keep last shots").font(.footnote).foregroundStyle(Theme.creamDim)
+                Picker("Keep last shots", selection: shotTrailKeepBinding) {
+                    ForEach(state.shotTrail.keepOptions, id: \.count) { option in
+                        Text(option.label).tag(option.count)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .accessibilityIdentifier("settings.shotTrail.keepLast")
+            }
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Landing effect").font(.footnote).foregroundStyle(Theme.creamDim)
+                Picker("Landing effect", selection: landingEffectBinding) {
+                    ForEach(state.shotTrail.landingEffects, id: \.effect.storageValue) { option in
+                        Text(option.label).tag(option.effect)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .accessibilityIdentifier("settings.shotTrail.landingEffect")
+            }
+        } header: {
+            header("SHOT TRAIL")
         }
         .listRowBackground(Theme.bgCard)
     }

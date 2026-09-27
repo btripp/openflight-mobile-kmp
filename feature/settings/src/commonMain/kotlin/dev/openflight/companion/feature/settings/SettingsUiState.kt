@@ -2,7 +2,11 @@
 package dev.openflight.companion.feature.settings
 
 import dev.openflight.companion.core.data.CalloutTrigger
+import dev.openflight.companion.core.data.DEFAULT_SHOT_TRAIL_KEEP_LAST
+import dev.openflight.companion.core.data.LandingEffect
 import dev.openflight.companion.core.data.RangeThemeSetting
+import dev.openflight.companion.core.data.SHOT_TRAIL_KEEP_OPTIONS
+import dev.openflight.companion.core.data.ShotTrailStyle
 import dev.openflight.companion.core.data.TransportType
 import dev.openflight.companion.core.insights.CalloutField
 import dev.openflight.companion.core.insights.UnitSystem
@@ -52,6 +56,8 @@ data class SettingsUiState(
     val callouts: CalloutSettingsUiState = CalloutSettingsUiState(),
     // Plan F8a2a: the range theme, added at the end to keep this file's diff mergeable (§4a A7).
     val rangeTheme: RangeThemeUiState = RangeThemeUiState(),
+    // Plan F8a2t: the shot trail, added at the end to keep this file's diff mergeable (§4a A7).
+    val shotTrail: ShotTrailUiState = ShotTrailUiState(),
 )
 
 /** A simulator connector's severity bucket (`SimStatus.tsx`'s `severity`). */
@@ -250,6 +256,84 @@ data class RangeThemeOption(
                 RangeThemeOption(RangeThemeSetting.DUSK, "Dusk"),
                 RangeThemeOption(RangeThemeSetting.NIGHT, "Night"),
                 RangeThemeOption(RangeThemeSetting.LINKS, "Links"),
+            )
+    }
+}
+
+/**
+ * Plan F8a2t: the Practice group's "Shot trail" picker: the persisted style, "Keep last shots" and
+ * landing effect, and every option in order with its label (so SwiftUI builds its pickers from
+ * Kotlin instances, like [RangeThemeUiState]).
+ */
+data class ShotTrailUiState(
+    val selected: ShotTrailStyle = ShotTrailStyle.DEFAULT,
+    val keepLast: Int = DEFAULT_SHOT_TRAIL_KEEP_LAST,
+    val landingEffect: LandingEffect = LandingEffect.DEFAULT,
+    val styles: List<ShotTrailOption> = ShotTrailOption.ALL,
+    val keepOptions: List<ShotTrailKeepOption> = ShotTrailKeepOption.ALL,
+    val landingEffects: List<LandingEffectOption> = LandingEffectOption.ALL,
+) {
+    val selectedLabel: String get() = styles.firstOrNull { it.style == selected }?.label.orEmpty()
+    val keepLastLabel: String get() = keepOptions.firstOrNull { it.count == keepLast }?.label.orEmpty()
+    val landingEffectLabel: String get() = landingEffects.firstOrNull { it.effect == landingEffect }?.label.orEmpty()
+}
+
+/** One shot trail style the picker offers. */
+data class ShotTrailOption(
+    val style: ShotTrailStyle,
+    val label: String,
+) {
+    companion object {
+        val ALL: List<ShotTrailOption> =
+            listOf(
+                ShotTrailOption(ShotTrailStyle.CLASSIC, "Classic"),
+                ShotTrailOption(ShotTrailStyle.BROADCAST_GLOW, "Broadcast glow"),
+                ShotTrailOption(ShotTrailStyle.COMET, "Comet"),
+                ShotTrailOption(ShotTrailStyle.CLUB_COLOUR, "Club colour"),
+                ShotTrailOption(ShotTrailStyle.DOTTED, "Dotted"),
+                ShotTrailOption(ShotTrailStyle.SMOKE, "Smoke"),
+                ShotTrailOption(ShotTrailStyle.NEON, "Neon"),
+                ShotTrailOption(ShotTrailStyle.SPEED_HEAT, "Speed heat"),
+                ShotTrailOption(ShotTrailStyle.RAINBOW, "Rainbow"),
+                ShotTrailOption(ShotTrailStyle.SPIN_RIBBON, "Spin ribbon"),
+                ShotTrailOption(ShotTrailStyle.GROUND_TRACK, "Ground track"),
+            )
+    }
+}
+
+/** One "Keep last shots" choice. */
+data class ShotTrailKeepOption(
+    val count: Int,
+    val label: String,
+) {
+    companion object {
+        val ALL: List<ShotTrailKeepOption> =
+            SHOT_TRAIL_KEEP_OPTIONS.map { count ->
+                ShotTrailKeepOption(
+                    count,
+                    if (count ==
+                        0
+                    ) {
+                        "Off"
+                    } else {
+                        "Last " + count
+                    },
+                )
+            }
+    }
+}
+
+/** One landing effect the picker offers. */
+data class LandingEffectOption(
+    val effect: LandingEffect,
+    val label: String,
+) {
+    companion object {
+        val ALL: List<LandingEffectOption> =
+            listOf(
+                LandingEffectOption(LandingEffect.OFF, "Off"),
+                LandingEffectOption(LandingEffect.RING, "Ring"),
+                LandingEffectOption(LandingEffect.BURST, "Burst"),
             )
     }
 }

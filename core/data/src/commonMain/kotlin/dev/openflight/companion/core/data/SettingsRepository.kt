@@ -146,7 +146,33 @@ interface SettingsRepository {
 
     /** Default no-op, see [calloutsEnabled]. */
     suspend fun setRangeTheme(theme: RangeThemeSetting) {}
+
+    // Plan F8a2t: the shot trail, added at the end to keep this file's diff mergeable (§4a A7).
+
+    /** How the range draws a shot's trail, defaulting to [ShotTrailStyle.CLASSIC]. */
+    val shotTrail: Flow<ShotTrailStyle> get() = flowOf(ShotTrailStyle.DEFAULT)
+
+    /** Default no-op, see [calloutsEnabled]. */
+    suspend fun setShotTrail(style: ShotTrailStyle) {}
+
+    /** How many earlier live shots' trails stay on the range, faded: one of [SHOT_TRAIL_KEEP_OPTIONS]. */
+    val shotTrailKeepLast: Flow<Int> get() = flowOf(DEFAULT_SHOT_TRAIL_KEEP_LAST)
+
+    /** Default no-op, see [calloutsEnabled]. A count outside [SHOT_TRAIL_KEEP_OPTIONS] is ignored. */
+    suspend fun setShotTrailKeepLast(count: Int) {}
+
+    /** What marks a landing, defaulting to [LandingEffect.OFF]. */
+    val landingEffect: Flow<LandingEffect> get() = flowOf(LandingEffect.DEFAULT)
+
+    /** Default no-op, see [calloutsEnabled]. */
+    suspend fun setLandingEffect(effect: LandingEffect) {}
 }
+
+/** Plan F8a2t: "Keep last shots" offers none or three faded earlier trails. */
+val SHOT_TRAIL_KEEP_OPTIONS: List<Int> = listOf(0, 3)
+
+/** Plan F8a2t: no earlier trails until the user asks for them. */
+const val DEFAULT_SHOT_TRAIL_KEEP_LAST: Int = 0
 
 /**
  * When shot call-outs are spoken (plan F4): every final shot, or only shots taken during a game
@@ -183,5 +209,76 @@ enum class RangeThemeSetting(
         val DEFAULT: RangeThemeSetting = DAY
 
         fun fromStorageValue(value: String?): RangeThemeSetting? = entries.firstOrNull { it.storageValue == value }
+    }
+}
+
+/**
+ * How the driving range draws a live shot's trail (plan F8a2t). `feature:range` draws each from
+ * the shared geometry; this is only the persisted choice. The overlay's many-shot view keeps its
+ * thin club-coloured trails whatever this is.
+ */
+enum class ShotTrailStyle(
+    /** The value persisted in settings (and the `--shot-trail` launch argument). */
+    val storageValue: String,
+) {
+    /** Today's tracer: a ribbon with a soft glow. */
+    CLASSIC("classic"),
+
+    /** A bright core in a wide, soft broadcast-style glow. */
+    BROADCAST_GLOW("broadcast_glow"),
+
+    /** The tail fades out behind the ball. */
+    COMET("comet"),
+
+    /** The shot's club colour from the club palette. */
+    CLUB_COLOUR("club_colour"),
+
+    /** Beads evenly spaced in time, so the ball's speed shows in their spacing. */
+    DOTTED("dotted"),
+
+    /** A trail that widens and fades as it ages. */
+    SMOKE("smoke"),
+
+    /** A thin, saturated, crisp line. */
+    NEON("neon"),
+
+    /** Coloured by the ball's speed at each point, hot (fast) to cool (slow). */
+    SPEED_HEAT("speed_heat"),
+
+    /** The hue runs along the trail's length. */
+    RAINBOW("rainbow"),
+
+    /** A flat ribbon twisting at a rate set by the spin; high-spin wedges twist more. */
+    SPIN_RIBBON("spin_ribbon"),
+
+    /** The tracer plus a faint line on the ground under it. */
+    GROUND_TRACK("ground_track"),
+    ;
+
+    companion object {
+        val DEFAULT: ShotTrailStyle = CLASSIC
+
+        fun fromStorageValue(value: String?): ShotTrailStyle? = entries.firstOrNull { it.storageValue == value }
+    }
+}
+
+/** What marks a landing on the range (plan F8a2t). Both are drawn static under reduced motion. */
+enum class LandingEffect(
+    /** The value persisted in settings. */
+    val storageValue: String,
+) {
+    OFF("off"),
+
+    /** A ring expanding over the ground from the landing spot. */
+    RING("ring"),
+
+    /** A burst of dust and sparkle thrown out from the landing spot. */
+    BURST("burst"),
+    ;
+
+    companion object {
+        val DEFAULT: LandingEffect = OFF
+
+        fun fromStorageValue(value: String?): LandingEffect? = entries.firstOrNull { it.storageValue == value }
     }
 }

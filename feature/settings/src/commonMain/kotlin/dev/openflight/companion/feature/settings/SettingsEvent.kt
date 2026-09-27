@@ -2,7 +2,9 @@
 package dev.openflight.companion.feature.settings
 
 import dev.openflight.companion.core.data.CalloutTrigger
+import dev.openflight.companion.core.data.LandingEffect
 import dev.openflight.companion.core.data.RangeThemeSetting
+import dev.openflight.companion.core.data.ShotTrailStyle
 import dev.openflight.companion.core.insights.CalloutField
 import dev.openflight.companion.core.insights.UnitSystem
 
@@ -82,6 +84,21 @@ sealed interface SettingsEvent {
     /** Plan F8a2a: the range theme picker; persisted for the driving range. */
     data class SetRangeTheme(
         val theme: RangeThemeSetting,
+    ) : SettingsEvent
+
+    /** Plan F8a2t: the shot trail picker; persisted for the driving range. */
+    data class SetShotTrail(
+        val style: ShotTrailStyle,
+    ) : SettingsEvent
+
+    /** Plan F8a2t: "Keep last shots": none or three faded earlier trails. */
+    data class SetShotTrailKeepLast(
+        val count: Int,
+    ) : SettingsEvent
+
+    /** Plan F8a2t: what marks a landing. */
+    data class SetLandingEffect(
+        val effect: LandingEffect,
     ) : SettingsEvent
 }
 

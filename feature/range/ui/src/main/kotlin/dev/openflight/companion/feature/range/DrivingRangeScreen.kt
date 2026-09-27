@@ -212,6 +212,7 @@ private fun SceneLayer(
             theme = uiState.camera.theme,
             freezeProgress = freezeProgress,
             obstructions = obstructionRects,
+            trail = uiState.camera.trail,
         )
         Box(modifier = Modifier.fillMaxSize().background(Shade))
         Box(modifier = Modifier.fillMaxSize().safeDrawingPadding()) {
