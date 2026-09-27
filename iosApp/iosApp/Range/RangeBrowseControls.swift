@@ -248,6 +248,7 @@ struct RangeShotList: View {
 
 /// Plan F8b chips above the transport, Android's `BrowseChips`: "New shot · Return to live",
 /// "Reset view" while the user has moved the camera, and the estimated total once the ball is down.
+/// Plan F8d-B: under them, "Simulate shot" on a mock Pi (`canSimulate`) and why it last failed.
 struct RangeBrowseChips: View {
     let state: DrivingRangeUiState
     let send: (DrivingRangeEvent) -> Void
@@ -255,33 +256,80 @@ struct RangeBrowseChips: View {
     var body: some View {
         let browse = state.browse
         let rollOut = showsRollOut ? state.rollOut : nil
-        if browse.newLiveShot || browse.userTransformed || rollOut != nil {
-            HStack(spacing: 8) {
-                Spacer(minLength: 0)
-                if browse.newLiveShot {
-                    ChipButton(label: "New shot · Return to live", isSelected: true, minTouchTarget: true) {
-                        send(DrivingRangeEventReturnToLive.shared)
-                    }
-                    .accessibilityIdentifier(RangeTestTags.shared.NEW_LIVE_SHOT)
+        VStack(alignment: .trailing, spacing: 6) {
+            if browse.newLiveShot || browse.userTransformed || rollOut != nil {
+                chips(browse: browse, rollOut: rollOut)
+            }
+            // Plan F8d-B: a `--mock` Pi over Wi-Fi flies a new simulated shot through the live
+            // path. On its own row, so the chips above keep their width on an iPhone.
+            if state.canSimulate || state.simulateError != nil {
+                simulateRow
+            }
+        }
+    }
+
+    private func chips(browse: RangeBrowseState, rollOut: RangeRollOut?) -> some View {
+        HStack(spacing: 8) {
+            Spacer(minLength: 0)
+            if browse.newLiveShot {
+                ChipButton(label: "New shot · Return to live", isSelected: true, minTouchTarget: true) {
+                    send(DrivingRangeEventReturnToLive.shared)
                 }
-                if browse.userTransformed {
-                    ChipButton(label: "Reset view", isSelected: false, minTouchTarget: true) {
-                        send(DrivingRangeEventResetView.shared)
-                    }
+                .accessibilityIdentifier(RangeTestTags.shared.NEW_LIVE_SHOT)
+            }
+            if browse.userTransformed {
+                ChipButton(label: "Reset view", isSelected: false, minTouchTarget: true) {
+                    send(DrivingRangeEventResetView.shared)
+                }
+                .background(.black.opacity(0.55), in: Capsule())
+                .accessibilityIdentifier(RangeTestTags.shared.RESET_VIEW)
+            }
+            if let rollOut {
+                Text(Self.rollOutSummary(rollOut))
+                    .font(.of(.caption, weight: .semibold).monospacedDigit())
+                    .foregroundStyle(Theme.cream)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 7)
                     .background(.black.opacity(0.55), in: Capsule())
-                    .accessibilityIdentifier(RangeTestTags.shared.RESET_VIEW)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                    .accessibilityIdentifier(RangeTestTags.shared.ROLL_OUT)
+            }
+        }
+    }
+
+    /// "Simulate shot" (Android's `BrowseChips`), with why the last request failed before it.
+    private var simulateRow: some View {
+        HStack(spacing: 8) {
+            Spacer(minLength: 0)
+            if let error = state.simulateError {
+                Label(error, systemImage: "exclamationmark.triangle.fill")
+                    .font(.of(.caption, weight: .semibold))
+                    .foregroundStyle(Theme.danger)
+                    .lineLimit(2)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(.black.opacity(0.55), in: Capsule())
+                    .accessibilityElement(children: .combine)
+                    .accessibilityIdentifier(RangeTestTags.shared.SIMULATE_ERROR)
+            }
+            if state.canSimulate {
+                Button {
+                    send(DrivingRangeEventSimulateShot.shared)
+                } label: {
+                    Label("Simulate shot", systemImage: "sparkles")
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(Theme.gold)
+                        .padding(.horizontal, 13)
+                        .padding(.vertical, 10)
+                        .background(.black.opacity(0.6), in: Capsule())
+                        .overlay { Capsule().stroke(.white.opacity(0.2), lineWidth: 1) }
+                        .frame(minHeight: 44)
+                        .contentShape(Capsule())
                 }
-                if let rollOut {
-                    Text(Self.rollOutSummary(rollOut))
-                        .font(.of(.caption, weight: .semibold).monospacedDigit())
-                        .foregroundStyle(Theme.cream)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 7)
-                        .background(.black.opacity(0.55), in: Capsule())
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
-                        .accessibilityIdentifier(RangeTestTags.shared.ROLL_OUT)
-                }
+                .buttonStyle(.plain)
+                .accessibilityHint("Asks the mock Pi for a new shot")
+                .accessibilityIdentifier(RangeTestTags.shared.SIMULATE)
             }
         }
     }

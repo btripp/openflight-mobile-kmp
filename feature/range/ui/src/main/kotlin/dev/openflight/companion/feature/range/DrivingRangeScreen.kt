@@ -28,10 +28,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.Measurable
+import androidx.compose.ui.layout.MeasurePolicy
+import androidx.compose.ui.layout.MeasureResult
+import androidx.compose.ui.layout.MeasureScope
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.openflight.companion.core.data.RangeCameraMode
 import dev.openflight.companion.core.designsystem.OfColorTokens
@@ -261,18 +268,17 @@ private fun Controls(
     onExit: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Row(
+    // Plan F8d-B: the status pill sits between Exit and the buttons only when its whole label fits
+    // there on one line; otherwise it drops to its own line under them ([ControlsLayout]) instead
+    // of being squeezed into a column of letters (large text, or Follow + History + Replay).
+    Layout(
         modifier = modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        OfOutlinedButton(
-            text = "Exit",
-            onClick = onExit,
-            modifier = Modifier.background(ControlBackground, PillShape).testTag(RangeTestTags.EXIT),
-        )
-        // The status takes the flexible space (and wraps if it must) so the buttons keep their width.
-        Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
+        content = {
+            OfOutlinedButton(
+                text = "Exit",
+                onClick = onExit,
+                modifier = Modifier.background(ControlBackground, PillShape).testTag(RangeTestTags.EXIT),
+            )
             OfStatusChip(
                 label = uiState.phase.label,
                 tone = uiState.phase.tone(),
@@ -282,7 +288,62 @@ private fun Controls(
                         .padding(horizontal = 12.dp, vertical = 6.dp)
                         .testTag(RangeTestTags.STATUS),
             )
+            ControlButtons(uiState, onReplay, onToggleCamera, onOpenSessions)
+        },
+        measurePolicy = ControlsLayout(gap = 10.dp),
+    )
+}
+
+/**
+ * Lays out Exit, the status pill and the trailing buttons: one row when the pill's natural,
+ * one-line width fits between Exit and the buttons; else Exit and the buttons on the first row and
+ * the pill end-aligned on a second row, with the full width to wrap in if it still must.
+ */
+private class ControlsLayout(
+    private val gap: Dp,
+) : MeasurePolicy {
+    override fun MeasureScope.measure(
+        measurables: List<Measurable>,
+        constraints: Constraints,
+    ): MeasureResult {
+        val (exitMeasurable, statusMeasurable, buttonsMeasurable) = measurables
+        val gapPx = gap.roundToPx()
+        val loose = constraints.copy(minWidth = 0, minHeight = 0)
+        val exit = exitMeasurable.measure(loose)
+        val buttons =
+            buttonsMeasurable.measure(
+                loose.copy(maxWidth = (constraints.maxWidth - exit.width - gapPx).coerceAtLeast(0)),
+            )
+        val between = constraints.maxWidth - exit.width - buttons.width - 2 * gapPx
+        val oneRow = statusMeasurable.maxIntrinsicWidth(Constraints.Infinity) <= between
+        val status = statusMeasurable.measure(loose.copy(maxWidth = if (oneRow) between else constraints.maxWidth))
+        val rowHeight = maxOf(exit.height, buttons.height, if (oneRow) status.height else 0)
+        val height = if (oneRow) rowHeight else rowHeight + gapPx + status.height
+        val width = constraints.maxWidth
+        return layout(width, height) {
+            exit.place(0, (rowHeight - exit.height) / 2)
+            buttons.place(width - buttons.width, (rowHeight - buttons.height) / 2)
+            if (oneRow) {
+                status.place(width - buttons.width - gapPx - status.width, (rowHeight - status.height) / 2)
+            } else {
+                status.place(width - status.width, rowHeight + gapPx)
+            }
         }
+    }
+}
+
+/** Follow/Fixed, History and (when there's a shot to fly again) Replay. */
+@Composable
+private fun ControlButtons(
+    uiState: DrivingRangeUiState,
+    onReplay: () -> Unit,
+    onToggleCamera: () -> Unit,
+    onOpenSessions: () -> Unit,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
         CameraModeToggle(
             mode = uiState.cameraMode,
             locked = uiState.cameraModeLocked,

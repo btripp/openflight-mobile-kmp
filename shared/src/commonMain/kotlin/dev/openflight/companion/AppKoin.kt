@@ -107,6 +107,17 @@ suspend fun Koin.applyLaunchOptions(options: LaunchOptions) {
             allowOverride = true,
         )
     }
+    if (options.previewPiMock) {
+        // Plan F8d-B: a `mock_mode` preview Pi whose simulate delivers a new preview shot through
+        // the live path. The shot repository is looked up per simulate, so it's never built early.
+        val koin = this
+        val mockPi =
+            PreviewDevicePiSessionRepository(mockMode = true) { number ->
+                (koin.get<ShotRepository>() as? LocalEditsShotRepository)
+                    ?.deliver(PreviewShotRepository.simulatedShot(number))
+            }
+        loadModules(listOf(module { single<PiSessionRepository> { mockPi } }), allowOverride = true)
+    }
     val settings = get<SettingsRepository>()
     options.transport?.let { settings.setTransport(it) }
     options.host?.let { settings.setHost(it) }

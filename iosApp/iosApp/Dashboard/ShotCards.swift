@@ -30,6 +30,8 @@ struct ShotCard: View {
     let shot: ShotEvent
     var units: UnitSystem = .imperial
     var enrichment: ShotEnrichment?
+    /// Plan F8d-B: "View on range" (flies this shot on the range, paused on it); hidden if nil.
+    var onViewOnRange: (() -> Void)?
 
     private static let spinAdjusted = "spin-adjusted"
 
@@ -49,10 +51,14 @@ struct ShotCard: View {
                     }
                 }
                 Spacer()
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.title2)
-                    .foregroundStyle(Theme.gold)
-                    .accessibilityHidden(true)
+                if let onViewOnRange {
+                    ViewOnRangeButton(identifier: DashboardTestTags.shared.VIEW_ON_RANGE, action: onViewOnRange)
+                } else {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.title2)
+                        .foregroundStyle(Theme.gold)
+                        .accessibilityHidden(true)
+                }
             }
 
             primaryMetrics

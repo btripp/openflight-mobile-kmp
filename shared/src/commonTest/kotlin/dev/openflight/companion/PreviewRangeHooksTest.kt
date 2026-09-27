@@ -86,6 +86,36 @@ class PreviewRangeHooksTest {
             assertThat(repository.shots(PreviewShotHistoryRepository.BULK_SESSION).first().firstOrNull()).isNull()
         }
 
+    @Test
+    fun mockPiSimulatesANewDifferentShotEachTime() =
+        runTest {
+            val shots = LocalEditsShotRepository(previewShots(), scope = backgroundScope)
+            val pi =
+                PreviewDevicePiSessionRepository(mockMode = true) { number ->
+                    shots.deliver(PreviewShotRepository.simulatedShot(number))
+                }
+
+            assertThat(pi.mockMode.value).isEqualTo(true)
+            pi.simulateShot()
+            val first = shots.latestShot.value
+            pi.simulateShot()
+            val second = shots.latestShot.value
+
+            assertThat(first?.eventId).isEqualTo(PreviewShotRepository.simulatedShot(1).eventId)
+            assertThat(second?.eventId).isEqualTo(PreviewShotRepository.simulatedShot(2).eventId)
+            assertThat(second?.timestamp).isNotEqualTo(first?.timestamp)
+            // Different flights: neither is the preview shot's, nor each other's.
+            val carries =
+                listOf(PreviewShotRepository.PREVIEW_SHOT, first, second).map { it?.estimatedCarryYards }
+            assertThat(carries.toSet().size).isEqualTo(3)
+            assertThat(shots.history.value.size).isEqualTo(3)
+        }
+
+    @Test
+    fun thePreviewPiIsNotAMockByDefault() {
+        assertThat(PreviewDevicePiSessionRepository().mockMode.value).isEqualTo(false)
+    }
+
     private companion object {
         const val INTERVAL = 5_000L
     }

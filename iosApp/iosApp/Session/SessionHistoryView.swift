@@ -190,11 +190,14 @@ struct SessionHistoryDetailView: View {
     @State private var export: CsvExport?
 
     init(sessionId: String) {
+        self.sessionId = sessionId
         _host = StateObject(wrappedValue: ViewModelHost(KoinHelper().sessionHistoryDetailViewModel(sessionId: sessionId)))
     }
 
+    private let sessionId: String
+
     var body: some View {
-        SessionHistoryDetailContent(state: host.state, send: host.send, export: export)
+        SessionHistoryDetailContent(state: host.state, send: host.send, export: export, sessionId: sessionId)
             .navigationTitle(host.state.title.isEmpty ? "Session" : host.state.title)
             .task {
                 await host.collect(host.viewModel.sideEffects) { effect in
@@ -215,6 +218,11 @@ struct SessionHistoryDetailContent: View {
     let state: SessionHistoryDetailUiState
     let send: (SessionHistoryDetailEvent) -> Void
     let export: CsvExport?
+    /// Plan F8d-B: this stored session, for "Replay on range" and the rows' "View on range".
+    var sessionId: String?
+
+    /// Plan F8d-B: opens the range; nil (no app shell) hides the range buttons.
+    @Environment(\.openRange) private var openRange
 
     private var session: SessionUiState { state.session }
 
@@ -241,20 +249,31 @@ struct SessionHistoryDetailContent: View {
                     .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
                 Section { SessionStatsGrid(state: session) }.listRowBackground(Theme.bgCard)
                 Section { exportButton }.listRowBackground(Theme.bgCard)
+                if let openRange, let sessionId {
+                    Section { replayOnRangeButton(openRange, sessionId) }.listRowBackground(Theme.bgCard)
+                }
                 Section {
                     ForEach(session.shots, id: \.id) { row in
-                        SessionShotRowView(row: row, units: session.units)
-                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                if state.canDelete {
-                                    // Not `.destructive`: the row stays until the delete is confirmed.
-                                    Button {
-                                        send(SessionHistoryDetailEventDeleteShot(id: row.id))
-                                    } label: {
-                                        Label("Delete", systemImage: "trash")
-                                    }
-                                    .tint(.red)
+                        HStack(spacing: 4) {
+                            SessionShotRowView(row: row, units: session.units)
+                            // Plan F8d-B: fly this stored shot on the range, paused on it.
+                            if let openRange, let sessionId, row.canFly {
+                                ViewOnRangeButton(iconOnly: true, identifier: RangeEntryTags.sessionShot(row.id)) {
+                                    openRange(RangeTarget(sessionId: sessionId, shotId: row.id))
                                 }
                             }
+                        }
+                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                            if state.canDelete {
+                                // Not `.destructive`: the row stays until the delete is confirmed.
+                                Button {
+                                    send(SessionHistoryDetailEventDeleteShot(id: row.id))
+                                } label: {
+                                    Label("Delete", systemImage: "trash")
+                                }
+                                .tint(.red)
+                            }
+                        }
                     }
                     .listRowBackground(Theme.bgCard)
                 } header: {
@@ -323,6 +342,21 @@ struct SessionHistoryDetailContent: View {
             .padding(.horizontal, 2)
         }
         .listRowBackground(Color.clear)
+    }
+
+    /// Plan F8a1/F8d-B: replays the whole session on the range from its first shot.
+    private func replayOnRangeButton(_ openRange: OpenRangeAction, _ sessionId: String) -> some View {
+        Button {
+            openRange(RangeTarget(sessionId: sessionId))
+        } label: {
+            Label("Replay on range", systemImage: "play.circle")
+                .frame(maxWidth: .infinity)
+        }
+        .font(.of(.body, weight: .semibold))
+        .buttonStyle(.bordered)
+        .controlSize(.large)
+        .tint(Theme.gold)
+        .accessibilityIdentifier(RangeEntryTags.replaySession)
     }
 
     private var exportButton: some View {
