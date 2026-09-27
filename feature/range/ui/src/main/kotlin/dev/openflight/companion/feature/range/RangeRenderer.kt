@@ -36,7 +36,12 @@ internal class RangeRenderer(
     val currentProjection: RangeProjection? get() = frame.projection
 
     private val skyGradient = style.sky.toVerticalBrush(startY = 0f, endY = 1f)
-    private val groundColor = style.distantGround.toColor()
+
+    /** Plan F8a2p: the rough and fairway are flat; the haze overlay and the soft stripes are gradients. */
+    private val groundColor = style.ground.toColor()
+    private val fairwayColor = style.fairway.toColor()
+    private val haze = MovableLinearGradient(style.haze.overlayStops)
+    private val stripeGradients = scene.stripes.map { MovableLinearGradient(style.stripeGradient) }
 
     /** Plan F8a2a: the sun's glow on a unit circle at the origin, moved and scaled onto the sun per frame. */
     private val sunGlow = style.sun.glow.toUnitRadialBrush()
@@ -68,6 +73,7 @@ internal class RangeRenderer(
         val projection = frame.projection ?: return
         with(drawScope) {
             drawBackdrop(projection)
+            drawGround(projection)
             drawPolygons(scene.polygons)
             drawTrees()
             drawLabels(labelHeightMeters, minLabelPixels)
@@ -142,8 +148,8 @@ internal class RangeRenderer(
     }
 
     /**
-     * Sky down to the horizon, then (plan F8a2a) the sun and the far ridges, then the distant
-     * ground below the horizon (past the ground plane's far end).
+     * Sky down to the horizon, then (plan F8a2a) the sun and the far ridges, then (plan F8a2p) the
+     * flat rough from the horizon down; [drawGround] hazes it.
      */
     private fun DrawScope.drawBackdrop(projection: RangeProjection) {
         val horizon = scene.backdropHorizon(projection.height)
@@ -168,6 +174,31 @@ internal class RangeRenderer(
         }
         if (horizon < projection.height) {
             drawRect(groundColor, topLeft = Offset(0f, horizon), size = Size(size.width, size.height - horizon))
+        }
+    }
+
+    /**
+     * Plan F8a2p: the fairway, its soft stripes and the rest of the ground, then the haze overlay
+     * from the horizon down, laid per pose from [RangeScene.hazeTopY] to [RangeScene.hazeBottomY].
+     */
+    private fun DrawScope.drawGround(projection: RangeProjection) {
+        val fairway = scene.fairway
+        if (fairway.visible) drawPath(fairway.path.path, fairwayColor)
+        val stripes = scene.stripes
+        for (index in stripes.indices) {
+            val stripe = stripes[index]
+            if (!stripe.gradientVisible) continue
+            val gradient = stripeGradients[index]
+            gradient.layOut(stripe.startX, stripe.startY, stripe.endX, stripe.endY)
+            drawPath(stripe.polygon.path.path, gradient.brush)
+        }
+        drawPolygons(scene.groundPolygons)
+        if (scene.hazeVisible) {
+            val top = scene.backdropHorizon(projection.height)
+            if (top < projection.height) {
+                haze.layOut(0f, scene.hazeTopY, 0f, scene.hazeBottomY)
+                drawRect(haze.brush, topLeft = Offset(0f, top), size = Size(size.width, projection.height - top))
+            }
         }
     }
 
@@ -198,7 +229,7 @@ internal class RangeRenderer(
         val labels = scene.labels
         for (index in labels.indices) {
             val label = labels[index]
-            if (!label.visible || index >= labelLayouts.size) continue
+            if (!label.drawn || index >= labelLayouts.size) continue
             val layout = labelLayouts[index]
             val fontPixels = label.fontPixels(labelHeightMeters, minLabelPixels, labelFontPixels)
             val factor = fontPixels / labelFontPixels

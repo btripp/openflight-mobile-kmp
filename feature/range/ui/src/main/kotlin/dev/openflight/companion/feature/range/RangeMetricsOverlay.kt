@@ -4,8 +4,10 @@ package dev.openflight.companion.feature.range
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -18,6 +20,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.openflight.companion.core.designsystem.OfColorTokens
@@ -34,9 +38,14 @@ import dev.openflight.companion.core.model.ShotMetricFormatter
 /**
  * The metrics over the scene (RangeMetricsOverlay.swift): ball speed and carry on top; at the
  * bottom the club error, the estimated-flight badge and the detail metrics with the "NEXT CLUB"
- * selector, in one row in landscape or a two-column grid in portrait. While a ball flies and
- * through the landing dwell ([compactMetrics], plan R7b) the detail metrics fold into one strip so
- * the landing area stays visible.
+ * selector, laid out by the shared [detailLayout] (plan F8a2p): one row in landscape, two compact
+ * rows of four over a portrait scene, the roomy two-column grid in the docked side panel, and one
+ * strip while a ball flies and through the landing dwell ([compactMetrics], plan R7b), so the
+ * landing area stays visible.
+ *
+ * Plan F8a2p: over the scene ([expandToFill]) the ball speed and carry tiles are compact too, so
+ * the tee view keeps most of the screen. Every card reports its bounds to [obstructions], which
+ * keep the scene's yardage labels and far markers clear of it.
  *
  * @param expandToFill true (the phone overlay, full screen height) pushes the bottom content down
  *   with a growing spacer, so it sits at the bottom of the scene regardless of how tall the top
@@ -51,8 +60,10 @@ internal fun RangeMetricsOverlay(
     onSelectClub: (GolfClub) -> Unit,
     modifier: Modifier = Modifier,
     expandToFill: Boolean = true,
+    obstructions: RangeObstructionTracker? = null,
 ) {
     val shot = uiState.displayedShot
+    val layout = uiState.detailLayout(landscape = isLandscape, docked = !expandToFill)
     Column(
         modifier =
             modifier
@@ -77,13 +88,23 @@ internal fun RangeMetricsOverlay(
                 title = "BALL SPEED",
                 value = ShotMetricFormatter.number(shot?.ballSpeedMph, decimals = 1),
                 unit = "MPH",
-                modifier = Modifier.weight(1f).testTag(RangeTestTags.BALL_SPEED),
+                compact = expandToFill,
+                modifier =
+                    Modifier
+                        .weight(1f)
+                        .rangeObstruction("ballSpeed", obstructions)
+                        .testTag(RangeTestTags.BALL_SPEED),
             )
             OfMetricPrimary(
                 title = "CARRY",
                 value = ShotMetricFormatter.number(shot?.estimatedCarryYards, decimals = 0),
                 unit = "YDS",
-                modifier = Modifier.weight(1f).testTag(RangeTestTags.CARRY),
+                compact = expandToFill,
+                modifier =
+                    Modifier
+                        .weight(1f)
+                        .rangeObstruction("carry", obstructions)
+                        .testTag(RangeTestTags.CARRY),
             )
         }
         if (expandToFill) {
@@ -92,24 +113,34 @@ internal fun RangeMetricsOverlay(
             Spacer(modifier = Modifier.height(OfSpacing.Md))
         }
         uiState.club.error?.let { error ->
-            Pill(text = "⚠ $error", color = OfColorTokens.Danger, modifier = Modifier.testTag(RangeTestTags.CLUB_ERROR))
+            Pill(
+                text = "⚠ $error",
+                color = OfColorTokens.Danger,
+                modifier = Modifier.rangeObstruction("clubError", obstructions).testTag(RangeTestTags.CLUB_ERROR),
+            )
         }
         if (uiState.usesEstimatedFlight) {
             Pill(
                 text = "Estimated flight uses club defaults",
                 color = OfColorTokens.Cream,
-                modifier = Modifier.testTag(RangeTestTags.ESTIMATED),
+                modifier = Modifier.rangeObstruction("estimated", obstructions).testTag(RangeTestTags.ESTIMATED),
             )
         }
-        if (uiState.compactMetrics) {
+        if (layout == RangeDetailLayout.STRIP) {
             // Plan R7b: one strip while the ball flies and lands, so the landing area stays visible.
             Pill(
                 text = uiState.compactMetricsSummary,
                 color = OfColorTokens.Cream,
-                modifier = Modifier.testTag(RangeTestTags.METRICS_COMPACT),
+                modifier = Modifier.rangeObstruction("details", obstructions).testTag(RangeTestTags.METRICS_COMPACT),
             )
         } else {
-            DetailMetrics(shot, uiState.club, isLandscape, onSelectClub)
+            DetailMetrics(
+                shot,
+                uiState.club,
+                layout,
+                onSelectClub,
+                Modifier.rangeObstruction("details", obstructions),
+            )
         }
     }
 }
@@ -118,31 +149,37 @@ internal fun RangeMetricsOverlay(
 private fun DetailMetrics(
     shot: ShotEvent?,
     club: RangeClubState,
-    isLandscape: Boolean,
+    layout: RangeDetailLayout,
     onSelectClub: (GolfClub) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val metrics = detailMetrics(shot)
-    if (isLandscape) {
+    val dense = layout != RangeDetailLayout.GRID
+    if (layout == RangeDetailLayout.ROW) {
         Row(
-            modifier = Modifier.fillMaxWidth().testTag(RangeTestTags.METRICS_DETAIL),
+            modifier = modifier.fillMaxWidth().testTag(RangeTestTags.METRICS_DETAIL),
             horizontalArrangement = Arrangement.spacedBy(OfSpacing.Sm),
         ) {
-            ClubMetric(club, onSelectClub, Modifier.weight(CLUB_CELL_WEIGHT))
-            for (metric in metrics) DetailMetric(metric, Modifier.weight(1f))
+            ClubMetric(club, onSelectClub, dense = true, Modifier.weight(CLUB_CELL_WEIGHT))
+            for (metric in metrics) DetailMetric(metric, dense = true, Modifier.weight(1f))
         }
     } else {
-        // Two columns: the club selector first, then the seven metrics.
+        // The club selector first, then the seven metrics: two rows of four over the scene (plan
+        // F8a2p), or four rows of two in the docked panel.
         val cells: List<(@Composable (Modifier) -> Unit)> =
-            listOf<@Composable (Modifier) -> Unit>({ ClubMetric(club, onSelectClub, it) }) +
-                metrics.map { metric -> { modifier: Modifier -> DetailMetric(metric, modifier) } }
+            listOf<@Composable (Modifier) -> Unit>({ ClubMetric(club, onSelectClub, dense, it) }) +
+                metrics.map { metric -> { cellModifier: Modifier -> DetailMetric(metric, dense, cellModifier) } }
         Column(
-            modifier = Modifier.fillMaxWidth().testTag(RangeTestTags.METRICS_DETAIL),
-            verticalArrangement = Arrangement.spacedBy(OfSpacing.Sm),
+            modifier = modifier.fillMaxWidth().testTag(RangeTestTags.METRICS_DETAIL),
+            verticalArrangement = Arrangement.spacedBy(if (dense) OfSpacing.Xs else OfSpacing.Sm),
         ) {
-            for (row in cells.chunked(2)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(OfSpacing.Sm)) {
-                    for (cell in row) cell(Modifier.weight(1f))
-                    if (row.size == 1) Spacer(Modifier.weight(1f))
+            for (row in cells.chunked(layout.columns)) {
+                Row(
+                    modifier = Modifier.height(IntrinsicSize.Min),
+                    horizontalArrangement = Arrangement.spacedBy(if (dense) OfSpacing.Xs else OfSpacing.Sm),
+                ) {
+                    for (cell in row) cell(Modifier.weight(1f).fillMaxHeight())
+                    repeat(layout.columns - row.size) { Spacer(Modifier.weight(1f)) }
                 }
             }
         }
@@ -153,10 +190,11 @@ private fun DetailMetrics(
 private fun ClubMetric(
     club: RangeClubState,
     onSelectClub: (GolfClub) -> Unit,
+    dense: Boolean,
     modifier: Modifier,
 ) {
     Column(
-        modifier = modifier.background(CellBackground, CellShape).padding(OfSpacing.Xs),
+        modifier = modifier.background(CellBackground, CellShape).padding(if (dense) 2.dp else OfSpacing.Xs),
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         OfText(
@@ -164,7 +202,11 @@ private fun ClubMetric(
             role = OfTextRole.Eyebrow,
             color = OfColorTokens.CreamDim,
             maxLines = 1,
-            modifier = Modifier.padding(start = OfSpacing.Sm),
+            modifier =
+                Modifier.padding(
+                    start = if (dense) OfSpacing.Xs else OfSpacing.Sm,
+                    top = if (dense) 2.dp else 0.dp,
+                ),
         )
         OfDropdownMenu(
             label = "",
@@ -173,6 +215,7 @@ private fun ClubMetric(
             onSelect = { name -> GolfClub.entries.firstOrNull { it.displayName == name }?.let(onSelectClub) },
             enabled = club.selectionEnabled,
             isBusy = club.isChanging,
+            compact = dense,
             modifier = Modifier.testTag(RangeTestTags.CLUB_SELECTOR),
         )
     }
@@ -181,8 +224,13 @@ private fun ClubMetric(
 @Composable
 private fun DetailMetric(
     metric: RangeMetricValue,
+    dense: Boolean,
     modifier: Modifier,
 ) {
+    if (dense) {
+        DenseMetric(metric, modifier)
+        return
+    }
     OfMetricDetail(
         title = metric.title,
         value = metric.value,
@@ -193,6 +241,39 @@ private fun DetailMetric(
                 .background(CellBackground, CellShape)
                 .padding(horizontal = OfSpacing.Sm, vertical = OfSpacing.Xs),
     )
+}
+
+/**
+ * Plan F8a2p: a small cell for the dense grid and the landscape row: the title as an eyebrow and
+ * the value with its unit on one line, read out as one phrase like [OfMetricDetail].
+ */
+@Composable
+private fun DenseMetric(
+    metric: RangeMetricValue,
+    modifier: Modifier,
+) {
+    val missing = metric.value == ShotMetricFormatter.MISSING
+    val degrees = metric.unit == "°"
+    val shown =
+        when {
+            missing -> metric.value
+            degrees -> metric.value + "°"
+            metric.unit.isEmpty() -> metric.value
+            else -> "${metric.value} ${metric.unit}"
+        }
+    Column(
+        modifier =
+            modifier
+                .heightIn(min = DenseCellMinHeight)
+                .background(CellBackground, CellShape)
+                .padding(horizontal = OfSpacing.Xs, vertical = OfSpacing.Xs)
+                .semantics(mergeDescendants = true) { contentDescription = "${metric.title}, $shown" },
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(2.dp, Alignment.CenterVertically),
+    ) {
+        OfText(text = metric.title, role = OfTextRole.Eyebrow, color = OfColorTokens.CreamDim, maxLines = 1)
+        OfText(text = shown, role = OfTextRole.Label, color = OfColorTokens.Cream, maxLines = 1)
+    }
 }
 
 @Composable
@@ -239,5 +320,6 @@ internal fun detailMetrics(shot: ShotEvent?): List<RangeMetricValue> =
     )
 
 private const val CLUB_CELL_WEIGHT = 1.4f
+private val DenseCellMinHeight = 40.dp
 private val CellShape = RoundedCornerShape(12.dp)
 private val CellBackground = Color.Black.copy(alpha = 0.55f)

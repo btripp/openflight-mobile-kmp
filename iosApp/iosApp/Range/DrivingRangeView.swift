@@ -89,6 +89,9 @@ struct DrivingRangeContent: View {
     @State private var showsSessions = false
     /// The controls' measured height: one row, or two when the status pill drops under the buttons.
     @State private var controlsHeight: CGFloat = 44
+    /// Plan F8a2p: the overlaid UI's frames and the canvas's, both global, for the scene's obstructions.
+    @State private var obstructionFrames: [String: CGRect] = [:]
+    @State private var canvasFrame: CGRect = .zero
 
     /// The side pane's width on a regular width: Android's 30 %, within readable bounds.
     private static let shotListFraction: CGFloat = 0.3
@@ -144,8 +147,10 @@ struct DrivingRangeContent: View {
 
                     Group {
                         RangeBrowseChips(state: state, send: send)
+                            .rangeObstruction("chips")
                         if !browse.isLive {
                             RangeBrowseBar(browse: browse, send: send)
+                                .rangeObstruction("browseBar")
                         }
                     }
                     .padding(.horizontal, 14)
@@ -154,6 +159,7 @@ struct DrivingRangeContent: View {
 
                 if state is DrivingRangeUiStateReady && browse.isLive {
                     waitingCard
+                        .rangeObstruction("ready")
                 }
 
                 controls
@@ -161,7 +167,17 @@ struct DrivingRangeContent: View {
                     .padding(.top, 10)
                     .frame(maxHeight: .infinity, alignment: .top)
             }
+            .onPreferenceChange(RangeObstructionKey.self) { frames in
+                obstructionFrames = frames
+            }
         }
+    }
+
+    /// Plan F8a2p: the overlaid UI's frames in the canvas's points (the canvas runs under the safe area).
+    private var obstructions: [CGRect] {
+        obstructionFrames.values
+            .map { $0.offsetBy(dx: -canvasFrame.minX, dy: -canvasFrame.minY) }
+            .sorted { ($0.minY, $0.minX) < ($1.minY, $1.minX) }
     }
 
     @ViewBuilder
@@ -189,8 +205,10 @@ struct DrivingRangeContent: View {
                 onFlightCompleted: { send(DrivingRangeEventFlightCompleted.shared) },
                 onViewChanged: { send(DrivingRangeEventViewChanged(view: $0)) },
                 onResetView: { send(DrivingRangeEventResetView.shared) },
-                onSelectLanding: { send(DrivingRangeEventSelectShot(shotId: $0)) }
+                onSelectLanding: { send(DrivingRangeEventSelectShot(shotId: $0)) },
+                obstructions: obstructions
             )
+            .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { canvasFrame = $0 }
         }
     }
 
@@ -202,20 +220,26 @@ struct DrivingRangeContent: View {
         ViewThatFits(in: .horizontal) {
             HStack(spacing: 10) {
                 exitButton
+                    .rangeObstruction("exit")
                 Spacer(minLength: 0)
                 statusPill
                     .fixedSize()
+                    .rangeObstruction("status")
                 trailingButtons
+                    .rangeObstruction("buttons")
             }
             VStack(alignment: .trailing, spacing: 8) {
                 HStack(spacing: 10) {
                     exitButton
+                        .rangeObstruction("exit")
                     Spacer(minLength: 0)
                     trailingButtons
+                        .rangeObstruction("buttons")
                 }
                 statusPill
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
+                    .rangeObstruction("status")
             }
         }
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { controlsHeight = $0 }
@@ -355,6 +379,27 @@ struct DrivingRangeContent: View {
         case is RangePhaseFlying: "smallcircle.filled.circle"
         case is RangePhaseLanded: "checkmark.circle.fill"
         default: "exclamationmark.triangle.fill" // RangePhaseUnavailable
+        }
+    }
+}
+
+/// Plan F8a2p: the frames (global) of the UI laid over the range, by name, which the scene keeps its
+/// yardage labels and far markers clear of.
+struct RangeObstructionKey: PreferenceKey {
+    static let defaultValue: [String: CGRect] = [:]
+
+    static func reduce(value: inout [String: CGRect], nextValue: () -> [String: CGRect]) {
+        value.merge(nextValue()) { _, next in next }
+    }
+}
+
+extension View {
+    /// Plan F8a2p: reports this view's frame as a range obstruction named `key` while it's shown.
+    func rangeObstruction(_ key: String) -> some View {
+        background {
+            GeometryReader { geometry in
+                Color.clear.preference(key: RangeObstructionKey.self, value: [key: geometry.frame(in: .global)])
+            }
         }
     }
 }

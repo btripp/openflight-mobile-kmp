@@ -248,45 +248,246 @@ class RangeSceneGeometryTest {
     }
 
     @Test
-    fun seenFromTheTeeTheGroundAndFairwayBandsHazeMoreWithDistance() {
+    fun theHazeIsMeasuredFromTheCameraSoTheFollowCameraSeesClearGrassBelowIt() {
         val style = RangeTheme.DAY.style
-        val scene = RangeScene(RangeSceneDescription.standard(treeCount = 0), style, ::RecordingPathSink)
+        val scene = RangeScene(RangeSceneDescription.standard(treeCount = 4), style, ::RecordingPathSink)
+        // The 200 yd target (the fourth, 183 m down the range), and the tree 22 m down it.
+        val target = scene.polygons[2 * 3]
+        val nearTree = scene.trees.last()
 
         scene.project(RangeProjection(RangeCameraPlanner().pose, width = 1000f, height = 2000f))
+        val hazeBlue = blue(style.haze.color.toArgb())
+        val targetFromTheTee = kotlin.math.abs(blue(target.argb) - hazeBlue)
+        val treeFromTheTee = kotlin.math.abs(blue(nearTree.crowns.first().argb) - hazeBlue)
+        assertThat(target.argb).isNotEqualTo(target.color.toArgb())
 
-        // The rough's nine bands come first, then the fairway's six, near to far.
-        val rough = scene.polygons.take(9)
-        val fairway = scene.polygons.drop(9).take(6)
-        assertThat(rough.map { it.color }.toSet()).isEqualTo(setOf(style.ground))
-        assertThat(fairway.map { it.color }.toSet()).isEqualTo(setOf(style.fairway))
-        assertThat(fairway.first().argb).isEqualTo(style.fairway.toArgb())
-        for (bands in listOf(rough, fairway)) {
-            val towardHaze = bands.map { kotlin.math.abs(blue(it.argb) - blue(style.haze.color.toArgb())) }
-            assertThat(towardHaze).isEqualTo(towardHaze.sortedDescending())
-            assertThat(towardHaze.first()).isGreaterThan(towardHaze.last())
+        // A camera hovering just short of that target, looking on down the range.
+        val overTheTarget = RangeCameraPose(Vec3(0.0, 30.0, -160.0), Vec3(0.0, 0.0, -300.0))
+        scene.project(RangeProjection(overTheTarget, width = 1000f, height = 2000f))
+
+        assertThat(kotlin.math.abs(blue(target.argb) - hazeBlue)).isGreaterThan(targetFromTheTee)
+        // The tee's tree is now far behind it: behind the camera, nothing is hazed.
+        assertThat(nearTree.crowns.first().argb).isEqualTo(
+            nearTree.crowns
+                .first()
+                .color
+                .toArgb(),
+        )
+        assertThat(treeFromTheTee).isLessThan(
+            kotlin.math.abs(
+                blue(
+                    nearTree.crowns
+                        .first()
+                        .color
+                        .toArgb(),
+                ) - hazeBlue,
+            ),
+        )
+    }
+
+    // Plan F8a2p: the feathered ground.
+
+    @Test
+    fun theHazeOverlayRunsFromFullHazeAtTheHorizonToClearInEvenSteps() {
+        for (theme in RangeTheme.entries) {
+            val haze = theme.style.haze
+            val stops = haze.overlayStops
+            val name = theme.name
+
+            assertThat(stops.first().offset, name).isEqualTo(0f)
+            assertThat(
+                stops
+                    .first()
+                    .color.alpha
+                    .toDouble(),
+                name,
+            ).isCloseTo(haze.maxAmount.toDouble(), 1e-6)
+            assertThat(stops.last().offset, name).isEqualTo(1f)
+            assertThat(
+                stops
+                    .last()
+                    .color.alpha
+                    .toDouble(),
+                name,
+            ).isCloseTo(0.0, 1e-6)
+            assertThat(stops.map { it.color.copy(alpha = 1f) }.toSet(), name).isEqualTo(setOf(haze.color))
+            for ((near, far) in stops.zipWithNext()) {
+                // Ordered, and no big jump between neighbouring stops.
+                assertThat(far.offset, name).isGreaterThan(near.offset)
+                assertThat(near.color.alpha - far.color.alpha, name).isGreaterThan(0f)
+                assertThat((near.color.alpha - far.color.alpha).toDouble(), name)
+                    .isLessThanOrEqualTo(haze.maxAmount / 16.0 + 1e-6)
+            }
         }
     }
 
     @Test
-    fun theHazeIsMeasuredFromTheCameraSoTheFollowCameraSeesClearGrassBelowIt() {
+    fun theHazeOverlayMatchesTheHazeAtEveryDistanceWithinAFewPercent() {
+        for (theme in RangeTheme.entries) {
+            val haze = theme.style.haze
+            val stops = haze.overlayStops
+            for (step in 1..1_000) {
+                val u = step / 1_000f
+                val exact = haze.amount(haze.referenceMeters / u)
+                val upper = stops.indexOfFirst { it.offset >= u }
+                val lower = stops[upper - 1]
+                val t = (u - lower.offset) / (stops[upper].offset - lower.offset)
+                val drawn = lower.color.alpha + (stops[upper].color.alpha - lower.color.alpha) * t
+                assertThat((drawn - exact).toDouble(), "${theme.name} at u $u").isCloseTo(0.0, 0.03)
+            }
+        }
+    }
+
+    @Test
+    fun theHazeOverlayIsLinearInScreenYSoOneGradientHazesTheWholeGround() {
         val style = RangeTheme.DAY.style
-        val scene = RangeScene(RangeSceneDescription.standard(treeCount = 4), style, ::RecordingPathSink)
-        // The fairway band 174–246 m down the range, and the tree 22 m down it.
-        val band = scene.polygons[9 + 3]
-        val nearTree = scene.trees.last()
+        val scene = RangeScene(RangeSceneDescription.standard(treeCount = 0), style, ::RecordingPathSink)
+        val poses =
+            listOf(
+                RangeCameraPlanner().pose,
+                RangeCameraPose(Vec3(6.0, 34.0, -120.0), Vec3(-4.0, 3.0, -230.0), verticalFovDegrees = 62.0),
+            )
+        for (pose in poses) {
+            val projection = RangeProjection(pose, width = 1000f, height = 2000f)
+            scene.project(projection)
+            assertThat(scene.hazeVisible).isTrue()
+            assertThat(scene.hazeTopY).isEqualTo(scene.horizonY)
+            assertThat(scene.hazeBottomY).isGreaterThan(scene.hazeTopY)
+            for ((x, downrange) in listOf(0.0 to 60.0, -30.0 to 150.0, 25.0 to 260.0, 0.0 to 600.0)) {
+                val z = pose.position.z - downrange
+                val y = projection.project(x, 0.0, z).y
+                val offset = (y - scene.hazeTopY) / (scene.hazeBottomY - scene.hazeTopY)
+                val expected = style.haze.referenceMeters / projection.hazeDistance(x, z)
+                assertThat(offset.toDouble(), "$pose at $x, $z").isCloseTo(expected, 1e-3)
+            }
+        }
+    }
 
+    @Test
+    fun theHazeOverlayIsHiddenLookingStraightDown() {
+        val scene = RangeScene(RangeSceneDescription.standard(treeCount = 0), RangeTheme.DAY.style, ::RecordingPathSink)
+        scene.project(projection(RangeCameraPose(Vec3(0.0, 50.0, -100.0), Vec3(0.0, 0.0, -100.0))))
+        assertThat(scene.hazeVisible).isFalse()
+    }
+
+    @Test
+    fun theStripesAreSoftBandsThatFadeInAndOutAndMeetTheirNeighbours() {
+        val style = RangeTheme.DAY.style
+        val profile = style.stripeGradient
+        assertThat(profile.first().color.alpha).isEqualTo(0f)
+        assertThat(profile.last().color.alpha).isEqualTo(0f)
+        assertThat(profile.maxOf { it.color.alpha }).isEqualTo(style.stripe.alpha)
+        assertThat(profile.map { it.offset }).isEqualTo(profile.map { it.offset }.sorted())
+        for ((a, b) in profile.zipWithNext()) {
+            assertThat(kotlin.math.abs(a.color.alpha - b.color.alpha).toDouble()).isLessThanOrEqualTo(0.45)
+        }
+
+        val scene = RangeScene(RangeSceneDescription.standard(treeCount = 0), style, ::RecordingPathSink)
         scene.project(RangeProjection(RangeCameraPlanner().pose, width = 1000f, height = 2000f))
-        assertThat(band.argb).isNotEqualTo(style.fairway.toArgb())
-        val hazeBlue = blue(style.haze.color.toArgb())
-        val treeFromTheTee = kotlin.math.abs(blue(nearTree.crowns.first().argb) - hazeBlue)
 
-        // A camera hovering over that band, 210 m down the range, looking on.
-        val overTheBand = RangeCameraPose(Vec3(0.0, 30.0, -210.0), Vec3(0.0, 0.0, -300.0))
-        scene.project(RangeProjection(overTheBand, width = 1000f, height = 2000f))
+        assertThat(scene.stripes.size).isEqualTo(11)
+        assertThat(scene.stripes.all { it.gradientVisible }).isTrue()
+        for (stripe in scene.stripes) {
+            // Near edge low on the screen, far edge above it, straight up the screen under the tee camera.
+            assertThat(stripe.startY).isGreaterThan(stripe.endY)
+            assertThat(stripe.startX.toDouble()).isCloseTo(500.0, 0.01)
+            assertThat(stripe.endX.toDouble()).isCloseTo(500.0, 0.01)
+        }
+        // Each stripe's far edge is its neighbour's near edge: no gap and no seam between them.
+        for ((near, far) in scene.stripes.zipWithNext()) {
+            assertThat(near.endY.toDouble()).isCloseTo(far.startY.toDouble(), 0.01)
+        }
+    }
 
-        assertThat(band.argb).isEqualTo(style.fairway.toArgb())
-        // The tee's tree is now far behind it, and hazier.
-        assertThat(kotlin.math.abs(blue(nearTree.crowns.first().argb) - hazeBlue)).isLessThan(treeFromTheTee)
+    @Test
+    fun aStripeUnderTheCameraStillFadesFromWhereItsNearEdgeWouldBe() {
+        val scene = RangeScene(RangeSceneDescription.standard(treeCount = 0), RangeTheme.DAY.style, ::RecordingPathSink)
+        // Over the second stripe (30–66 m down the range), 8 m up, looking on.
+        val pose = RangeCameraPose(Vec3(0.0, 8.0, -50.0), Vec3(0.0, 0.0, -120.0))
+        val projection = RangeProjection(pose, width = 1000f, height = 2000f)
+        scene.project(projection)
+
+        val stripe = scene.stripes[1]
+        assertThat(stripe.gradientVisible).isTrue()
+        // Its far edge, 66 m down the range, is where the gradient ends.
+        val farEdge = projection.project(0.0, 0.0, -66.0)
+        assertThat(stripe.endY.toDouble()).isCloseTo(farEdge.y.toDouble(), 0.5)
+        // Its near edge is behind the camera, so the gradient starts below the canvas.
+        assertThat(stripe.startY).isGreaterThan(2000f)
+        // Stripes behind the camera have no gradient to draw.
+        assertThat(scene.stripes[0].gradientVisible).isFalse()
+    }
+
+    // Plan F8a2p: labels and far markers under the overlaid UI.
+
+    @Test
+    fun obstructionsOverlapOnlyWhereTheyCover() {
+        val obstructions = RangeObstructions()
+        assertThat(obstructions.set(floatArrayOf(10f, 20f, 110f, 70f, 500f, 500f, 600f, 600f))).isTrue()
+        assertThat(obstructions.set(floatArrayOf(10f, 20f, 110f, 70f, 500f, 500f, 600f, 600f))).isFalse()
+        assertThat(obstructions.count).isEqualTo(2)
+
+        assertThat(obstructions.intersects(100f, 60f, 150f, 90f)).isTrue()
+        assertThat(obstructions.intersects(550f, 550f, 560f, 560f)).isTrue()
+        assertThat(obstructions.intersects(0f, 0f, 1000f, 1000f)).isTrue()
+        // Touching an edge, or clear of both.
+        assertThat(obstructions.intersects(110f, 20f, 200f, 70f)).isFalse()
+        assertThat(obstructions.intersects(200f, 200f, 300f, 300f)).isFalse()
+        assertThat(RangeObstructions().intersects(0f, 0f, 1000f, 1000f)).isFalse()
+    }
+
+    @Test
+    fun aLabelUnderTheOverlaidUiIsHiddenAndItsMarkerFaded() {
+        val style = RangeTheme.DAY.style
+        val frame = RangeFrame(style, clubPaletteSize = 8, newPath = ::RecordingPathSink)
+        val pose = RangeCameraPlanner().pose
+        frame.resize(1000f, 2000f, pose)
+        frame.setLabelPixels(minPixels = 27f, maxPixels = 48f)
+        frame.prepare(pose, progress = 0f)
+        val scene = frame.scene
+        val drawn = scene.labels.filter { it.drawn }
+        assertThat(drawn.size).isGreaterThan(2)
+        val covered = drawn.first()
+        val clear = drawn.last()
+        val marker = scene.polygons[2 * scene.labels.indexOf(covered)]
+        val markerArgb = marker.argb
+
+        // A card over the first label and its marker, only.
+        frame.setObstructions(
+            floatArrayOf(covered.anchorX - 5f, covered.anchorY - 5f, covered.anchorX + 5f, marker.bottom),
+        )
+        frame.prepare(pose, progress = 0f)
+
+        assertThat(covered.obstructed).isTrue()
+        assertThat(covered.drawn).isFalse()
+        assertThat(clear.drawn).isTrue()
+        assertThat(
+            marker.argb ushr 24,
+        ).isEqualTo(((markerArgb ushr 24) * RangeScene.OBSTRUCTED_MARKER_ALPHA + 0.5f).toInt())
+        assertThat(marker.argb and 0xFFFFFF).isEqualTo(markerArgb and 0xFFFFFF)
+
+        // The card goes away: the label and the marker come back, with no re-projection.
+        frame.setObstructions(FloatArray(0))
+        frame.prepare(pose, progress = 0f)
+        assertThat(covered.drawn).isTrue()
+        assertThat(marker.argb).isEqualTo(markerArgb)
+    }
+
+    @Test
+    fun aLabelBoxIsMeasuredAtItsFontSize() {
+        val label = WorldLabel("250", 0.0, 2.0, -92.0)
+        label.project(projection(), SceneScratch(capacity = 8))
+        val obstructions = RangeObstructions()
+        // Clear of the text's half width (3 digits at 0.62 em plus padding, at 20 px) to the right.
+        val halfWidth = 20f * (WorldLabel.GLYPH_WIDTH_EM * 3 + WorldLabel.PADDING_EM) / 2
+        obstructions.set(
+            floatArrayOf(label.anchorX + halfWidth + 1f, label.anchorY - 30f, label.anchorX + 80f, label.anchorY),
+        )
+        label.obstruct(obstructions, fontPixels = 20f)
+        assertThat(label.obstructed).isFalse()
+
+        label.obstruct(obstructions, fontPixels = 40f)
+        assertThat(label.obstructed).isTrue()
     }
 
     private fun blue(argb: Int): Int = argb and 0xFF
@@ -324,12 +525,14 @@ class RangeSceneGeometryTest {
         scene.project(RangeProjection(RangeCameraPlanner().pose, width = 1000f, height = 2000f))
 
         assertThat(scene.polygons.all { it.visible }).isTrue()
-        // The ground runs 59.5 m behind the camera, so its outline is clipped: its near corners
-        // land far below the canvas.
-        val ground = scene.polygons.first().path
-        assertThat(ground.commands.first()).isEqualTo("rewind")
-        assertThat(ground.points.maxOf { it.second }).isGreaterThan(2000f)
-        assertThat(scene.polygons.first().color).isEqualTo(RangeTheme.DAY.style.ground)
+        // Plan F8a2p: the fairway, one polygon from just behind the tee to the range's end.
+        assertThat(scene.fairway.visible).isTrue()
+        assertThat(scene.fairway.color).isEqualTo(RangeTheme.DAY.style.fairway)
+        assertThat(
+            scene.fairway.path.commands
+                .count { it == "moveTo" },
+        ).isEqualTo(1)
+        assertThat(scene.groundPolygons.all { it.visible }).isTrue()
         // Every tree has a trunk and three crown tones in view.
         for (tree in scene.trees) {
             assertThat(tree.crowns.size).isEqualTo(3)

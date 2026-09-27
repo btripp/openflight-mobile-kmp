@@ -179,6 +179,48 @@ val DrivingRangeUiState.usesEstimatedFlight: Boolean
 val DrivingRangeUiState.compactMetrics: Boolean
     get() = phase == RangePhase.Flying || phase == RangePhase.Landed
 
+/**
+ * Plan F8a2p: how the overlay lays out the detail metrics (the club selector and the seven detail
+ * values), the same on both platforms.
+ *
+ * - [STRIP]: [compactMetrics], one line while the ball flies and through the landing dwell.
+ * - [ROW]: one row of small cells, in landscape (the range's pre-F8a2p landscape layout).
+ * - [DENSE_GRID]: [columns] small cells a row, two rows, over a portrait scene. The pre-F8a2p
+ *   two-column grid took four rows (about a quarter of a phone) while waiting for a shot, leaving
+ *   the tee view a thin strip; this is half that.
+ * - [GRID]: the roomy two-column grid, in the docked side panel (plan F1b/F1c), where it covers no
+ *   scene.
+ */
+enum class RangeDetailLayout(
+    val columns: Int,
+) {
+    STRIP(0),
+    ROW(DETAIL_CELLS),
+    DENSE_GRID(DENSE_COLUMNS),
+    GRID(2),
+}
+
+/** The eight detail cells: the club selector and seven metrics. */
+private const val DETAIL_CELLS = 8
+private const val DENSE_COLUMNS = 4
+
+/**
+ * Plan F8a2p: the detail metrics' layout for this state: [RangeDetailLayout.STRIP] while
+ * [compactMetrics] (in every layout), otherwise [RangeDetailLayout.GRID] in the [docked] side
+ * panel, [RangeDetailLayout.ROW] in [landscape] and [RangeDetailLayout.DENSE_GRID] over a portrait
+ * scene.
+ */
+fun DrivingRangeUiState.detailLayout(
+    landscape: Boolean,
+    docked: Boolean,
+): RangeDetailLayout =
+    when {
+        compactMetrics -> RangeDetailLayout.STRIP
+        docked -> RangeDetailLayout.GRID
+        landscape -> RangeDetailLayout.ROW
+        else -> RangeDetailLayout.DENSE_GRID
+    }
+
 /** The compact strip's one line: "Club 103.2 mph · Launch 12.6° · Spin 2,380 rpm" ("—" when missing). */
 val DrivingRangeUiState.compactMetricsSummary: String
     get() {

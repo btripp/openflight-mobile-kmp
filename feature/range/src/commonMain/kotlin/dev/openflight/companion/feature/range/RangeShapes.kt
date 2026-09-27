@@ -2,26 +2,30 @@
 package dev.openflight.companion.feature.range
 
 import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.cos
-import kotlin.math.hypot
 import kotlin.math.sin
+import kotlin.math.sqrt
 
 /**
  * Plan F8a2a: where a shape's haze is measured from (a point on the ground, in scene metres) and
- * how strongly it hazes: 1 for grass and trees, less for the yardage targets so they stay readable.
+ * how strongly it hazes: 1 for trees, less for the yardage targets so they stay readable.
  */
 class HazeAnchor(
     val x: Double,
     val z: Double,
     val strength: Float = 1f,
 ) {
-    /** The shape's [base] colour for a camera at ([cameraX], [cameraZ]), packed `0xAARRGGBB`. */
+    /**
+     * The shape's [base] colour seen through [projection]'s camera, packed `0xAARRGGBB`. Plan
+     * F8a2p: hazed by [RangeProjection.hazeDistance], the same distance the ground's haze overlay
+     * uses, so a tree fades exactly as much as the grass at its foot.
+     */
     fun argb(
         base: RangeColor,
         haze: RangeHaze,
-        cameraX: Double,
-        cameraZ: Double,
-    ): Int = haze.argb(base, hypot(x - cameraX, z - cameraZ), strength)
+        projection: RangeProjection,
+    ): Int = haze.argb(base, projection.hazeDistance(x, z), strength)
 }
 
 /**
@@ -54,13 +58,28 @@ class WorldPolygon<P : PathSink>(
     var argb: Int = color.toArgb()
         private set
 
-    /** Re-colours it for a camera at ([cameraX], [cameraZ]); nothing without a haze anchor. Allocation-free. */
+    /** Plan F8a2p: the drawn outline's pixel bounds at the last [project] (meaningless while not [visible]). */
+    var left = 0f
+        private set
+    var top = 0f
+        private set
+    var right = 0f
+        private set
+    var bottom = 0f
+        private set
+
+    /** Re-colours it for [projection]'s camera; without a haze anchor it keeps [color]. Allocation-free. */
     fun tint(
         style: RangeHaze,
-        cameraX: Double,
-        cameraZ: Double,
+        projection: RangeProjection,
     ) {
-        haze?.let { argb = it.argb(color, style, cameraX, cameraZ) }
+        argb = haze?.argb(color, style, projection) ?: color.toArgb()
+    }
+
+    /** Plan F8a2p: multiplies the tinted colour's alpha by [factor] (a marker behind the overlay UI). */
+    fun fade(factor: Float) {
+        val alpha = ((argb ushr ALPHA_SHIFT) * factor.coerceIn(0f, 1f) + HALF_STEP).toInt()
+        argb = (argb and RGB_MASK) or (alpha shl ALPHA_SHIFT)
     }
 
     val vertexCount: Int get() = vertices.size / STRIDE
@@ -71,6 +90,10 @@ class WorldPolygon<P : PathSink>(
     ) {
         path.rewind()
         visible = false
+        left = Float.POSITIVE_INFINITY
+        top = Float.POSITIVE_INFINITY
+        right = Float.NEGATIVE_INFINITY
+        bottom = Float.NEGATIVE_INFINITY
         var start = 0
         for (ring in ringSizes.indices) {
             val size = ringSizes[ring]
@@ -111,10 +134,153 @@ class WorldPolygon<P : PathSink>(
         val point = scratch.point
         for (index in 0 until clipped) {
             projection.projectInto(scratch.xs[index], scratch.ys[index], scratch.zs[index], point, 0)
-            if (index == 0) path.moveTo(point[0], point[1]) else path.lineTo(point[0], point[1])
+            val x = point[0]
+            val y = point[1]
+            if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
+            if (x < left) left = x
+            if (x > right) right = x
+            if (y < top) top = y
+            if (y > bottom) bottom = y
         }
         path.close()
         return true
+    }
+}
+
+/**
+ * Plan F8a2p: one soft mowing stripe, a band across the fairway [nearMeters]..[farMeters] down the
+ * range. [polygon] is its outline (clipped to the fairway); the platform fills it with the
+ * style's `stripeGradient` laid from ([startX], [startY]), its near edge, to ([endX], [endY]), its
+ * far edge, so the stripe fades in and out along the range instead of ending at a hard line.
+ *
+ * The gradient runs square to the stripe's near edge as drawn (so that whole edge is clear), and
+ * when the camera is over the stripe, from where its middle line comes into view, extended back to
+ * where the near edge would be. [gradientVisible] is false when there's no gradient to draw (the
+ * stripe is behind the camera or seen edge-on).
+ */
+class WorldStripe<P : PathSink>(
+    val polygon: WorldPolygon<P>,
+    private val centerX: Double,
+    private val nearMeters: Double,
+    private val farMeters: Double,
+) {
+    var startX = 0f
+        private set
+    var startY = 0f
+        private set
+    var endX = 0f
+        private set
+    var endY = 0f
+        private set
+    var gradientVisible = false
+        private set
+
+    /** Projects the outline and lays out its gradient for [projection]. Allocation-free. */
+    fun project(
+        projection: RangeProjection,
+        scratch: SceneScratch,
+    ) {
+        polygon.project(projection, scratch)
+        gradientVisible = polygon.visible && layOutGradient(projection, scratch.point)
+    }
+
+    @Suppress("ReturnCount") // Each early return is a way the stripe has no gradient to draw.
+    private fun layOutGradient(
+        projection: RangeProjection,
+        point: FloatArray,
+    ): Boolean {
+        // Scene z of the near and far edges (downrange is −z), and where the middle line enters view.
+        val nearZ = -nearMeters
+        val farZ = -farMeters
+        val minDepth = RangeProjection.NEAR_PLANE_METERS * 2
+        val nearDepth = projection.depth(centerX, 0.0, nearZ)
+        val farDepth = projection.depth(centerX, 0.0, farZ)
+        if (nearDepth < minDepth && farDepth < minDepth) return false
+        // The fraction along the stripe (0 near, 1 far) of the first point in front of the camera.
+        val from =
+            when {
+                nearDepth >= minDepth -> 0.0
+                else -> (minDepth - nearDepth) / (farDepth - nearDepth)
+            }
+        val to =
+            when {
+                farDepth >= minDepth -> 1.0
+                else -> (minDepth - nearDepth) / (farDepth - nearDepth)
+            }
+        if (to - from < MIN_VISIBLE_FRACTION) return false
+        val fromZ = nearZ + (farZ - nearZ) * from
+        val toZ = nearZ + (farZ - nearZ) * to
+        // The near edge's direction on screen, from a metre either side of the middle line.
+        projection.projectInto(centerX - 1.0, 0.0, fromZ, point, 0)
+        val edgeX0 = point[0]
+        val edgeY0 = point[1]
+        projection.projectInto(centerX + 1.0, 0.0, fromZ, point, 0)
+        var normalX = -(point[1] - edgeY0)
+        var normalY = point[0] - edgeX0
+        val normalLength = sqrt(normalX * normalX + normalY * normalY)
+        if (normalLength < MIN_PIXELS || normalLength.isNaN()) return false
+        normalX /= normalLength
+        normalY /= normalLength
+        projection.projectInto(centerX, 0.0, fromZ, point, 0)
+        val fromX = point[0]
+        val fromY = point[1]
+        projection.projectInto(centerX, 0.0, toZ, point, 0)
+        val along = (point[0] - fromX) * normalX + (point[1] - fromY) * normalY
+        if (abs(along) < MIN_PIXELS) return false
+        // Screen distance per unit of stripe fraction, then extend to fractions 0 and 1.
+        val perUnit = along / (to - from).toFloat()
+        startX = fromX - normalX * perUnit * from.toFloat()
+        startY = fromY - normalY * perUnit * from.toFloat()
+        endX = fromX + normalX * perUnit * (1 - from).toFloat()
+        endY = fromY + normalY * perUnit * (1 - from).toFloat()
+        return true
+    }
+
+    private companion object {
+        const val MIN_VISIBLE_FRACTION = 1e-3
+        const val MIN_PIXELS = 0.5f
+    }
+}
+
+/**
+ * Plan F8a2p: the screen rectangles the overlaid UI covers (the metric cards, the controls, the
+ * chips), in canvas pixels, which yardage labels and far markers keep clear of. Each is `left, top,
+ * right, bottom` in [rects]. Pure and allocation-free to query; [set] copies only when they changed.
+ */
+class RangeObstructions {
+    private var rects = FloatArray(0)
+
+    /** How many rectangles there are. */
+    val count: Int get() = rects.size / RECT_STRIDE
+
+    /** Replaces the rectangles with [packed] (`left, top, right, bottom` each); returns whether they changed. */
+    fun set(packed: FloatArray): Boolean {
+        if (packed.contentEquals(rects)) return false
+        rects = packed.copyOf(packed.size - packed.size % RECT_STRIDE)
+        return true
+    }
+
+    /** Whether the box [left]..[right] × [top]..[bottom] overlaps any rectangle (touching edges don't). */
+    fun intersects(
+        left: Float,
+        top: Float,
+        right: Float,
+        bottom: Float,
+    ): Boolean {
+        var at = 0
+        while (at < rects.size) {
+            val acrossOverlaps = left < rects[at + RIGHT] && right > rects[at]
+            if (acrossOverlaps && top < rects[at + BOTTOM] && bottom > rects[at + TOP]) return true
+            at += RECT_STRIDE
+        }
+        return false
+    }
+
+    companion object {
+        const val RECT_STRIDE = 4
+        private const val TOP = 1
+        private const val RIGHT = 2
+        private const val BOTTOM = 3
     }
 }
 
@@ -190,16 +356,15 @@ class WorldTree<P : PathSink>(
 
     private val anchor = HazeAnchor(x, z)
 
-    /** Plan F8a2a: re-colours the trunk and crowns for a camera at ([cameraX], [cameraZ]). */
+    /** Plan F8a2a: re-colours the trunk and crowns for [projection]'s camera. */
     fun tint(
         haze: RangeHaze,
-        cameraX: Double,
-        cameraZ: Double,
+        projection: RangeProjection,
     ) {
-        trunk.tint(haze, cameraX, cameraZ)
+        trunk.tint(haze, projection)
         for (index in crowns.indices) {
             val crown = crowns[index]
-            crown.argb = anchor.argb(crown.color, haze, cameraX, cameraZ)
+            crown.argb = anchor.argb(crown.color, haze, projection)
         }
     }
 
@@ -235,10 +400,22 @@ class WorldLabel(
     var visible = false
         private set
 
+    /**
+     * Plan F8a2p: the label's box would overlap the overlaid UI ([RangeObstructions]), so it isn't
+     * drawn. Every yardage it names is also a marker on the range and the carry is in the metrics,
+     * so hiding it hides no information that isn't on screen elsewhere.
+     */
+    var obstructed = false
+        private set
+
+    /** Whether the platform draws it: [visible] and not [obstructed]. */
+    val drawn: Boolean get() = visible && !obstructed
+
     fun project(
         projection: RangeProjection,
         scratch: SceneScratch,
     ) {
+        obstructed = false
         val depth = projection.depth(x, y, z)
         visible = depth > RangeProjection.NEAR_PLANE_METERS
         if (!visible) return
@@ -258,6 +435,38 @@ class WorldLabel(
         minPixels: Float,
         maxPixels: Float,
     ): Float = (scale * heightMeters).coerceIn(minPixels, maxPixels)
+
+    /**
+     * Plan F8a2p: marks it [obstructed] when its box at [fontPixels] overlaps [obstructions]. The
+     * box is estimated the same way on both platforms (bold digits are about [GLYPH_WIDTH_EM] of the
+     * font size wide, the line [LINE_HEIGHT_EM] tall), bottom-centred on the anchor like the text.
+     */
+    fun obstruct(
+        obstructions: RangeObstructions,
+        fontPixels: Float,
+    ) {
+        obstructed = false
+        if (!visible || obstructions.count == 0) return
+        val halfWidth = fontPixels * (GLYPH_WIDTH_EM * text.length + PADDING_EM) / 2
+        obstructed =
+            obstructions.intersects(
+                anchorX - halfWidth,
+                anchorY - fontPixels * LINE_HEIGHT_EM,
+                anchorX + halfWidth,
+                anchorY,
+            )
+    }
+
+    companion object {
+        /** A bold digit's advance, in ems. */
+        const val GLYPH_WIDTH_EM = 0.62f
+
+        /** A label line's height, in ems. */
+        const val LINE_HEIGHT_EM = 1.25f
+
+        /** Clearance around the text, in ems. */
+        const val PADDING_EM = 0.4f
+    }
 }
 
 /** Reusable buffers for projecting the scene without allocating. */
@@ -295,3 +504,8 @@ private val LOBE_SIN = FloatArray(LOBE_SEGMENTS) { sin(2 * PI * it / LOBE_SEGMEN
 
 /** A label is drawn while a metre spans at least this fraction of the canvas height (out to ~200 yd). */
 private const val MIN_LABEL_PIXELS_PER_METER_FRACTION = 0.0045f
+
+// Packed `0xAARRGGBB` colours (plan F8a2p's marker fade).
+private const val ALPHA_SHIFT = 24
+private const val RGB_MASK = 0x00FFFFFF
+private const val HALF_STEP = 0.5f

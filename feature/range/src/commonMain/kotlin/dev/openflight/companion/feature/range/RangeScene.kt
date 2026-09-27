@@ -16,28 +16,49 @@ import kotlin.math.sin
  * (RangeSceneController.swift `addGround`/`addTeeBox`/`addTargets`/`addTrees`); colours come from
  * [style].
  *
- * Plan F8a2a, the atmosphere pass: the ground and fairway are split into depth bands, and each
- * band, stripe, target and tree is re-coloured with every re-projection, hazed by its distance
- * from the camera ([RangeVisualStyle.haze], [WorldPolygon.argb]); frames that don't move the
- * camera change no colour. The rough runs out to the horizon, grass mottling and trees' contact
- * shadows are one multi-ring polygon each, and every tree is a trunk and three lobed crown tones
- * whose shape, size and shade vary by a seed.
+ * Plan F8a2a, the atmosphere pass: haze, grass mottling, trees' contact shadows (one multi-ring
+ * polygon each) and trees of a trunk and three lobed crown tones whose shape, size and shade vary by
+ * a seed. Plan F8a2p feathers the ground. Hazed depth bands showed as hard slabs under the follow
+ * camera, so now the rough is one flat fill below the horizon, the fairway one polygon and the
+ * mowing stripes soft gradients ([stripes]). One vertical gradient overlay hazes everything on the
+ * ground at once ([RangeHaze.overlayStops], laid from [hazeTopY] to [hazeBottomY]). It runs
+ * continuously from the camera to the horizon, with no seams.
+ *
+ * Plan F8a2p also keeps the yardage labels and far markers clear of the overlaid UI. [obstruct]
+ * hides a label whose box overlaps one of the platform's [RangeObstructions], and fades a marker
+ * under one to [OBSTRUCTED_MARKER_ALPHA]. No information is lost: every yardage is also its
+ * marker's place on the range, and the carry is in the metrics.
  *
  * Shared by both renderers (plan F8c1). [newPath] makes each shape's platform [PathSink], once, at
- * construction (and in [landingMarker], once per flight). Draw order, back to front: the backdrop
- * (the sky gradient to [backdropHorizon], the [sky], the distant ground band below it),
- * [polygons], then the trees in [treeOrder] (trunk, then each crown tone), then the visible
- * [labels].
+ * construction (and in [landingMarker], once per flight). Draw order, back to front:
+ * 1. the backdrop: the sky gradient to [backdropHorizon], the [sky], then [RangeVisualStyle.ground]
+ *    from the horizon down;
+ * 2. [fairway], the [stripes] (each with [RangeVisualStyle.stripeGradient]), [groundPolygons];
+ * 3. the haze overlay, while [hazeVisible];
+ * 4. [polygons] (the yardage targets and the tee box), the trees in [treeOrder] (trunk, then each
+ *    crown tone), then the labels that are [WorldLabel.drawn].
  */
 class RangeScene<P : PathSink>(
     description: RangeSceneDescription,
     val style: RangeVisualStyle,
     private val newPath: () -> P,
 ) {
-    /** Ground-level shapes in drawing order (back to front along the range). */
+    /** Plan F8a2p: the fairway, one flat polygon under the haze overlay. */
+    val fairway: WorldPolygon<P>
+
+    /** Plan F8a2p: the soft mowing stripes, near to far, over the [fairway]. */
+    val stripes: List<WorldStripe<P>>
+
+    /** Plan F8a2p: the rest of the ground under the haze: mottling, the trees' shadows and the target line. */
+    val groundPolygons: List<WorldPolygon<P>>
+
+    /** Shapes drawn over the haze overlay, back to front: the yardage targets and the tee box. */
     val polygons: List<WorldPolygon<P>>
     val labels: List<WorldLabel>
     val trees: List<WorldTree<P>>
+
+    /** Each yardage target's two discs, outer then inner (plan F8a2p: faded together under the UI). */
+    private val markers: List<Pair<WorldPolygon<P>, WorldPolygon<P>>>
 
     /** The sun and the far ridges (plan F8a2a). */
     val sky: RangeSky<P> = RangeSky(style, newPath)
@@ -51,16 +72,34 @@ class RangeScene<P : PathSink>(
     var horizonY = 0f
         private set
 
+    /**
+     * Plan F8a2p: the haze overlay's gradient runs from [hazeTopY] (offset 0, the horizon) to
+     * [hazeBottomY] (offset 1, the ground [RangeHaze.referenceMeters] away) and is clamped beyond
+     * them. It fills from the horizon (clamped to the canvas) to the canvas bottom. It isn't drawn
+     * while [hazeVisible] is false (the camera looking straight down or up).
+     */
+    var hazeTopY = 0f
+        private set
+    var hazeBottomY = 0f
+        private set
+    var hazeVisible = false
+        private set
+
+    private var projected: RangeProjection? = null
+
     init {
         val builder = Builder(style, newPath)
-        builder.ground(description)
+        fairway = builder.fairway(description)
+        stripes = builder.stripes(description)
         builder.mottling()
         builder.treeShadows(description.trees)
         builder.targetLine(description)
+        groundPolygons = builder.ground.toList()
         builder.targets(description)
         builder.teeBox()
         polygons = builder.polygons
         labels = builder.labels
+        markers = builder.markers
         trees =
             description.trees
                 .sortedByDescending { it.downrangeMeters }
@@ -70,19 +109,55 @@ class RangeScene<P : PathSink>(
 
     /** Re-projects everything for [projection]'s current camera. Allocation-free. */
     fun project(projection: RangeProjection) {
+        projected = projection
+        fairway.project(projection, scratch)
+        for (index in stripes.indices) stripes[index].project(projection, scratch)
+        for (index in groundPolygons.indices) groundPolygons[index].project(projection, scratch)
         for (index in polygons.indices) polygons[index].project(projection, scratch)
         for (index in labels.indices) labels[index].project(projection, scratch)
         for (index in trees.indices) trees[index].project(projection, scratch)
-        tint(projection.cameraX, projection.cameraZ)
+        tint(projection)
         sortTreesFarToNear()
         horizonY = projection.horizonY()
+        val span = projection.groundPixelsBelowHorizon(style.haze.referenceMeters)
+        hazeVisible = horizonY.isFinite() && span.isFinite()
+        hazeTopY = horizonY
+        hazeBottomY = horizonY + span
         sky.project(projection, horizonY)
     }
 
     /**
+     * Plan F8a2p: hides the labels and fades the markers that the overlaid UI covers, for the last
+     * [project]ed camera. A label's box is measured at its font size: [labelHeightMeters] at its
+     * depth, clamped to [minLabelPixels]..[maxLabelPixels] (the platform's pixel sizes). Call it
+     * after every [project], and again when [obstructions] change. Allocation-free.
+     */
+    fun obstruct(
+        obstructions: RangeObstructions,
+        labelHeightMeters: Float,
+        minLabelPixels: Float,
+        maxLabelPixels: Float,
+    ) {
+        val projection = projected ?: return
+        for (index in labels.indices) {
+            val label = labels[index]
+            label.obstruct(obstructions, label.fontPixels(labelHeightMeters, minLabelPixels, maxLabelPixels))
+        }
+        for (index in markers.indices) {
+            val (outer, inner) = markers[index]
+            outer.tint(style.haze, projection)
+            inner.tint(style.haze, projection)
+            if (outer.visible && obstructions.intersects(outer.left, outer.top, outer.right, outer.bottom)) {
+                outer.fade(OBSTRUCTED_MARKER_ALPHA)
+                inner.fade(OBSTRUCTED_MARKER_ALPHA)
+            }
+        }
+    }
+
+    /**
      * The sky / distant-ground split on a [height]-pixel canvas: [horizonY] clamped to the canvas.
-     * The sky gradient ([RangeVisualStyle.sky]) spans 0 to it, and [RangeVisualStyle.distantGround]
-     * fills it to [height] (past the ground plane's far end).
+     * The sky gradient ([RangeVisualStyle.sky]) spans 0 to it, and [RangeVisualStyle.ground]
+     * fills it to [height], under the haze overlay.
      */
     fun backdropHorizon(height: Float): Float = horizonY.coerceIn(0f, height)
 
@@ -93,13 +168,10 @@ class RangeScene<P : PathSink>(
             disc(landing, LANDING_INNER_RADIUS_METERS, LANDING_INNER_HEIGHT_METERS, style.landingInner, newPath()),
         )
 
-    /** Plan F8a2a: every hazed shape's colour for a camera at ([cameraX], [cameraZ]). */
-    private fun tint(
-        cameraX: Double,
-        cameraZ: Double,
-    ) {
-        for (index in polygons.indices) polygons[index].tint(style.haze, cameraX, cameraZ)
-        for (index in trees.indices) trees[index].tint(style.haze, cameraX, cameraZ)
+    /** Every hazed shape's colour for [projection]'s camera (the ground itself is hazed by the overlay). */
+    private fun tint(projection: RangeProjection) {
+        for (index in polygons.indices) polygons[index].tint(style.haze, projection)
+        for (index in trees.indices) trees[index].tint(style.haze, projection)
     }
 
     /** Insertion sort (the order barely changes between frames, and it doesn't allocate). */
@@ -120,61 +192,65 @@ class RangeScene<P : PathSink>(
         val style: RangeVisualStyle,
         val newPath: () -> P,
     ) {
+        /** Ground shapes under the haze overlay (plan F8a2p). */
+        val ground = mutableListOf<WorldPolygon<P>>()
+
+        /** Shapes over the haze overlay. */
         val polygons = mutableListOf<WorldPolygon<P>>()
         val labels = mutableListOf<WorldLabel>()
+        val markers = mutableListOf<Pair<WorldPolygon<P>, WorldPolygon<P>>>()
 
         /** The sun's horizontal direction: highlights face it, shadows fall away from it. */
         private val sunX = sin(style.sun.azimuthDegrees * PI / DEGREES_PER_HALF_TURN)
         private val sunZ = -cos(style.sun.azimuthDegrees * PI / DEGREES_PER_HALF_TURN)
 
-        /** Plan F8a2a: the rough and the fairway in hazed depth bands, then the mowing stripes. */
-        fun ground(description: RangeSceneDescription) {
-            for (band in 0 until GROUND_BAND_EDGES.size - 1) {
-                val near = GROUND_BAND_EDGES[band]
-                val far = GROUND_BAND_EDGES[band + 1]
-                val halfWidth = if (band == 0) NEAR_GROUND_HALF_WIDTH_METERS else FAR_GROUND_HALF_WIDTH_METERS
-                polygons += band(near, far, halfWidth, style.ground)
-            }
-            val fairwayEnd = description.rangeDepthMeters - FAIRWAY_OFFSET_METERS
+        /** Plan F8a2p: the fairway, one polygon from just behind the tee to its far end. */
+        fun fairway(description: RangeSceneDescription): WorldPolygon<P> {
+            val near = -FAIRWAY_OFFSET_METERS
+            val far = fairwayEnd(description)
+            return WorldPolygon(
+                rectangle(0.0, -(near + far) / 2, description.fairwayWidthMeters / 2, (far - near) / 2, 0.0),
+                style.fairway,
+                newPath(),
+            )
+        }
+
+        /**
+         * Plan F8a2p: the mowing stripes, each a full [STRIPE_SPACING_METERS] deep so neighbours meet
+         * where both have faded out, cut to the fairway.
+         */
+        fun stripes(description: RangeSceneDescription): List<WorldStripe<P>> {
             val halfWidth = description.fairwayWidthMeters / 2
-            for (band in 0 until FAIRWAY_BAND_EDGES.size) {
-                val near = if (band == 0) -FAIRWAY_OFFSET_METERS else FAIRWAY_BAND_EDGES[band - 1]
-                val far = if (band == FAIRWAY_BAND_EDGES.size - 1) fairwayEnd else FAIRWAY_BAND_EDGES[band]
-                polygons += band(near, far, halfWidth, style.fairway)
-            }
-            for (index in 0 until STRIPE_COUNT) {
-                val distance = index * STRIPE_SPACING_METERS + STRIPE_OFFSET_METERS
-                polygons +=
+            val fairwayEnd = fairwayEnd(description)
+            return (0 until STRIPE_COUNT).map { index ->
+                val center = index * STRIPE_SPACING_METERS + STRIPE_OFFSET_METERS
+                val near = center - STRIPE_SPACING_METERS / 2
+                val far = center + STRIPE_SPACING_METERS / 2
+                val drawnNear = near.coerceAtLeast(-FAIRWAY_OFFSET_METERS)
+                val drawnFar = far.coerceAtMost(fairwayEnd)
+                WorldStripe(
                     WorldPolygon(
-                        rectangle(0.0, -distance, halfWidth, STRIPE_LENGTH_METERS / 2, 0.0),
+                        rectangle(0.0, -(drawnNear + drawnFar) / 2, halfWidth, (drawnFar - drawnNear) / 2, 0.0),
                         style.stripe,
                         newPath(),
-                        haze = HazeAnchor(0.0, -distance),
-                    )
+                    ),
+                    centerX = 0.0,
+                    nearMeters = near,
+                    farMeters = far,
+                )
             }
         }
 
-        /** A ground rectangle across the range from [near] to [far] metres downrange, hazed from its middle. */
-        private fun band(
-            near: Double,
-            far: Double,
-            halfWidth: Double,
-            color: RangeColor,
-        ): WorldPolygon<P> =
-            WorldPolygon(
-                rectangle(0.0, -(near + far) / 2, halfWidth, (far - near) / 2, 0.0),
-                color,
-                newPath(),
-                haze = HazeAnchor(0.0, -(near + far) / 2),
-            )
+        private fun fairwayEnd(description: RangeSceneDescription): Double =
+            description.rangeDepthMeters - FAIRWAY_OFFSET_METERS
 
         /**
          * Plan F8a2a: low-alpha light and dark patches in the grass, each set one polygon of many
          * irregular rings (one fill each), scattered by a fixed seed.
          */
         fun mottling() {
-            polygons += patches(MOTTLE_LIGHT_SEED, style.mottleLight)
-            polygons += patches(MOTTLE_DARK_SEED, style.mottleDark)
+            ground += patches(MOTTLE_LIGHT_SEED, style.mottleLight)
+            ground += patches(MOTTLE_DARK_SEED, style.mottleDark)
         }
 
         private fun patches(
@@ -221,13 +297,13 @@ class RangeScene<P : PathSink>(
                     vertices[at++] = centerZ + SHADOW_RADIUS_Z_METERS * s * sin(angle)
                 }
             }
-            polygons += WorldPolygon(vertices, style.treeShadow, newPath(), IntArray(trees.size) { SHADOW_SIDES })
+            ground += WorldPolygon(vertices, style.treeShadow, newPath(), IntArray(trees.size) { SHADOW_SIDES })
         }
 
         /** The target line down the middle of the fairway, out to the last marker. */
         fun targetLine(description: RangeSceneDescription) {
             val end = (description.markers.maxOfOrNull { it.yards } ?: 0) * RangeSceneDescription.YARDS_TO_METERS
-            polygons +=
+            ground +=
                 WorldPolygon(
                     rectangle(0.0, -end / 2, TARGET_LINE_HALF_WIDTH_METERS, end / 2, 0.0),
                     style.targetLine,
@@ -240,8 +316,8 @@ class RangeScene<P : PathSink>(
             description.markers.forEachIndexed { index, marker ->
                 val center = description.markerScenePositions[index]
                 val anchor = HazeAnchor(center.x, center.z, MARKER_HAZE_STRENGTH)
-                polygons += disc(center, marker.radiusMeters, 0.0, style.markerOuter, newPath(), anchor)
-                polygons +=
+                val outer = disc(center, marker.radiusMeters, 0.0, style.markerOuter, newPath(), anchor)
+                val inner =
                     disc(
                         center,
                         marker.radiusMeters * MARKER_INNER_FRACTION,
@@ -250,6 +326,9 @@ class RangeScene<P : PathSink>(
                         newPath(),
                         anchor,
                     )
+                polygons += outer
+                polygons += inner
+                markers += outer to inner
                 labels += WorldLabel(marker.yards.toString(), center.x, MARKER_LABEL_HEIGHT_METERS, center.z)
             }
         }
@@ -339,75 +418,66 @@ class RangeScene<P : PathSink>(
         }
     }
 
-    private companion object {
-        const val LANDING_OUTER_RADIUS_METERS = 2.2
-        const val LANDING_INNER_RADIUS_METERS = 1.35
-        const val LANDING_OUTER_HEIGHT_METERS = 0.065
-        const val LANDING_INNER_HEIGHT_METERS = 0.09
-        const val DEGREES_PER_HALF_TURN = 180.0
+    companion object {
+        /** Plan F8a2p: a yardage target under the overlaid UI keeps this much of its alpha. */
+        const val OBSTRUCTED_MARKER_ALPHA = 0.25f
 
-        /**
-         * Plan F8a2a: the rough's depth bands, in metres down the range from the tee. The first
-         * runs behind the camera; the last reaches far enough that its far edge sits within a few
-         * pixels of the horizon.
-         */
-        val GROUND_BAND_EDGES = doubleArrayOf(-150.0, 70.0, 150.0, 250.0, 380.0, 550.0, 800.0, 1200.0, 2000.0, 6000.0)
-        const val NEAR_GROUND_HALF_WIDTH_METERS = 600.0
-        const val FAR_GROUND_HALF_WIDTH_METERS = 3000.0
+        private const val LANDING_OUTER_RADIUS_METERS = 2.2
+        private const val LANDING_INNER_RADIUS_METERS = 1.35
+        private const val LANDING_OUTER_HEIGHT_METERS = 0.065
+        private const val LANDING_INNER_HEIGHT_METERS = 0.09
+        private const val DEGREES_PER_HALF_TURN = 180.0
 
-        /** The fairway's band edges, in metres downrange: every two mowing stripes. */
-        val FAIRWAY_BAND_EDGES = doubleArrayOf(30.0, 102.0, 174.0, 246.0, 318.0, 382.0)
-
-        const val MARKER_HAZE_STRENGTH = 0.5f
-        const val TREE_SEED = 7_919
-        const val TREE_MIN_BRIGHTNESS = 0.88
-        const val TREE_BRIGHTNESS_SPREAD = 0.24
-        const val TREE_MIN_HEIGHT = 0.9
-        const val TREE_HEIGHT_SPREAD = 0.3
-        const val LOBE_DROP_CHANCE = 0.4
-        const val LOBE_JITTER_METERS = 0.8
-        const val LOBE_MIN_SIZE = 0.85
-        const val LOBE_SIZE_SPREAD = 0.3
-        const val LOBE_SUN_OFFSET_METERS = 0.9
-        const val HALF = 0.5
-        const val HASH_SLOTS = 8
+        private const val MARKER_HAZE_STRENGTH = 0.5f
+        private const val TREE_SEED = 7_919
+        private const val TREE_MIN_BRIGHTNESS = 0.88
+        private const val TREE_BRIGHTNESS_SPREAD = 0.24
+        private const val TREE_MIN_HEIGHT = 0.9
+        private const val TREE_HEIGHT_SPREAD = 0.3
+        private const val LOBE_DROP_CHANCE = 0.4
+        private const val LOBE_JITTER_METERS = 0.8
+        private const val LOBE_MIN_SIZE = 0.85
+        private const val LOBE_SIZE_SPREAD = 0.3
+        private const val LOBE_SUN_OFFSET_METERS = 0.9
+        private const val HALF = 0.5
+        private const val HASH_SLOTS = 8
 
         // A mottle patch's hash slots, and a lobe's fields after its x.
-        const val SLOT_DISTANCE = 1
-        const val SLOT_RADIUS = 2
-        const val SLOT_ASPECT = 3
-        const val LOBE_Y = 1
-        const val LOBE_Z = 2
-        const val LOBE_RADIUS = 3
+        private const val SLOT_DISTANCE = 1
+        private const val SLOT_RADIUS = 2
+        private const val SLOT_ASPECT = 3
+        private const val LOBE_Y = 1
+        private const val LOBE_Z = 2
+        private const val LOBE_RADIUS = 3
 
         /** A template lobe's x at this value sits on the sun's side of the tree. */
-        const val SUN_SIDE = 99.0
+        private const val SUN_SIDE = 99.0
 
         // Crown lobes at scale 1: x, y, z, radius (metres; x and z relative to the trunk).
-        val DARK_LOBES = doubleArrayOf(-1.3, 5.3, 0.3, 2.2, 1.3, 5.1, 0.2, 2.1, 0.0, 4.9, 0.4, 1.9)
-        val MID_LOBES = doubleArrayOf(0.0, 6.5, 0.0, 2.7, -1.0, 7.8, -0.2, 2.0, 1.1, 7.3, -0.1, 1.8)
-        val LIGHT_LOBES = doubleArrayOf(SUN_SIDE, 8.3, -0.4, 1.35, 0.1, 9.2, -0.5, 0.95)
+        private val DARK_LOBES = doubleArrayOf(-1.3, 5.3, 0.3, 2.2, 1.3, 5.1, 0.2, 2.1, 0.0, 4.9, 0.4, 1.9)
+        private val MID_LOBES = doubleArrayOf(0.0, 6.5, 0.0, 2.7, -1.0, 7.8, -0.2, 2.0, 1.1, 7.3, -0.1, 1.8)
+        private val LIGHT_LOBES = doubleArrayOf(SUN_SIDE, 8.3, -0.4, 1.35, 0.1, 9.2, -0.5, 0.95)
 
-        const val MOTTLE_LIGHT_SEED = 101
-        const val MOTTLE_DARK_SEED = 211
-        const val MOTTLE_PATCHES = 8
-        const val MOTTLE_SIDES = 7
-        const val MOTTLE_HALF_SPREAD_METERS = 75.0
-        const val MOTTLE_NEAR_METERS = 15.0
-        const val MOTTLE_FAR_METERS = 250.0
-        const val MOTTLE_MIN_RADIUS_METERS = 5.0
-        const val MOTTLE_RADIUS_SPREAD_METERS = 9.0
-        const val MOTTLE_MIN_ASPECT = 0.6
-        const val MOTTLE_ASPECT_SPREAD = 0.5
-        const val MOTTLE_MIN_WOBBLE = 0.8
-        const val MOTTLE_WOBBLE_SPREAD = 0.3
-        const val MOTTLE_LIFT_METERS = 0.005
+        private const val MOTTLE_LIGHT_SEED = 101
+        private const val MOTTLE_DARK_SEED = 211
+        private const val MOTTLE_PATCHES = 8
+        private const val MOTTLE_SIDES = 7
+        private const val MOTTLE_HALF_SPREAD_METERS = 75.0
+        private const val MOTTLE_NEAR_METERS = 15.0
+        private const val MOTTLE_FAR_METERS = 250.0
+        private const val MOTTLE_MIN_RADIUS_METERS = 5.0
+        private const val MOTTLE_RADIUS_SPREAD_METERS = 9.0
+        private const val MOTTLE_MIN_ASPECT = 0.6
+        private const val MOTTLE_ASPECT_SPREAD = 0.5
+        private const val MOTTLE_MIN_WOBBLE = 0.8
+        private const val MOTTLE_WOBBLE_SPREAD = 0.3
+        private const val MOTTLE_LIFT_METERS = 0.005
 
-        const val SHADOW_SIDES = 12
-        const val SHADOW_OFFSET_METERS = 1.4
-        const val SHADOW_RADIUS_X_METERS = 3.2
-        const val SHADOW_RADIUS_Z_METERS = 2.2
-        const val SHADOW_LIFT_METERS = 0.01
+        private const val SHADOW_SIDES = 12
+        private const val SHADOW_OFFSET_METERS = 1.4
+        private const val SHADOW_RADIUS_X_METERS = 3.2
+        private const val SHADOW_RADIUS_Z_METERS = 2.2
+        private const val SHADOW_LIFT_METERS = 0.01
     }
 }
 
@@ -477,7 +547,6 @@ private const val FAIRWAY_OFFSET_METERS = 8.0
 private const val STRIPE_COUNT = 11
 private const val STRIPE_SPACING_METERS = 36.0
 private const val STRIPE_OFFSET_METERS = 12.0
-private const val STRIPE_LENGTH_METERS = 18.0
 private const val TARGET_LINE_HALF_WIDTH_METERS = 0.12
 private const val MARKER_INNER_FRACTION = 0.48
 private const val MARKER_LABEL_HEIGHT_METERS = 2.5

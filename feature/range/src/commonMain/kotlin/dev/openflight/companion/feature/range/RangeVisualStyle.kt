@@ -3,6 +3,7 @@ package dev.openflight.companion.feature.range
 
 import dev.openflight.companion.core.flight.RangeTracerStyle
 import kotlin.math.exp
+import kotlin.math.ln
 
 /**
  * A colour in sRGB, each component 0..1, with straight (not premultiplied) [alpha]. Pure data, so
@@ -87,9 +88,11 @@ data class RangeGradientStop(
  * Aerial perspective (plan F8a2a): the farther a shape is from the camera, the more of [color] it
  * takes on, so the range fades into the horizon instead of ending at a hard dark band.
  *
- * Each shape takes one colour per camera pose, from its distance to the camera ([amount]); the
- * ground and fairway are split into depth bands for it. Measured from the camera, not the tee, so
- * the follow camera flying down the range sees clear grass under it and haze ahead.
+ * Plan F8a2p: the distance is [RangeProjection.hazeDistance], the depth along the camera's heading
+ * (depth fog), measured from the camera, not the tee, so the follow camera flying down the range
+ * sees clear grass under it and haze ahead. Everything on the ground is hazed at once by one
+ * gradient overlay ([overlayStops]), continuous from the camera to the horizon; the markers and
+ * trees, drawn over it, each take one colour per pose from their own distance ([apply]).
  *
  * @property startMeters no haze nearer than this.
  * @property depthMeters the e-folding distance of the fade past [startMeters].
@@ -118,6 +121,39 @@ data class RangeHaze(
 
     /** [base] at infinity. */
     fun farColor(base: RangeColor): RangeColor = base.mix(color, maxAmount)
+
+    /**
+     * Plan F8a2p: the distance the ground haze gradient is laid out against: offset 1 of
+     * [overlayStops] is the ground this far away (no haze yet), offset 0 is the horizon.
+     */
+    val referenceMeters: Double get() = startMeters.coerceAtLeast(MIN_REFERENCE_METERS)
+
+    /**
+     * Plan F8a2p: the ground's aerial perspective as one vertical gradient of [color] whose alpha
+     * is the haze [amount], laid over everything drawn on the ground. Its offset `u` is
+     * [referenceMeters] / distance, which is linear in screen y from the horizon (u = 0, alpha
+     * [maxAmount]) down to the ground [referenceMeters] away (u = 1, alpha 0; clamped nearer), so
+     * the renderers only move and stretch it per pose ([RangeScene.hazeTopY],
+     * [RangeScene.hazeBottomY]). The stops are spaced so the alpha steps evenly: a stop apart
+     * differs by `maxAmount / OVERLAY_STEPS`, with linear interpolation in between.
+     */
+    val overlayStops: List<RangeGradientStop> by lazy {
+        val stops = mutableListOf(RangeGradientStop(0f, color.withAlpha(maxAmount)))
+        for (step in OVERLAY_STEPS - 1 downTo 0) {
+            val fraction = step.toDouble() / OVERLAY_STEPS
+            val distance = startMeters - depthMeters * ln(1.0 - fraction)
+            val offset = (referenceMeters / distance).coerceIn(0.0, 1.0).toFloat()
+            stops += RangeGradientStop(offset, color.withAlpha(amount(distance)))
+        }
+        stops
+    }
+
+    private companion object {
+        const val MIN_REFERENCE_METERS = 1.0
+
+        /** How many even alpha steps [overlayStops] takes from clear to [maxAmount]. */
+        const val OVERLAY_STEPS = 16
+    }
 
     /** [apply] packed as `0xAARRGGBB`, without allocating (the per-pose re-tint). */
     fun argb(
@@ -194,9 +230,10 @@ data class RangeRidge(
  *
  * @property sky the sky's vertical gradient, from the top of the canvas (0) to the horizon (1): the
  *   zenith colour down to a pale horizon band.
- * @property ground the rough near the tee. Farther ground takes on [haze]; the band from the
- *   horizon down, past the end of the ground plane, is [distantGround].
- * @property fairway the fairway's base (its darker mowing stripe); [stripe] is the lighter one.
+ * @property ground the rough: one flat fill from the horizon down (plan F8a2p), under the
+ *   [haze] overlay, so it reaches [distantGround] at the horizon.
+ * @property fairway the fairway's base (its darker mowing band); [stripe] is the lighter band,
+ *   drawn soft-edged with [stripeGradient].
  * @property teeMarker the two tee-box marker discs.
  * @property crownDark a crown's shaded underside; [crownMid] its body; [crownLight] its sunlit top.
  * @property treeShadow the soft contact shadow under each tree.
@@ -205,7 +242,8 @@ data class RangeRidge(
  *   [tracerGlowWidthFactor] times the core's width.
  * @property ball the ball on the tracer's tip.
  * @property shade the scrim over the whole scene that keeps the overlaid controls readable.
- * @property haze the aerial perspective.
+ * @property haze the aerial perspective: one gradient overlay over the ground ([RangeHaze.overlayStops])
+ *   and a per-pose tint for the markers and trees.
  * @property sun the sun or moon.
  * @property ridges the horizon silhouettes, far to near.
  * @property overlayTracerAlpha the alpha of the overlay's club-coloured trajectories (the club
@@ -264,7 +302,31 @@ data class RangeVisualStyle(
     /** The ground at infinity: the band from the horizon down, past the end of the ground plane. */
     val distantGround: RangeColor get() = haze.farColor(ground)
 
+    /**
+     * Plan F8a2p: one soft mowing stripe across its depth, 0 at its near edge to 1 at its far edge:
+     * [stripe] fading in from nothing, full across its middle and out again, so neighbouring
+     * stripes meet at the darker [fairway] with no edge. Each stripe fills its outline with this
+     * gradient laid from its near edge to its far edge ([WorldStripe]); the ground haze goes over it.
+     */
+    val stripeGradient: List<RangeGradientStop> by lazy {
+        STRIPE_PROFILE.map { (offset, alpha) -> RangeGradientStop(offset, stripe.withAlpha(stripe.alpha * alpha)) }
+    }
+
     private companion object {
+        /** (offset, alpha) along a stripe: a smooth bell, clear at both edges. */
+        val STRIPE_PROFILE =
+            listOf(
+                0f to 0f,
+                0.12f to 0.18f,
+                0.25f to 0.6f,
+                0.38f to 0.92f,
+                0.5f to 1f,
+                0.62f to 0.92f,
+                0.75f to 0.6f,
+                0.88f to 0.18f,
+                1f to 0f,
+            )
+
         const val OVERLAY_TRACER_ALPHA = 0.7f
         const val LABEL_HEIGHT_METERS = 2.2f
         const val MIN_LABEL_SIZE = 9f

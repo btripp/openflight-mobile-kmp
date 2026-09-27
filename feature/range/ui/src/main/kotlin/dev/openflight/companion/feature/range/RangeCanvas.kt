@@ -4,6 +4,7 @@ package dev.openflight.companion.feature.range
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculateCentroid
+import androidx.compose.foundation.gestures.calculateRotation
 import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Spacer
@@ -23,9 +24,12 @@ import androidx.compose.ui.draw.DrawResult
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.isSpecified
 import androidx.compose.ui.input.pointer.PointerEvent
+import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextStyle
@@ -35,8 +39,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.openflight.companion.core.data.RangeCameraMode
 import dev.openflight.companion.core.designsystem.OfClubPalette
-import kotlin.math.abs
-import kotlin.math.roundToInt
+import dev.openflight.companion.core.flight.RangeCameraPose
 
 /**
  * The 2.5D range: the scene, the one tracer, the ball, its shadow and the landing marker, all
@@ -54,13 +57,24 @@ import kotlin.math.roundToInt
  * frame while the follow camera moves, once per size for the fixed camera. Re-projecting rewrites
  * the same `Path`s and float arrays, so a frame allocates nothing but the planner's small pose.
  *
- * Plan F8a1 view controls: a pinch zooms, a two-finger drag pans along the ground, a one-finger
- * horizontal drag orbits, and a double tap resets. While [view] isn't the identity the follow
+ * Plan F8a1 view controls, made map-like by plan F8a2p (the mapping is [ViewTransform]'s):
+ * - one finger drags the range, and the ground under it follows;
+ * - a pinch zooms about its centre;
+ * - two fingers twisting, or dragging sideways, orbit;
+ * - a double tap resets.
+ *
+ * Zoom is pinch-only on screen; TalkBack gets "Zoom in" and "Zoom out" custom actions instead
+ * ([ZOOM_IN_ACTION], [ZOOM_OUT_ACTION]), a step of [ViewTransform.ZOOM_STEP] each.
+ *
+ * They work in every mode (live, replay and overlay). While [view] isn't the identity the follow
  * camera is suspended and the fixed tee camera is transformed instead. Each gesture reports the
  * whole new [ViewTransform] through [onViewChanged]. In the overlay, [overlay]'s static
  * trajectories are drawn (re-projected only when the camera moves) and a tap near a landing
  * selects it through [onSelectLanding]. [rollOut] draws the estimated roll-out to the total dot
  * once the ball has landed (or for the selected overlay shot).
+ *
+ * Plan F8a2p: [obstructions] are the overlaid UI's rectangles in this canvas's pixels (`left, top,
+ * right, bottom` each); the yardage labels under them are hidden and the markers faded.
  *
  * Plan F8a2a: [theme] picks the palette (the renderer is rebuilt when it changes). Debug
  * [freezeProgress] (the `range_freeze_progress` launch extra, iOS's `--range-freeze-progress`)
@@ -85,6 +99,7 @@ fun RangeCanvas(
     onSelectLanding: (String) -> Unit = {},
     theme: RangeTheme = RangeTheme.DAY,
     freezeProgress: Float? = null,
+    obstructions: FloatArray = NO_OBSTRUCTIONS,
 ) {
     var shown by remember { mutableStateOf<ActiveFlight?>(null) }
     val progress = remember { mutableFloatStateOf(0f) }
@@ -99,6 +114,7 @@ fun RangeCanvas(
     val viewChanged by rememberUpdatedState(onViewChanged)
     val resetView by rememberUpdatedState(onResetView)
     val selectLanding by rememberUpdatedState(onSelectLanding)
+    val obstructionState = rememberUpdatedState(obstructions)
     // Plan F8c1: the shared palette and sizes; plan F8a2a: the user's theme.
     val style = theme.style
     val rig = remember { RangeCameraRig() }
@@ -187,7 +203,9 @@ fun RangeCanvas(
                         )
                     }
                 renderer.labelFontPixels = style.maxLabelSize.sp.toPx()
+                frame.setLabelPixels(style.minLabelSize.sp.toPx(), renderer.labelFontPixels)
                 onDrawBehind {
+                    frame.setObstructions(obstructionState.value)
                     val current = shown
                     val transform = currentView.value
                     val pose =
@@ -218,9 +236,21 @@ fun RangeCanvas(
         modifier =
             modifier
                 .testTag(RangeTestTags.SCENE)
-                .semantics { stateDescription = viewDescription(view) }
-                .rangeViewGestures(
+                .semantics {
+                    stateDescription = view.description
+                    // Plan F8a2p: zoom without the pinch, for TalkBack (zoom is pinch-only on screen).
+                    customActions =
+                        listOf(
+                            CustomAccessibilityAction(ZOOM_IN_ACTION) {
+                                view.canZoomIn.also { if (it) viewChanged(view.zoomedBySteps(1)) }
+                            },
+                            CustomAccessibilityAction(ZOOM_OUT_ACTION) {
+                                view.canZoomOut.also { if (it) viewChanged(view.zoomedBySteps(-1)) }
+                            },
+                        )
+                }.rangeViewGestures(
                     renderer = renderer,
+                    base = rig.fixedPose,
                     view = currentView,
                     overlay = { currentOverlay },
                     onViewChanged = { viewChanged(it) },
@@ -231,13 +261,15 @@ fun RangeCanvas(
 }
 
 /**
- * Plan F8a1 view gestures on the scene: double tap resets, a tap near an overlay landing selects
- * it, two fingers pinch-zoom and pan along the ground, one finger drags to orbit. Each gesture
- * reports the whole new [ViewTransform].
+ * The range's view gestures (plan F8a1, made map-like by plan F8a2p): a double tap resets, a tap
+ * near an overlay landing selects it, one finger drags the range along the ground, and two fingers
+ * pinch-zoom about their centre and orbit by twisting or dragging sideways. Each gesture reports
+ * the whole new [ViewTransform], built from [base] (the tee camera) on this canvas.
  */
 @Suppress("LongParameterList") // The camera, the view and one callback per gesture.
 private fun Modifier.rangeViewGestures(
     renderer: RangeRenderer,
+    base: RangeCameraPose,
     view: State<ViewTransform>,
     overlay: () -> List<OverlayFlight>,
     onViewChanged: (ViewTransform) -> Unit,
@@ -256,35 +288,36 @@ private fun Modifier.rangeViewGestures(
                 }
             },
         )
-    }.pointerInput(Unit) {
-        // Pinch/pan with two fingers, orbit with one; taps pass through untouched.
+    }.pointerInput(base) {
+        // Taps pass through untouched: a finger only drags once it has moved past the touch slop.
         awaitEachGesture {
-            awaitFirstDown(requireUnconsumed = false)
+            val down = awaitFirstDown(requireUnconsumed = false)
             // Accumulated locally: the view model's state may lag a pointer event behind.
             var local = view.value
-            var dragX = 0f
-            var orbiting = false
+            var dragging = false
             do {
                 val event = awaitPointerEvent()
                 val pressed = event.changes.count { it.pressed }
+                val width = size.width.toFloat()
+                val height = size.height.toFloat()
                 val next =
                     when {
+                        width <= 0f || height <= 0f -> {
+                            local
+                        }
+
                         pressed >= 2 -> {
+                            dragging = true
                             event.changes.forEach { if (it.positionChanged()) it.consume() }
-                            local.pinchedAndPanned(event, renderer.currentProjection)
+                            local.pinchedAndTwisted(event, base, width, height)
                         }
 
                         pressed == 1 -> {
                             val change = event.changes.first { it.pressed }
-                            val dx = change.position.x - change.previousPosition.x
-                            dragX += dx
-                            orbiting = orbiting || abs(dragX) > viewConfiguration.touchSlop
-                            if (orbiting && size.width > 0) {
-                                change.consume()
-                                local.orbitedBy(dx / size.width * ViewTransform.ORBIT_DEGREES_PER_WIDTH)
-                            } else {
-                                local
-                            }
+                            dragging =
+                                dragging ||
+                                (change.position - down.position).getDistance() > viewConfiguration.touchSlop
+                            if (dragging) local.dragged(change, base, width, height) else local
                         }
 
                         else -> {
@@ -299,30 +332,48 @@ private fun Modifier.rangeViewGestures(
         }
     }
 
-/** A two-finger step: the pinch's zoom, then its centroid's move as a pan along the ground. */
-private fun ViewTransform.pinchedAndPanned(
-    event: PointerEvent,
-    projection: RangeProjection?,
+/** A one-finger step: the ground under the finger follows it (consumed, so it isn't a tap). */
+private fun ViewTransform.dragged(
+    change: PointerInputChange,
+    base: RangeCameraPose,
+    width: Float,
+    height: Float,
 ): ViewTransform {
-    val zoomed = zoomedBy(event.calculateZoom().toDouble())
-    val from = event.calculateCentroid(useCurrent = false)
-    val to = event.calculateCentroid(useCurrent = true)
-    return if (projection != null && from.isSpecified && to.isSpecified) {
-        zoomed.pannedAlongGround(projection, from.x, from.y, to.x, to.y)
-    } else {
-        zoomed
-    }
+    change.consume()
+    return draggedAlongGround(
+        base,
+        width,
+        height,
+        change.previousPosition.x,
+        change.previousPosition.y,
+        change.position.x,
+        change.position.y,
+    )
 }
 
-/** The scene's accessibility state: "Default view", or the zoom and orbit the user chose. */
-private fun viewDescription(view: ViewTransform): String =
-    if (view.isIdentity) {
-        "Default view"
-    } else {
-        "Zoom ${(view.zoom * PERCENT).roundToInt()} percent, orbit ${view.orbitYawDegrees.roundToInt()} degrees"
-    }
+/**
+ * A two-finger step: the pinch zooms about the fingers' centre, and a twist (clockwise orbits
+ * right) or a sideways drag of both fingers orbits.
+ */
+private fun ViewTransform.pinchedAndTwisted(
+    event: PointerEvent,
+    base: RangeCameraPose,
+    width: Float,
+    height: Float,
+): ViewTransform {
+    val from = event.calculateCentroid(useCurrent = false)
+    val to = event.calculateCentroid(useCurrent = true)
+    if (!from.isSpecified || !to.isSpecified) return this
+    val zoomed = zoomedAbout(event.calculateZoom().toDouble(), base, width, height, to.x, to.y)
+    val orbit = event.calculateRotation() + (to.x - from.x) / width * ViewTransform.ORBIT_DEGREES_PER_WIDTH
+    return if (orbit == 0.0) zoomed else zoomed.orbitedBy(orbit)
+}
 
+private val NO_OBSTRUCTIONS = FloatArray(0)
+
+/** Plan F8a2p: the scene's accessibility actions (TalkBack custom actions; VoiceOver's on iOS). */
+internal const val ZOOM_IN_ACTION = "Zoom in"
+internal const val ZOOM_OUT_ACTION = "Zoom out"
 private const val NANOS_PER_SECOND = 1_000_000_000.0
 private const val TAP_REACH_DP = 40
 private const val MIN_SPEED = 0.1
-private const val PERCENT = 100
