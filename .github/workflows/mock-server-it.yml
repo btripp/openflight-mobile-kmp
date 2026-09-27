@@ -57,16 +57,16 @@ jobs:
             repository: btripp/openflight
             ref: 07d5313c95b3be75e9ad24874072353d5cde950f
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Check out the backend
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: ${{ matrix.backend.repository }}
           ref: ${{ matrix.backend.ref }}
           path: backend
       # Upstream gitignores uv.lock and has no .python-version, so pin Python here and resolve
       # from pyproject.toml (not --frozen).
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v7
         with:
           python-version: "3.11"
           enable-cache: true
@@ -74,11 +74,11 @@ jobs:
       - name: Install the backend
         working-directory: backend
         run: uv sync
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: "21"
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
       - name: MockServerIT
         env:
           OPENFLIGHT_BACKEND_DIR: ${{ github.workspace }}/backend
