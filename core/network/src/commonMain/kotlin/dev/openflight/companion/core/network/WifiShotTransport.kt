@@ -84,6 +84,11 @@ private data class ServerErrorBody(
  * to [schemaEvents]. A Pi that rejects it with `400` is asked for the plain v1 stream from then on
  * (for this host); jfish's Pi ignores the query and simply keeps sending v1, which the decoder
  * tells apart by each payload's `schema_version`.
+ *
+ * Plan R8j: a `404` on the stream means the backend has no SSE route (stock upstream). That is
+ * final for this instance: the state becomes an error of kind
+ * [ConnectionErrorKind.STREAM_UNAVAILABLE] and nothing is retried until [retry] (or a new instance,
+ * for another host or the next app start). Every other failure keeps the backoff loop.
  */
 @Suppress("TooManyFunctions") // The ShotTransport surface plus the stream loop and its event handlers.
 class WifiShotTransport(
@@ -162,6 +167,11 @@ class WifiShotTransport(
             } catch (_: SchemaV2Rejected) {
                 // An older Pi refused `?schema=2`: ask for the v1 stream straight away.
                 requestSchemaV2 = false
+            } catch (_: StreamNotFound) {
+                // Plan R8j: a stock backend has no SSE route. Retrying can't help, so stop until an
+                // explicit retry (or a new transport for another host / the next app start).
+                _state.value = ConnectionState.Error(STREAM_NOT_FOUND_MESSAGE, ConnectionErrorKind.STREAM_UNAVAILABLE)
+                return
             } catch (error: Exception) {
                 // Any failure -- a bad status, a decode error surfaced as an exception, or the
                 // stream ending cleanly -- is retryable, so it is reported the same way here.
@@ -188,10 +198,7 @@ class WifiShotTransport(
                     socketTimeoutMillis = IDLE_TIMEOUT_MILLIS
                 }
             }.execute { response ->
-                if (response.status == HttpStatusCode.BadRequest && requestSchemaV2) throw SchemaV2Rejected()
-                if (response.status != HttpStatusCode.OK) {
-                    throw OpenFlightHttpError.UnexpectedStatus(response.status.value)
-                }
+                streamFailure(response.status)?.let { throw it }
                 _state.value = ConnectionState.Connected
                 val channel = response.bodyAsChannel()
                 val buffer = ByteArray(1)
@@ -200,6 +207,15 @@ class WifiShotTransport(
                 }
             }
     }
+
+    /** Why a stream response with [status] can't be read, or `null` for a `200`. */
+    private fun streamFailure(status: HttpStatusCode): Exception? =
+        when {
+            status == HttpStatusCode.OK -> null
+            status == HttpStatusCode.BadRequest && requestSchemaV2 -> SchemaV2Rejected()
+            status == HttpStatusCode.NotFound -> StreamNotFound()
+            else -> OpenFlightHttpError.UnexpectedStatus(status.value)
+        }
 
     /**
      * Handles one parsed event. Kept separate from the network loop so it's directly testable,
@@ -307,6 +323,11 @@ class WifiShotTransport(
 
 /** The Pi answered `?schema=2` with `400`: it predates schema v2. */
 private class SchemaV2Rejected : Exception("The Pi doesn't serve schema v2")
+
+/** Plan R8j: the Pi answered the stream with `404`: a stock backend without the SSE route. */
+private class StreamNotFound : Exception(STREAM_NOT_FOUND_MESSAGE)
+
+private const val STREAM_NOT_FOUND_MESSAGE = "OpenFlight returned HTTP 404: this Pi has no SSE shot stream."
 
 /** A stream failure as a state; a denied iOS Local Network permission gets its own, actionable kind. */
 private fun Throwable.toConnectionError(): ConnectionState.Error =

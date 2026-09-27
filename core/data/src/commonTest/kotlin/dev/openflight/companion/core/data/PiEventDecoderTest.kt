@@ -11,6 +11,7 @@ import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
+import dev.openflight.companion.core.model.EnrichmentProgress
 import dev.openflight.companion.core.model.pi.CloudUploadState
 import dev.openflight.companion.core.model.pi.PiNotice
 import dev.openflight.companion.core.model.pi.PowerState
@@ -79,8 +80,21 @@ class PiEventDecoderTest {
         assertThat(update.detail.shotNumber).isEqualTo(1)
         assertThat(update.detail.timestamp).isEqualTo(PiFixtures.SHOT_TIMESTAMP)
         assertThat(update.detail.iwr6843HorizontalDeg).isEqualTo(2.1)
-        // `pending` and `enrichment` are read by nothing, and don't break decoding.
+        assertThat(update.enrichment).isNull()
+        // Plan R8j: a skipped update's `enrichment` is kept for the live feed.
         assertThat(skipped.detail.shotNumber).isEqualTo(1)
+        assertThat(skipped.enrichment).isEqualTo(EnrichmentProgress("skipped", "enrichment queue full"))
+    }
+
+    @Test
+    fun aShotWithPendingHardwareIsProvisional() {
+        val plain = decodePiEvent(PiFixtures.event(PiFixtures.SHOT_FRAME)) as PiEvent.Shot
+        val empty = decode("shot", """{"shot":{"timestamp":"t"},"pending":{}}""") as PiEvent.Shot
+        val pending = decode("shot", """{"shot":{"timestamp":"t"},"pending":{"iwr6843":true}}""") as PiEvent.Shot
+
+        assertThat(plain.provisional).isFalse()
+        assertThat(empty.provisional).isFalse()
+        assertThat(pending.provisional).isTrue()
     }
 
     @Test

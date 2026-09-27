@@ -135,6 +135,45 @@ class WifiShotTransportStreamTest {
         }
 
     @Test
+    fun aStockPiWithoutTheStreamIsProbedOnceUntilAnExplicitRetry() =
+        runTest {
+            // Plan R8j: stock upstream has no /api/shots/stream, so Flask answers 404.
+            var requests = 0
+            val engine =
+                MockEngine {
+                    requests++
+                    respond(content = "Not Found", status = HttpStatusCode.NotFound)
+                }
+            val transport = wifiShotTransport(engine, testScheduler)
+
+            transport.state.test {
+                assertThat(awaitItem()).isEqualTo(ConnectionState.Idle)
+                transport.start()
+                assertThat(awaitItem()).isEqualTo(ConnectionState.Connecting)
+                val error = awaitItem() as ConnectionState.Error
+                assertThat(error.kind).isEqualTo(ConnectionErrorKind.STREAM_UNAVAILABLE)
+                assertThat(error.description.contains("404")).isTrue()
+
+                // Well past the 15 s maximum backoff: nothing is retried on its own.
+                advanceTimeBy(60_000)
+                runCurrent()
+                expectNoEvents()
+                assertThat(requests).isEqualTo(1)
+
+                // An explicit retry probes again.
+                transport.retry()
+                runCurrent()
+                // Idle and Connecting may be conflated; the probe ends in the same error.
+                var next = awaitItem()
+                while (next !is ConnectionState.Error) next = awaitItem()
+                assertThat(next.kind).isEqualTo(ConnectionErrorKind.STREAM_UNAVAILABLE)
+                assertThat(requests).isEqualTo(2)
+                cancelAndIgnoreRemainingEvents()
+            }
+            transport.disconnect()
+        }
+
+    @Test
     fun aBlankHostReportsAnActionableErrorWithoutConnecting() =
         runTest {
             var requested = false

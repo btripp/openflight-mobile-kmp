@@ -3,6 +3,7 @@ package dev.openflight.companion.core.data
 
 import dev.openflight.companion.core.model.CalibrationResult
 import dev.openflight.companion.core.model.ClubSelection
+import dev.openflight.companion.core.model.ConnectionErrorKind
 import dev.openflight.companion.core.model.ConnectionState
 import dev.openflight.companion.core.model.GolfClub
 import dev.openflight.companion.core.model.PhoneOrientationMeasurement
@@ -11,6 +12,7 @@ import dev.openflight.companion.core.model.ShotHistory
 import dev.openflight.companion.core.model.pi.ClearState
 import dev.openflight.companion.core.model.pi.DeletionState
 import dev.openflight.companion.core.model.pi.PiLinkState
+import dev.openflight.companion.core.network.OpenFlightHttpError
 import dev.openflight.companion.core.network.PiControlClient
 import dev.openflight.companion.core.protocol.SchemaV2Commands
 import dev.openflight.companion.core.protocol.SchemaV2Event
@@ -35,6 +37,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeoutOrNull
 
 /** Builds a Wi-Fi transport bound to one host; a host change builds a new one (plan §0.2). */
 internal fun interface WifiTransportFactory {
@@ -79,6 +82,15 @@ internal fun interface WifiTransportFactory {
  * mirrored into [persistentHistory] too. After the club sync on connect, a v2 BLE link also asks
  * for the profile roster and the power status (failures are logged: a Pi without `--battery`
  * refuses the latter).
+ *
+ * Plan R8j (stock upstream Pi: no `/api/shots/stream`, no `/api/club`): when the Wi-Fi stream
+ * answers 404 ([ConnectionErrorKind.STREAM_UNAVAILABLE]; the transport then stops probing until a
+ * retry, a host change or the next start) and the Pi's Socket.IO link is connected, the Pi's live
+ * `shot`/`shot_update` feed [history] and [latestShot] (stored once, by the [PiSessionRepository.liveShots]
+ * collector), [connectionState] shows the link's state instead of the 404, and the club follows the
+ * Pi's `session_state`/`club_changed`. A club call that gets 404 from `/api/club` switches to
+ * Socket.IO `set_club` for the rest of the connection. With SSE and `/api/club` present (fork
+ * backend) nothing changes: SSE feeds [history] and Socket.IO only enriches, so no shot is doubled.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 @Suppress("TooManyFunctions") // The ShotRepository surface (9) plus the session helpers.
@@ -110,6 +122,17 @@ internal class DefaultShotRepository(
 
     /** The active transport's kind, so [shutdownPi] can refuse to run over Bluetooth. */
     private val activeTransportType = MutableStateFlow<TransportType?>(null)
+
+    /** The active transport's own state; [connectionState] may show the Pi link's instead (R8j). */
+    private val transportState = MutableStateFlow<ConnectionState>(ConnectionState.Idle)
+
+    /** R8j: this connection's `/api/club` answered 404, so club calls go over Socket.IO. */
+    private val clubApiAbsent = MutableStateFlow(false)
+
+    private val mutableLiveShotSource = MutableStateFlow(LiveShotSource.NONE)
+
+    /** Plan R8j: where [history]'s live shots come from right now (for tests and MockServerIT). */
+    internal val liveShotSource: StateFlow<LiveShotSource> = mutableLiveShotSource.asStateFlow()
     private val controlMutex = Mutex()
     private var sessionJob: Job? = null
 
@@ -159,7 +182,15 @@ internal class DefaultShotRepository(
 
     override suspend fun setClub(club: GolfClub): ClubSelection {
         val transport = activeTransport.value ?: throw NoActiveTransportException()
-        val selection = controlMutex.withLock { transport.setClub(club) }
+        val selection =
+            controlMutex.withLock {
+                val pi = clubFallbackPi()
+                if (pi != null && clubApiAbsent.value) {
+                    setClubOverSocket(pi, club)
+                } else {
+                    clubApiOrFallback(pi, { transport.setClub(club) }) { setClubOverSocket(it, club) }
+                }
+            }
         settings.setSelectedClub(selection.club)
         return selection
     }
@@ -167,6 +198,52 @@ internal class DefaultShotRepository(
     override suspend fun currentClub(): ClubSelection {
         val transport = activeTransport.value ?: throw NoActiveTransportException()
         return readAndPersistClub(transport)
+    }
+
+    /** The Pi session a Wi-Fi club change can fall back to (plan R8j), or `null` on Bluetooth. */
+    private fun clubFallbackPi(): PiSessionRepository? =
+        piSession?.takeIf {
+            activeTransportType.value ==
+                TransportType.WIFI
+        }
+
+    /**
+     * Runs [request] against `/api/club`; when that route is missing (HTTP 404: a stock backend) and
+     * a Pi session exists, remembers that for this connection and runs [fallback] instead.
+     */
+    private suspend fun clubApiOrFallback(
+        pi: PiSessionRepository?,
+        request: suspend () -> ClubSelection,
+        fallback: suspend (PiSessionRepository) -> ClubSelection,
+    ): ClubSelection =
+        try {
+            request()
+        } catch (missing: OpenFlightHttpError.UnexpectedStatus) {
+            if (pi == null || missing.statusCode != HTTP_NOT_FOUND) throw missing
+            log("No /api/club on this Pi (HTTP 404): using Socket.IO for the club")
+            clubApiAbsent.value = true
+            fallback(pi)
+        }
+
+    /**
+     * Plan R8j: `set_club` over Socket.IO, confirmed by the Pi's `club_changed` broadcast (the
+     * server ignores an unknown club without replying, hence the timeout).
+     */
+    private suspend fun setClubOverSocket(
+        pi: PiSessionRepository,
+        club: GolfClub,
+    ): ClubSelection {
+        pi.setClub(club.wireValue)
+        val confirmed =
+            withTimeoutOrNull(CLUB_CONFIRMATION_TIMEOUT_MILLIS) { pi.club.first { it == club.wireValue } }
+                ?: throw ClubChangeNotConfirmedException()
+        return ClubSelection(status = CLUB_STATUS_OK, club = GolfClub.fromWireValue(confirmed) ?: club)
+    }
+
+    /** Plan R8j: the Pi's current club from its Socket.IO session (`session_state.club` / `club_changed`). */
+    private fun clubFromSocket(pi: PiSessionRepository): ClubSelection {
+        val club = checkNotNull(pi.club.value?.let(GolfClub::fromWireValue)) { "The Pi hasn't reported its club yet." }
+        return ClubSelection(status = CLUB_STATUS_OK, club = club)
     }
 
     override suspend fun submitCalibration(measurement: PhoneOrientationMeasurement): CalibrationResult {
@@ -288,19 +365,26 @@ internal class DefaultShotRepository(
                 }
             activeTransport.value = transport
             activeTransportType.value = key.type
+            clubApiAbsent.value = false
+            // R8j: the Socket.IO fallbacks only exist for a Wi-Fi transport with a Pi session.
+            val pi = piSession?.takeIf { key.type == TransportType.WIFI }
             try {
                 coroutineScope {
                     // Subscribe before start() so no shot or state change is missed.
                     launch(start = CoroutineStart.UNDISPATCHED) { transport.shots.collect { record(it) } }
                     launch(start = CoroutineStart.UNDISPATCHED) {
+                        var previous: ConnectionState = ConnectionState.Idle
                         transport.state.collect { state ->
                             // R8h: every successful (re)connect is a new history session.
-                            if (state == ConnectionState.Connected && mutableConnectionState.value != state) {
+                            if (state == ConnectionState.Connected && previous != state) {
                                 persistentHistory?.startSession(key.host, key.type)
                             }
-                            mutableConnectionState.value = state
+                            previous = state
+                            transportState.value = state
+                            publishConnectionState(pi)
                         }
                     }
+                    if (pi != null) followPiFallback(pi)
                     launch(start = CoroutineStart.UNDISPATCHED) {
                         transport.schemaEvents.collect { applySchemaEvent(it) }
                     }
@@ -320,6 +404,7 @@ internal class DefaultShotRepository(
                 transport.disconnect()
                 activeTransport.value = null
                 activeTransportType.value = null
+                transportState.value = ConnectionState.Idle
                 mutableConnectionState.value = ConnectionState.Idle
                 mutableSupportsControls.value = false
                 mutableActiveClub.value = null
@@ -350,13 +435,86 @@ internal class DefaultShotRepository(
         }
     }
 
-    private fun record(shot: ShotEvent) {
+    /**
+     * @param writeThrough `false` for a Pi live shot: [start] already files every one of those in
+     *   [persistentHistory], so it's written there exactly once.
+     */
+    private fun record(
+        shot: ShotEvent,
+        writeThrough: Boolean = true,
+    ) {
         val updated = shotHistory.record(shot)
         if (updated === shotHistory) return
         shotHistory = updated
         mutableHistory.value = updated.shots
         mutableLatestShot.value = updated.latestShot
-        persistentHistory?.record(shot, piSession?.detailFor(shot))
+        if (writeThrough) persistentHistory?.record(shot, piSession?.detailFor(shot))
+    }
+
+    /**
+     * Plan R8j: shows [connectionState] for the transport, except that a stream the Pi doesn't
+     * serve (stock backend: SSE 404) is no error while the Socket.IO link carries the shots: then
+     * the link's state stands in for it. Also settles [liveShotSource].
+     */
+    private fun publishConnectionState(pi: PiSessionRepository?) {
+        val transport = transportState.value
+        val link = pi?.linkState?.value
+        val streamMissing = transport.isStreamUnavailable()
+        mutableConnectionState.value = if (link != null && streamMissing) link.inPlaceOfStream() else transport
+        mutableLiveShotSource.value =
+            when {
+                transport == ConnectionState.Connected -> LiveShotSource.SSE
+                streamMissing && link == PiLinkState.Connected -> LiveShotSource.SOCKET_IO
+                else -> LiveShotSource.NONE
+            }
+    }
+
+    /**
+     * Plan R8j, for one Wi-Fi connection: follows the Pi link into [connectionState]; while the Pi
+     * serves no SSE stream, feeds its live `shot`/`shot_update` into [history] (upserted by
+     * `event_id`, see [toShotEvent]); and while it has no SSE stream or no `/api/club`, takes the
+     * club from its `session_state`/`club_changed`. With a working stream (fork backend) the stream
+     * stays the only source and Socket.IO only enriches.
+     */
+    private fun CoroutineScope.followPiFallback(pi: PiSessionRepository) {
+        launch(start = CoroutineStart.UNDISPATCHED) { pi.linkState.collect { publishConnectionState(pi) } }
+        launch(start = CoroutineStart.UNDISPATCHED) {
+            pi.liveShots.collect { live ->
+                if (liveShotSource.value == LiveShotSource.SOCKET_IO) recordLiveShot(live)
+            }
+        }
+        launch(start = CoroutineStart.UNDISPATCHED) {
+            combine(transportState, clubApiAbsent, pi.club) { transport, noClubApi, club ->
+                club?.takeIf { transport.isStreamUnavailable() || noClubApi }?.let(GolfClub::fromWireValue)
+            }.distinctUntilChanged()
+                .collect { club ->
+                    if (club != null) {
+                        mutableActiveClub.value = club
+                        settings.setSelectedClub(club)
+                    }
+                }
+        }
+    }
+
+    /** A Pi live shot into [history]; a `shot_update` replaces the shot it finalizes. */
+    private fun recordLiveShot(live: PiLiveShot) {
+        val mapped = live.toShotEvent() ?: return
+        val shots = shotHistory.shots
+        val shot =
+            if (live.isUpdate && shots.none { it.eventId == mapped.eventId }) {
+                // Same id whenever timestamp and number match; else match on shot_number, then timestamp.
+                val index =
+                    shots.indexOfShot(
+                        mapped.shotNumber,
+                        mapped.timestamp,
+                        ShotEvent::shotNumber,
+                        ShotEvent::timestamp,
+                    )
+                if (index >= 0) mapped.copy(eventId = shots[index].eventId) else mapped
+            } else {
+                mapped
+            }
+        record(shot, writeThrough = false)
     }
 
     private suspend fun syncClubOnConnect(
@@ -409,7 +567,15 @@ internal class DefaultShotRepository(
     }
 
     private suspend fun readAndPersistClub(transport: ShotTransport): ClubSelection {
-        val selection = controlMutex.withLock { transport.currentClub() }
+        val selection =
+            controlMutex.withLock {
+                val pi = clubFallbackPi()
+                if (pi != null && clubApiAbsent.value) {
+                    clubFromSocket(pi)
+                } else {
+                    clubApiOrFallback(pi, { transport.currentClub() }, ::clubFromSocket)
+                }
+            }
         settings.setSelectedClub(selection.club)
         return selection
     }
@@ -419,4 +585,50 @@ internal class DefaultShotRepository(
         /** `null` for Bluetooth, so a host edit doesn't restart the Bluetooth session. */
         val host: String?,
     )
+
+    private companion object {
+        const val HTTP_NOT_FOUND = 404
+        const val CLUB_STATUS_OK = "ok"
+
+        /** Like the Wi-Fi transport's control-request timeout. */
+        const val CLUB_CONFIRMATION_TIMEOUT_MILLIS = 10_000L
+    }
 }
+
+/** Plan R8j: which link feeds [ShotRepository.history] on Wi-Fi. */
+internal enum class LiveShotSource {
+    /** Not connected (or Bluetooth, which isn't tracked here). */
+    NONE,
+
+    /** The SSE stream (fork backend, jfish Pi); Socket.IO only enriches. */
+    SSE,
+
+    /** A stock backend without SSE: the Pi's Socket.IO `shot`/`shot_update`. */
+    SOCKET_IO,
+}
+
+private fun ConnectionState.isStreamUnavailable(): Boolean =
+    this is ConnectionState.Error && kind == ConnectionErrorKind.STREAM_UNAVAILABLE
+
+/** The shot-stream state to show while the Socket.IO link stands in for a missing SSE stream. */
+private fun PiLinkState.inPlaceOfStream(): ConnectionState =
+    when (this) {
+        PiLinkState.Connected -> {
+            ConnectionState.Connected
+        }
+
+        is PiLinkState.Reconnecting -> {
+            ConnectionState.Error(
+                reason,
+                if (localNetworkDenied) ConnectionErrorKind.LOCAL_NETWORK_DENIED else ConnectionErrorKind.OTHER,
+            )
+        }
+
+        is PiLinkState.Rejected -> {
+            ConnectionState.Error(reason, ConnectionErrorKind.ENDPOINT_REJECTED)
+        }
+
+        PiLinkState.Idle, PiLinkState.Connecting, PiLinkState.WifiOnly -> {
+            ConnectionState.Connecting
+        }
+    }
