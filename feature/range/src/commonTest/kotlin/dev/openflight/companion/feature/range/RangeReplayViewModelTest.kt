@@ -52,14 +52,22 @@ class RangeReplayViewModelTest {
         Dispatchers.resetMain()
     }
 
-    private fun makeViewModel(shots: FakeShotRepository = FakeShotRepository(settings)): DrivingRangeViewModel =
+    private fun makeViewModel(
+        shots: FakeShotRepository = FakeShotRepository(settings),
+        cheap: Boolean = false,
+    ): DrivingRangeViewModel =
         DrivingRangeViewModel(
             shots = shots,
             settings = settings,
             history = history,
             conditions = FakeConditionsRepository(),
             piSession = piSession,
-            flightPlan = { m, c, b -> testFlightPlan(m, c, b, ::countingSimulation) },
+            flightPlan =
+                if (cheap) {
+                    ::cheapFlightPlan
+                } else {
+                    { m, c, b -> testFlightPlan(m, c, b, ::countingSimulation) }
+                },
             computeDispatcher = StandardTestDispatcher(scheduler),
             distanceEstimate = { _, _, _ -> null },
         )
@@ -218,7 +226,8 @@ class RangeReplayViewModelTest {
                     )
                 },
             )
-            val viewModel = makeViewModel()
+            // 250 stored shots: no physics here (see cheapFlightPlan), only the cap and the order.
+            val viewModel = makeViewModel(cheap = true)
 
             viewModel.uiState.test {
                 viewModel.onEvent(DrivingRangeEvent.StartOverlay(sessionId = "big"))
