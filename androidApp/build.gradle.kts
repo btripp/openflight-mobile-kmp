@@ -4,16 +4,32 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
+// Release signing comes from user-level Gradle properties (~/.gradle/gradle.properties), never
+// from the repo: openflight.release.storeFile / storePassword / keyAlias / keyPassword. Without
+// them (CI, contributors) assembleRelease still builds, just unsigned.
+val releaseStoreFile: String? = providers.gradleProperty("openflight.release.storeFile").orNull
+
 android {
     namespace = "dev.openflight.companion"
 
     defaultConfig {
         applicationId = "dev.openflight.companion"
-        versionCode = 1
+        versionCode = 2
         versionName = "0.1.0"
+    }
+    signingConfigs {
+        if (releaseStoreFile != null) {
+            create("release") {
+                storeFile = file(releaseStoreFile)
+                storePassword = providers.gradleProperty("openflight.release.storePassword").get()
+                keyAlias = providers.gradleProperty("openflight.release.keyAlias").get()
+                keyPassword = providers.gradleProperty("openflight.release.keyPassword").get()
+            }
+        }
     }
     buildTypes {
         release {
+            signingConfigs.findByName("release")?.let { signingConfig = it }
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),

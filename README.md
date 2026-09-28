@@ -328,6 +328,23 @@ compliance. Keep every credential out of the repo: `.gitignore` covers `Local.xc
 `*.p12`, `*.p8` (App Store Connect API keys), `*.cer`, provisioning profiles and
 `ExportOptions.plist`.
 
+### Android release APK
+
+`./gradlew :androidApp:assembleRelease` signs the APK only when your **user-level**
+`~/.gradle/gradle.properties` (never the repo's) names a keystore:
+
+```properties
+openflight.release.storeFile=/Users/you/.android/openflight-release.jks
+openflight.release.storePassword=…
+openflight.release.keyAlias=openflight
+openflight.release.keyPassword=…
+```
+
+Without those properties (CI, contributors) the release build still compiles, unsigned. Keep the
+keystore and its passwords backed up outside the repo: an app signed with a lost key can't be
+updated in place. Bump `versionCode` in `androidApp/build.gradle.kts` with each release, like
+`CURRENT_PROJECT_VERSION` on iOS.
+
 ### Test commands
 
 ```bash
