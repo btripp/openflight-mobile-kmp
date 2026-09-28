@@ -200,6 +200,28 @@ private fun SettingsConnectedPreview() {
     }
 }
 
+/** Issue #7: a long reconnect reason wraps under "Live session" instead of squeezing it. */
+@Preview(heightDp = 900)
+@Preview(heightDp = 900, fontScale = 2f)
+@Composable
+private fun SettingsLongLiveSessionPreview() {
+    OfTheme {
+        SettingsScreen(
+            uiState = previewSettingsState(link = PREVIEW_LONG_LINK_STATUS),
+            onEvent = {},
+            onBack = {},
+        )
+    }
+}
+
+/** Issue #7: the reconnect reason a tester saw off a Pi network, with the default host. */
+internal val PREVIEW_LONG_LINK_STATUS =
+    PiLinkState.Reconnecting(
+        attempt = 3,
+        retryInMillis = 5_000,
+        reason = "Unable to resolve host \"raspberrypi.local\": No address associated with hostname",
+    )
+
 @Preview(heightDp = 1400)
 @Composable
 private fun SettingsBluetoothPreview() {

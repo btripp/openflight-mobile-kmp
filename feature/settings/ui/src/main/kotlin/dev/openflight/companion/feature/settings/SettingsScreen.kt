@@ -3,6 +3,7 @@ package dev.openflight.companion.feature.settings
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -247,15 +248,7 @@ private fun ConnectionCard(uiState: SettingsUiState) {
         InfoRow("Transport", transport)
         if (uiState.transport == TransportType.WIFI && !uiState.demo.enabled) InfoRow("Host", uiState.host)
         InfoRow("Shot stream", uiState.connectionState.description)
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            OfText(
-                text = "Live session",
-                role = OfTextRole.BodySmall,
-                color = OfColorTokens.CreamDim,
-                modifier = Modifier.weight(1f),
-            )
-            OfPill(label = uiState.linkDescription, tone = uiState.linkState.tone())
-        }
+        LiveSessionRow(description = uiState.linkDescription, tone = uiState.linkState.tone())
         // Plan R8f: say what's wrong in words, not only with the pill's colour.
         uiState.connectionProblem?.let { problem ->
             OfNotice(
@@ -268,6 +261,33 @@ private fun ConnectionCard(uiState: SettingsUiState) {
         if (uiState.mockMode) {
             OfText(text = "The Pi runs in mock mode", role = OfTextRole.BodySmall, color = OfColorTokens.Warning)
         }
+    }
+}
+
+/**
+ * "Live session" and the link's status pill. Issue #7: in a `Row` the unweighted pill was
+ * measured first and took the whole width for a long reconnect reason, leaving the weighted label
+ * a sliver, one letter per line. In a [FlowRow] the label keeps its own width; a pill that
+ * doesn't fit beside it moves to the next line and wraps across the full width.
+ */
+@Composable
+private fun LiveSessionRow(
+    description: String,
+    tone: StatusTone,
+) {
+    FlowRow(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalArrangement = Arrangement.spacedBy(OfSpacing.Xs),
+        itemVerticalAlignment = Alignment.CenterVertically,
+    ) {
+        OfText(
+            text = "Live session",
+            role = OfTextRole.BodySmall,
+            color = OfColorTokens.CreamDim,
+            modifier = Modifier.padding(end = OfSpacing.Md).testTag(SettingsUiTags.LIVE_SESSION_LABEL),
+        )
+        OfPill(label = description, tone = tone, modifier = Modifier.testTag(SettingsUiTags.LIVE_SESSION_STATUS))
     }
 }
 
