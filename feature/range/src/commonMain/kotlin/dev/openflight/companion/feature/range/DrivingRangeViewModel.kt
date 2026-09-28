@@ -3,6 +3,7 @@ package dev.openflight.companion.feature.range
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import dev.openflight.companion.core.data.BagRepository
 import dev.openflight.companion.core.data.ConditionsRepository
 import dev.openflight.companion.core.data.HistoryShot
 import dev.openflight.companion.core.data.PiSessionRepository
@@ -25,6 +26,7 @@ import dev.openflight.companion.core.model.ConnectionState
 import dev.openflight.companion.core.model.GolfClub
 import dev.openflight.companion.core.model.ShotEvent
 import dev.openflight.companion.core.model.TargetBearing
+import dev.openflight.companion.core.model.clubMenu
 import dev.openflight.companion.core.model.pi.PiBatteryWarning
 import dev.openflight.companion.core.model.pi.PiFeatureAvailability
 import dev.openflight.companion.core.model.pi.ShotDetail
@@ -33,12 +35,15 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -84,6 +89,8 @@ class DrivingRangeViewModel(
     private val computeDispatcher: CoroutineDispatcher = Dispatchers.Default,
     private val distanceEstimate: (FlightMeasurements, Conditions, TargetBearing?) -> ShotDistanceEstimate? =
         ShotDistanceEstimator()::estimate,
+    // Issue #15: the club picker lists the active bag's clubs first; without one, all 20.
+    private val bags: BagRepository? = null,
 ) : ViewModel() {
     private val initialShot = shots.latestShot.value
     private val flight = MutableStateFlow(FlightState(phase = RangePhase.Waiting, displayedShot = initialShot))
@@ -130,10 +137,16 @@ class DrivingRangeViewModel(
                 numbers = numbers,
             )
         }
+
+    /** Issue #15: the active bag's clubs in bag order, or `null` without a bag. */
+    private val bagClubs: Flow<List<GolfClub>?> =
+        bags?.activeBag()?.map { bag -> bag?.clubs?.map { it.club } } ?: flowOf(null)
+
     private val clubState =
-        combine(settings.selectedClub, shots.connectionState, clubRequest) { club, connection, request ->
+        combine(settings.selectedClub, shots.connectionState, clubRequest, bagClubs) { club, connection, request, bag ->
             RangeClubState(
                 selected = club,
+                menu = clubMenu(bag, club),
                 selectionEnabled = connection == ConnectionState.Connected,
                 isChanging = request.inFlight,
                 error = request.error,

@@ -211,6 +211,7 @@ struct RangeMetricsOverlay: View {
 
     private var clubMetric: some View {
         ClubSelectionMenu(
+            menu: club.menu,
             selectedClub: club.selected,
             // Connected (ContentView.swift:128) and no club change in flight (plan §0.3).
             isEnabled: club.selectionEnabled && !club.isChanging,

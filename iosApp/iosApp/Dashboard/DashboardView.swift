@@ -487,6 +487,7 @@ struct DashboardContent: View {
                 .foregroundStyle(Theme.creamDim)
 
             ClubSelectionMenu(
+                menu: connection.clubMenu,
                 selectedClub: connection.club,
                 isEnabled: connection.clubMenuEnabled,
                 onSelect: { send(DashboardEventClubSelected(club: $0)) }

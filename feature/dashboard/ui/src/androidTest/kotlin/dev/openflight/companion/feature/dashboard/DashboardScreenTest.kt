@@ -15,15 +15,19 @@ import androidx.compose.ui.test.hasContentDescriptionExactly
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import dev.openflight.companion.core.data.TransportType
+import dev.openflight.companion.core.designsystem.OfDropdownMenuTags
 import dev.openflight.companion.core.designsystem.OfTheme
 import dev.openflight.companion.core.model.ConnectionState
+import dev.openflight.companion.core.model.GolfClub
 import dev.openflight.companion.core.model.ShotEvent
+import dev.openflight.companion.core.model.clubMenu
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -107,6 +111,48 @@ class DashboardScreenTest {
         show(DashboardUiState.Waiting(ConnectionPanelState(state = ConnectionState.Connected, isChangingClub = true)))
 
         composeRule.onNodeWithTag(DashboardTestTags.CLUB_SELECTOR).assertIsNotEnabled()
+    }
+
+    @Test
+    fun given_bagWithoutFourIron_when_openClubMenu_then_fourIronOnlyUnderAllClubs() {
+        val bag = listOf(GolfClub.DRIVER, GolfClub.IRON_7, GolfClub.PITCHING_WEDGE)
+        show(
+            DashboardUiState.Waiting(
+                ConnectionPanelState(
+                    state = ConnectionState.Connected,
+                    club = GolfClub.DRIVER,
+                    clubMenu = clubMenu(bag, GolfClub.DRIVER),
+                ),
+            ),
+        )
+
+        composeRule.onNodeWithTag(DashboardTestTags.CLUB_SELECTOR).performClick()
+        composeRule.onNodeWithText("7-Iron").assertIsDisplayed()
+        composeRule.onNodeWithText("Pitching Wedge").assertIsDisplayed()
+        composeRule.onAllNodesWithText("4-Iron").assertCountEquals(0)
+
+        composeRule
+            .onNodeWithTag(
+                OfDropdownMenuTags.MORE,
+            ).performScrollTo()
+            .assert(hasText("All clubs…"))
+            .performClick()
+        composeRule
+            .onNodeWithText("4-Iron")
+            .performScrollTo()
+            .assertIsDisplayed()
+            .performClick()
+
+        assertEquals(listOf<DashboardEvent>(DashboardEvent.ClubSelected(GolfClub.IRON_4)), events)
+    }
+
+    @Test
+    fun givenNoBag_whenOpenClubMenu_thenAllClubsAreListedWithoutAnAllClubsRow() {
+        show(DashboardUiState.Waiting(ConnectionPanelState(state = ConnectionState.Connected)))
+
+        composeRule.onNodeWithTag(DashboardTestTags.CLUB_SELECTOR).performClick()
+        composeRule.onNodeWithText("4-Iron").performScrollTo().assertIsDisplayed()
+        composeRule.onAllNodes(hasTestTag(OfDropdownMenuTags.MORE)).assertCountEquals(0)
     }
 
     @Test

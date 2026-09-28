@@ -19,11 +19,14 @@ import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.unit.Density
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import dev.openflight.companion.core.designsystem.OfDropdownMenuTags
 import dev.openflight.companion.core.designsystem.OfTheme
 import dev.openflight.companion.core.designsystem.OfWindowClass
 import dev.openflight.companion.core.flight.FlightInputProvenance
@@ -33,6 +36,7 @@ import dev.openflight.companion.core.flight.FlightTrajectory
 import dev.openflight.companion.core.flight.Vec3
 import dev.openflight.companion.core.model.GolfClub
 import dev.openflight.companion.core.model.ShotEvent
+import dev.openflight.companion.core.model.clubMenu
 import dev.openflight.companion.core.model.pi.PiBatteryWarning
 import dev.openflight.companion.core.model.pi.PowerState
 import dev.openflight.companion.core.model.pi.PowerStatus
@@ -245,6 +249,35 @@ class DrivingRangeScreenTest {
         show(DrivingRangeUiState.Showing(shot, RangePhase.Waiting, activeFlight = null))
 
         composeRule.onAllNodes(hasTestTag(RangeTestTags.BATTERY_WARNING)).assertCountEquals(0)
+    }
+
+    @Test
+    fun given_bagWithoutFourIron_when_openClubMenu_then_fourIronOnlyUnderAllClubs() {
+        val bag = listOf(GolfClub.DRIVER, GolfClub.IRON_7, GolfClub.PITCHING_WEDGE)
+        show(
+            DrivingRangeUiState.Ready(
+                RangeClubState(GolfClub.IRON_7, selectionEnabled = true, menu = clubMenu(bag, GolfClub.IRON_7)),
+            ),
+        )
+
+        composeRule.onNodeWithTag(RangeTestTags.CLUB_SELECTOR).performClick()
+        composeRule.onNodeWithText("Driver").assertIsDisplayed()
+        composeRule.onNodeWithText("Pitching Wedge").assertIsDisplayed()
+        composeRule.onAllNodesWithText("4-Iron").assertCountEquals(0)
+
+        composeRule
+            .onNodeWithTag(
+                OfDropdownMenuTags.MORE,
+            ).performScrollTo()
+            .assert(hasText("All clubs…"))
+            .performClick()
+        composeRule
+            .onNodeWithText("4-Iron")
+            .performScrollTo()
+            .assertIsDisplayed()
+            .performClick()
+
+        assertEquals(listOf<DrivingRangeEvent>(DrivingRangeEvent.ClubSelected(GolfClub.IRON_4)), events)
     }
 
     @Test

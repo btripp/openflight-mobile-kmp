@@ -3,6 +3,7 @@ package dev.openflight.companion.feature.dashboard
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import dev.openflight.companion.core.data.BagRepository
 import dev.openflight.companion.core.data.DemoModeOff
 import dev.openflight.companion.core.data.DemoModeRepository
 import dev.openflight.companion.core.data.PiSessionRepository
@@ -12,11 +13,13 @@ import dev.openflight.companion.core.data.TransportType
 import dev.openflight.companion.core.insights.ShotEnrichment
 import dev.openflight.companion.core.insights.computeClubChips
 import dev.openflight.companion.core.insights.computeClubStats
+import dev.openflight.companion.core.model.ClubMenu
 import dev.openflight.companion.core.model.ConnectionErrorKind
 import dev.openflight.companion.core.model.ConnectionProblem
 import dev.openflight.companion.core.model.ConnectionState
 import dev.openflight.companion.core.model.GolfClub
 import dev.openflight.companion.core.model.ShotEvent
+import dev.openflight.companion.core.model.clubMenu
 import dev.openflight.companion.core.model.pi.PiBatteryWarning
 import dev.openflight.companion.core.model.pi.PiLinkState
 import dev.openflight.companion.core.model.pi.ShotDetail
@@ -30,6 +33,8 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.transformLatest
@@ -52,6 +57,8 @@ class DashboardViewModel(
     private val clubConfirmation: ClubConfirmation = ClubConfirmation(),
     // Plan F14: "Try without a Pi", the Demo badge on the card and "Hit a shot".
     private val demoMode: DemoModeRepository = DemoModeOff,
+    // Issue #15: the club menu lists the active bag's clubs first; without one, all 20.
+    private val bags: BagRepository? = null,
 ) : ViewModel() {
     /** The host field's text while the user edits it; `null` shows the saved host. */
     private val hostDraft = MutableStateFlow<String?>(null)
@@ -63,8 +70,20 @@ class DashboardViewModel(
     /** Plan R8f: the profile picker beside the club. */
     private val profilePicker = ProfilePicker(piSession, viewModelScope)
 
+    /** Issue #15: the active bag's clubs in bag order, or `null` without a bag. */
+    private val bagClubs: Flow<List<GolfClub>?> =
+        bags?.activeBag()?.map { bag -> bag?.clubs?.map { it.club } } ?: flowOf(null)
+
     private val savedSettings =
-        combine(settings.transport, settings.host, settings.selectedClub, demoMode.enabled, ::SavedSettings)
+        combine(settings.transport, settings.host, settings.selectedClub, demoMode.enabled, bagClubs) {
+            transport,
+            host,
+            club,
+            demo,
+            bag,
+            ->
+            SavedSettings(transport, host, club, demo, clubMenu(bag, club))
+        }
 
     /** The Socket.IO link as the card needs it: up, or refused for a denied Local Network. */
     private val piLink =
@@ -105,6 +124,7 @@ class DashboardViewModel(
                 hostText = draft ?: saved.host,
                 state = state,
                 club = saved.club,
+                clubMenu = saved.clubMenu,
                 isChangingClub = request.inFlight,
                 clubError = request.error,
                 piLinkConnected = link.connected,
@@ -325,6 +345,7 @@ class DashboardViewModel(
         val host: String,
         val club: GolfClub,
         val demo: Boolean,
+        val clubMenu: ClubMenu,
     )
 
     private data class PiLinkFlags(

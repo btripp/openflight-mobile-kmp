@@ -7,6 +7,7 @@ import dev.openflight.companion.core.data.RangeCameraMode
 import dev.openflight.companion.core.data.SettingsRepository
 import dev.openflight.companion.core.data.ShotTrailStyle
 import dev.openflight.companion.core.flight.FlightTrajectory
+import dev.openflight.companion.core.model.ClubMenu
 import dev.openflight.companion.core.model.GolfClub
 import dev.openflight.companion.core.model.ShotEvent
 import dev.openflight.companion.core.model.ShotMetricFormatter
@@ -64,6 +65,8 @@ data class ActiveFlight(
  * The "NEXT CLUB" selector in the overlay (ContentView.swift:124-131 passes these to
  * `DrivingRangeView`).
  *
+ * @property menu issue #15: what the picker lists, the active bag's clubs first (always including
+ *   [selected]) and the rest under "All clubs"; all 20 flat without a bag.
  * @property selectionEnabled the transport is connected (ContentView.swift:128).
  * @property isChanging a `set_club` request is in flight.
  * @property error the last club request's failure.
@@ -73,6 +76,7 @@ data class RangeClubState(
     val selectionEnabled: Boolean = false,
     val isChanging: Boolean = false,
     val error: String? = null,
+    val menu: ClubMenu = ClubMenu.ALL,
 )
 
 /**
