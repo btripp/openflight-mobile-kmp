@@ -66,10 +66,13 @@ private fun AppLifecycleSource() {
     // reason `policy` is: this composition's Koin graph is the one a debug launch hook or an
     // instrumented test may have replaced (see OpenFlightApplication's note).
     val shotCallouts = koinInject<ShotCalloutCoordinator>()
+    // Issue #48: the Pi's low-battery call-out, app-scoped and started the same way.
+    val batteryAlerts = koinInject<PiBatteryAlertCoordinator>()
     val activity = LocalActivity.current
-    DisposableEffect(lifecycle, policy, shotCallouts) {
+    DisposableEffect(lifecycle, policy, shotCallouts, batteryAlerts) {
         policy.start()
         shotCallouts.start()
+        batteryAlerts.start()
         val observer =
             LifecycleEventObserver { _, event ->
                 when (event) {

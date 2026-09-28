@@ -15,6 +15,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -32,6 +33,9 @@ import dev.openflight.companion.core.flight.FlightTrajectory
 import dev.openflight.companion.core.flight.Vec3
 import dev.openflight.companion.core.model.GolfClub
 import dev.openflight.companion.core.model.ShotEvent
+import dev.openflight.companion.core.model.pi.PiBatteryWarning
+import dev.openflight.companion.core.model.pi.PowerState
+import dev.openflight.companion.core.model.pi.PowerStatus
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -213,6 +217,34 @@ class DrivingRangeScreenTest {
             .onNodeWithTag(RangeTestTags.CLUB_SELECTOR)
             .assert(hasText("7-Iron"))
             .assertIsEnabled()
+    }
+
+    @Test
+    fun givenALowPiBattery_whenShown_thenACompactWarningShowsInTheOverlay() {
+        val warning =
+            PiBatteryWarning.of(
+                PowerStatus(
+                    available = true,
+                    provider = "geekworm",
+                    state = PowerState.LOW,
+                    batteryPercent = 18.0,
+                    externalPower = false,
+                ),
+            )
+        show(DrivingRangeUiState.Showing(shot, RangePhase.Waiting, activeFlight = null, batteryWarning = warning))
+
+        composeRule
+            .onNodeWithTag(RangeTestTags.BATTERY_WARNING)
+            .assertIsDisplayed()
+            .assert(hasContentDescription("Pi battery low (18%). ${PiBatteryWarning.LOW_DETAIL}"))
+        composeRule.onNodeWithText("⚠ Pi battery low (18%)", useUnmergedTree = true).assertIsDisplayed()
+    }
+
+    @Test
+    fun givenNoPiBatteryWarning_whenShown_thenThereIsNone() {
+        show(DrivingRangeUiState.Showing(shot, RangePhase.Waiting, activeFlight = null))
+
+        composeRule.onAllNodes(hasTestTag(RangeTestTags.BATTERY_WARNING)).assertCountEquals(0)
     }
 
     @Test

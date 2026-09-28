@@ -104,6 +104,14 @@ class KoinHelper : KoinComponent {
     }
 
     /**
+     * Starts (idempotent) the app-wide Pi low-battery call-out (issue #48). Call once, from
+     * `iOSApp.init()`, next to [shotCallouts].
+     */
+    fun piBatteryAlerts() {
+        getKoin().piBatteryAlerts()
+    }
+
+    /**
      * Plan F9a: a game, opened on [launch]'s mode and distance when given (A6: the iOS destination
      * value carries it, e.g. "play a hole" → closest to the pin at the hole's distance).
      */

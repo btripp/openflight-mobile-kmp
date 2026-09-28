@@ -19,7 +19,10 @@ import dev.openflight.companion.core.model.ConnectionErrorKind
 import dev.openflight.companion.core.model.ConnectionProblem
 import dev.openflight.companion.core.model.ConnectionState
 import dev.openflight.companion.core.model.ShotEvent
+import dev.openflight.companion.core.model.pi.PiBatteryWarning
 import dev.openflight.companion.core.model.pi.PiLinkState
+import dev.openflight.companion.core.model.pi.PowerState
+import dev.openflight.companion.core.model.pi.PowerStatus
 import dev.openflight.companion.core.model.pi.ShotProcessingState
 import org.junit.Rule
 import org.junit.Test
@@ -82,6 +85,34 @@ class DashboardStatusScreenTest {
         show(DashboardUiState.Waiting(connected))
 
         composeRule.onAllNodes(hasTestTag(DashboardTestTags.PROCESSING)).assertCountEquals(0)
+    }
+
+    @Test
+    fun givenACriticalBattery_whenShown_thenTheNoticeAndItsTitleShow() {
+        val warning =
+            PiBatteryWarning.of(
+                PowerStatus(
+                    available = true,
+                    provider = "geekworm",
+                    state = PowerState.CRITICAL,
+                    batteryPercent = 9.0,
+                    externalPower = false,
+                ),
+            )
+        show(DashboardUiState.Live(connected, latest = PREVIEW_SHOT, previous = emptyList(), batteryWarning = warning))
+
+        composeRule.onNodeWithTag(DashboardTestTags.BATTERY_WARNING).assertIsDisplayed()
+        composeRule.onNodeWithText("Pi battery critical (9%)", useUnmergedTree = true).assertIsDisplayed()
+        composeRule
+            .onNodeWithText(PiBatteryWarning.CRITICAL_DETAIL, useUnmergedTree = true)
+            .assertIsDisplayed()
+    }
+
+    @Test
+    fun givenNoBatteryWarning_whenShown_thenThereIsNoNotice() {
+        show(DashboardUiState.Waiting(connected))
+
+        composeRule.onAllNodes(hasTestTag(DashboardTestTags.BATTERY_WARNING)).assertCountEquals(0)
     }
 
     @Test

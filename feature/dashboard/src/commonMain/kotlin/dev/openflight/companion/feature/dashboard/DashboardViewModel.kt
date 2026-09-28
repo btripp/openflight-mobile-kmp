@@ -17,6 +17,7 @@ import dev.openflight.companion.core.model.ConnectionProblem
 import dev.openflight.companion.core.model.ConnectionState
 import dev.openflight.companion.core.model.GolfClub
 import dev.openflight.companion.core.model.ShotEvent
+import dev.openflight.companion.core.model.pi.PiBatteryWarning
 import dev.openflight.companion.core.model.pi.PiLinkState
 import dev.openflight.companion.core.model.pi.ShotDetail
 import kotlinx.coroutines.CancellationException
@@ -125,25 +126,31 @@ class DashboardViewModel(
             )
         }
 
+    /** What the Pi is doing with the last swing (plan R8f) and its battery (issue #48). */
+    private val piStatus =
+        combine(piSession.shotProcessing, piSession.powerStatus) { processing, power ->
+            PiStatus(ProcessingIndicator.of(processing), PiBatteryWarning.of(power))
+        }
+
     val uiState: StateFlow<DashboardUiState> =
         combine(
             panel,
             shots.history,
             settings.units,
             piSession.shotDetails,
-            piSession.shotProcessing,
-        ) { connection, history, units, details, processingState ->
+            piStatus,
+        ) { connection, history, units, details, pi ->
             val stats = computeClubStats(history)
             val chips = computeClubChips(history)
             val latest = history.firstOrNull()
-            val processing = ProcessingIndicator.of(processingState)
             if (latest == null) {
                 DashboardUiState.Waiting(
                     connection,
                     units = units,
                     clubStats = stats,
                     clubChips = chips,
-                    processing = processing,
+                    processing = pi.processing,
+                    batteryWarning = pi.batteryWarning,
                 )
             } else {
                 DashboardUiState.Live(
@@ -154,7 +161,8 @@ class DashboardViewModel(
                     clubStats = stats,
                     clubChips = chips,
                     enrichments = enrichments(history, details),
-                    processing = processing,
+                    processing = pi.processing,
+                    batteryWarning = pi.batteryWarning,
                 )
             }
         }.stateIn(
@@ -328,6 +336,11 @@ class DashboardViewModel(
     private data class ClubRequest(
         val inFlight: Boolean = false,
         val error: String? = null,
+    )
+
+    private data class PiStatus(
+        val processing: ProcessingIndicator?,
+        val batteryWarning: PiBatteryWarning?,
     )
 
     companion object {

@@ -21,6 +21,8 @@ struct iOSApp: App {
         launchOptions = koin.launchOptions()
         // Plan F7: app-scoped, not tied to any one screen.
         koin.shotCallouts()
+        // Issue #48: the Pi's low-battery call-out, app-scoped like the shot call-outs.
+        koin.piBatteryAlerts()
         AppearanceSetup.apply()
     }
 

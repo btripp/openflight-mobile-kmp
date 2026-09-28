@@ -10,6 +10,7 @@ import dev.openflight.companion.core.flight.FlightTrajectory
 import dev.openflight.companion.core.model.GolfClub
 import dev.openflight.companion.core.model.ShotEvent
 import dev.openflight.companion.core.model.ShotMetricFormatter
+import dev.openflight.companion.core.model.pi.PiBatteryWarning
 
 /**
  * The range's flight phase, ported from `DrivingRangeViewModel.Phase`
@@ -129,6 +130,9 @@ sealed interface DrivingRangeUiState {
     /** Why the last [DrivingRangeEvent.SimulateShot] failed; cleared by the next one. */
     val simulateError: String?
 
+    /** Issue #48: the Pi's battery is low or critical and nothing is charging it, or `null`. */
+    val batteryWarning: PiBatteryWarning?
+
     val mode: RangeMode get() = browse.mode
 
     /** The camera to render with; see [RangeCameraState.mode]. */
@@ -144,6 +148,7 @@ sealed interface DrivingRangeUiState {
         override val browse: RangeBrowseState = RangeBrowseState(),
         override val canSimulate: Boolean = false,
         override val simulateError: String? = null,
+        override val batteryWarning: PiBatteryWarning? = null,
     ) : DrivingRangeUiState {
         /** The pre-F8d shape, kept so Swift callers of `init(club:camera:browse:)` still compile. */
         constructor(
@@ -169,6 +174,7 @@ sealed interface DrivingRangeUiState {
         override val rollOut: RangeRollOut? = null,
         override val canSimulate: Boolean = false,
         override val simulateError: String? = null,
+        override val batteryWarning: PiBatteryWarning? = null,
     ) : DrivingRangeUiState {
         /** The pre-F8d shape, kept so Swift callers of the seven-argument init still compile. */
         @Suppress("LongParameterList") // The primary constructor's shape before plan F8d.

@@ -34,14 +34,15 @@ import dev.openflight.companion.core.designsystem.OfTextRole
 import dev.openflight.companion.core.model.GolfClub
 import dev.openflight.companion.core.model.ShotEvent
 import dev.openflight.companion.core.model.ShotMetricFormatter
+import dev.openflight.companion.core.model.pi.PiBatteryLevel
 
 /**
  * The metrics over the scene (RangeMetricsOverlay.swift): ball speed and carry on top; at the
- * bottom the club error, the estimated-flight badge and the detail metrics with the "NEXT CLUB"
- * selector, laid out by the shared [detailLayout] (plan F8a2p): one row in landscape, two compact
- * rows of four over a portrait scene, the roomy two-column grid in the docked side panel, and one
- * strip while a ball flies and through the landing dwell ([compactMetrics], plan R7b), so the
- * landing area stays visible.
+ * bottom the Pi battery warning (issue #48), the club error, the estimated-flight badge and the
+ * detail metrics with the "NEXT CLUB" selector, laid out by the shared [detailLayout] (plan
+ * F8a2p): one row in landscape, two compact rows of four over a portrait scene, the roomy
+ * two-column grid in the docked side panel, and one strip while a ball flies and through the
+ * landing dwell ([compactMetrics], plan R7b), so the landing area stays visible.
  *
  * Plan F8a2p: over the scene ([expandToFill]) the ball speed and carry tiles are compact too, so
  * the tee view keeps most of the screen. Every card reports its bounds to [obstructions], which
@@ -112,6 +113,19 @@ internal fun RangeMetricsOverlay(
             Spacer(modifier = Modifier.weight(1f))
         } else {
             Spacer(modifier = Modifier.height(OfSpacing.Md))
+        }
+        uiState.batteryWarning?.let { warning ->
+            // Issue #48: one line with the bottom pills, never over the flight. The detail is for
+            // the screen reader; the Dashboard's notice spells it out on screen.
+            Pill(
+                text = "⚠ ${warning.title}",
+                color = if (warning.level == PiBatteryLevel.CRITICAL) OfColorTokens.Danger else OfColorTokens.Warning,
+                modifier =
+                    Modifier
+                        .rangeObstruction("battery", obstructions)
+                        .semantics { contentDescription = "${warning.title}. ${warning.detail}" }
+                        .testTag(RangeTestTags.BATTERY_WARNING),
+            )
         }
         uiState.club.error?.let { error ->
             Pill(
