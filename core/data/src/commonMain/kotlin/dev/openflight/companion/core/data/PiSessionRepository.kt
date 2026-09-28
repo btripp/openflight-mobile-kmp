@@ -152,6 +152,13 @@ interface PiSessionRepository {
     /** App background: disconnect and stop following settings. */
     fun stop()
 
+    /**
+     * Unless the link is connected, retries it at once instead of waiting out the current attempt
+     * or backoff. [ShotRepository.retry] calls it, so a Retry, or a local-network permission just
+     * granted (issue #6), reconnects both links. Defaults to nothing so fakes stay source-compatible.
+     */
+    fun retry() {}
+
     // Commands. Each throws WifiOnlyFeatureException on Bluetooth or while the link isn't connected.
 
     /** `get_session` → `session_state`. Sent automatically on every connect. */

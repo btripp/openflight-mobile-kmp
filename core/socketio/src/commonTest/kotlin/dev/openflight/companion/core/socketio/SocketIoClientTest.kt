@@ -11,6 +11,7 @@ import assertk.assertions.isFalse
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isTrue
 import dev.openflight.companion.core.network.LocalNetworkDenial
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
@@ -52,10 +53,17 @@ class SocketIoClientTest {
         val connections = mutableListOf<FakeConnection>()
         val failures = ArrayDeque<Throwable>()
 
+        /** Opens that never complete, like a TCP connect whose SYNs are silently dropped. */
+        var hangingOpens = 0
+
         val last: FakeConnection get() = connections.last()
 
         override suspend fun open(url: String): EngineIoConnection {
             urls += url
+            if (hangingOpens > 0) {
+                hangingOpens--
+                awaitCancellation()
+            }
             failures.removeFirstOrNull()?.let { throw it }
             return FakeConnection().also { connections += it }
         }
@@ -227,6 +235,105 @@ class SocketIoClientTest {
             )
         }
 
+    /**
+     * Issue #6: Android 17 without `ACCESS_LOCAL_NETWORK` drops LAN packets, so the first open hangs
+     * until the open timeout. That timeout must count as a failed attempt, not end the loop, so the
+     * client connects once the permission is granted.
+     */
+    @Test
+    fun anOpenThatTimesOutIsRetriedAndConnectsOnceTheNetworkAllowsIt() =
+        runClientTest { (transport, client) ->
+            transport.hangingOpens = 1
+            client.connect()
+            runCurrent()
+            assertThat(client.state.value).isEqualTo(SocketConnectionState.Connecting(attempt = 1))
+
+            advanceTimeBy(OPEN_TIMEOUT_MILLIS + 1)
+            runCurrent()
+            val reconnecting = client.state.value
+            assertThat(reconnecting).isInstanceOf(SocketConnectionState.Reconnecting::class)
+            assertThat((reconnecting as SocketConnectionState.Reconnecting).attempt).isEqualTo(1)
+
+            advanceTimeBy(reconnecting.retryInMillis)
+            handshake(transport)
+            assertThat(transport.urls).hasSize(2)
+            assertThat(client.state.value).isEqualTo(SocketConnectionState.Connected("sio-sid"))
+        }
+
+    @Test
+    fun reconnectNowAbandonsAHangingOpenAndConnectsAtOnce() =
+        runClientTest { (transport, client) ->
+            transport.hangingOpens = 1
+            client.connect()
+            advanceTimeBy(2_000)
+            runCurrent()
+
+            client.reconnectNow()
+            handshake(transport)
+
+            assertThat(transport.urls).hasSize(2)
+            assertThat(client.state.value).isEqualTo(SocketConnectionState.Connected("sio-sid"))
+        }
+
+    @Test
+    fun reconnectNowSkipsTheBackoffAndRestartsFromTheFirstAttempt() =
+        runClientTest { (transport, client) ->
+            repeat(4) { transport.failures += IllegalStateException("refused") }
+            client.connect()
+            runCurrent()
+            advanceTimeBy(500 + 1_000 + 2_000)
+            runCurrent()
+            assertThat(client.state.value).isEqualTo(
+                SocketConnectionState.Reconnecting(attempt = 4, retryInMillis = 4_000, reason = "refused"),
+            )
+            transport.failures.clear()
+
+            client.reconnectNow()
+            runCurrent()
+            assertThat(client.state.value).isEqualTo(SocketConnectionState.Connecting(attempt = 1))
+            handshake(transport)
+            assertThat(client.state.value).isEqualTo(SocketConnectionState.Connected("sio-sid"))
+        }
+
+    @Test
+    fun reconnectNowLeavesAConnectedOrStoppedClientAlone() =
+        runClientTest { (transport, client) ->
+            client.reconnectNow()
+            runCurrent()
+            assertThat(transport.urls).hasSize(0)
+
+            client.connect()
+            handshake(transport)
+            client.reconnectNow()
+            runCurrent()
+            assertThat(transport.connections).hasSize(1)
+            assertThat(transport.last.closed).isFalse()
+            assertThat(client.state.value).isEqualTo(SocketConnectionState.Connected("sio-sid"))
+
+            client.disconnect()
+            client.reconnectNow()
+            advanceTimeBy(60_000)
+            runCurrent()
+            assertThat(transport.connections).hasSize(1)
+            assertThat(client.state.value).isEqualTo(SocketConnectionState.Idle)
+        }
+
+    @Test
+    fun aHandshakeThatTimesOutIsRetried() =
+        runClientTest { (transport, client) ->
+            client.connect()
+            runCurrent()
+            // Opened, but the Engine.IO open packet never arrives.
+            advanceTimeBy(OPEN_TIMEOUT_MILLIS + 1)
+            runCurrent()
+            assertThat(client.state.value).isInstanceOf(SocketConnectionState.Reconnecting::class)
+            assertThat(transport.connections.single().closed).isTrue()
+
+            advanceTimeBy(1_000)
+            handshake(transport)
+            assertThat(client.state.value).isEqualTo(SocketConnectionState.Connected("sio-sid"))
+        }
+
     @Test
     fun treatsMissingPingsAsADeadConnectionAndReconnects() =
         runClientTest { (transport, client) ->
@@ -325,6 +432,9 @@ class SocketIoClientTest {
 
     private companion object {
         const val URL = "ws://pi.local:8080/socket.io/?EIO=4&transport=websocket"
+
+        /** [SocketIoClient]'s default open (and handshake) timeout. */
+        const val OPEN_TIMEOUT_MILLIS = 10_000L
         const val OPEN =
             """0{"sid":"eio-sid","upgrades":[],"pingTimeout":20000,"pingInterval":25000,"maxPayload":1000000}"""
     }

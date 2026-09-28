@@ -19,6 +19,8 @@ internal class FakePiSocket(
         private set
     var disconnectCount = 0
         private set
+    var reconnectNowCount = 0
+        private set
 
     override fun connect() {
         connectCount++
@@ -28,6 +30,10 @@ internal class FakePiSocket(
     override fun disconnect() {
         disconnectCount++
         state.value = SocketConnectionState.Idle
+    }
+
+    override fun reconnectNow() {
+        reconnectNowCount++
     }
 
     override suspend fun emit(

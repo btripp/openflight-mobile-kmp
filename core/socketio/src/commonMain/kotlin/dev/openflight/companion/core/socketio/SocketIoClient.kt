@@ -6,6 +6,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -17,7 +18,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
@@ -79,6 +79,22 @@ class SocketIoClient(
         loopJob = scope.launch { runLoop() }
     }
 
+    /**
+     * Unless connected, abandons the current attempt or backoff and tries again at once, from the
+     * first attempt. For a user's Retry, or a network permission that was just granted: an attempt
+     * started without it may be stuck on packets the platform dropped (issue #6). Does nothing
+     * before [connect] or after [disconnect].
+     */
+    fun reconnectNow() {
+        val previous = loopJob ?: return
+        if (mutableState.value is SocketConnectionState.Connected) return
+        loopJob =
+            scope.launch {
+                previous.cancelAndJoin()
+                runLoop()
+            }
+    }
+
     /** Sends the Socket.IO disconnect, closes the connection and stops reconnecting. */
     fun disconnect() {
         loopJob?.cancel()
@@ -132,12 +148,20 @@ class SocketIoClient(
         }
     }
 
-    /** Runs one connection to its end and returns why it ended. */
+    /**
+     * Runs one connection to its end and returns why it ended.
+     *
+     * The open and handshake timeouts throw [SocketOpenTimeoutException], never `withTimeout`'s
+     * [kotlinx.coroutines.TimeoutCancellationException]: that one is a [CancellationException], so
+     * [runLoop] would rethrow it and end the loop for good, stuck on `Connecting` (issue #6, where
+     * Android 17 dropped the packets of an attempt made before `ACCESS_LOCAL_NETWORK` was granted).
+     */
     private suspend fun runConnection(onConnected: () -> Unit): String {
-        val connection = withTimeout(openTimeoutMillis) { transport.open(url) }
+        val connection = withOpenTimeout(openTimeoutMillis, OPEN_TIMED_OUT) { transport.open(url) }
         var ackReceived = false
         try {
-            val handshake = withTimeout(openTimeoutMillis) { awaitOpen(connection) } ?: return CLOSED
+            val handshake =
+                withOpenTimeout(openTimeoutMillis, HANDSHAKE_TIMED_OUT) { awaitOpen(connection) } ?: return CLOSED
             connection.send(encodeMessage(SocketIoPacket.Connect()))
             return pump(connection, silenceLimit = handshake.pingInterval + handshake.pingTimeout) { sid ->
                 ackReceived = true
@@ -228,9 +252,6 @@ class SocketIoClient(
         }
     }
 
-    private fun encodeMessage(packet: SocketIoPacket): String =
-        EngineIoCodec.encodePacket(EngineIoPacket.Message(SocketIoCodec.encode(packet)))
-
     @Suppress("TooGenericExceptionCaught", "SwallowedException") // Closing a dead socket may throw; nothing to do.
     private suspend fun closeQuietly(
         connection: EngineIoConnection,
@@ -256,5 +277,32 @@ class SocketIoClient(
         const val EVENT_BUFFER = 64
         const val CLOSED = "Connection closed"
         const val HEARTBEAT_TIMEOUT = "Heartbeat timeout"
+        const val OPEN_TIMED_OUT = "Timed out connecting"
+        const val HANDSHAKE_TIMED_OUT = "Timed out waiting for the server's handshake"
     }
 }
+
+/** An attempt's open or handshake took longer than the open timeout: a failed attempt, retried. */
+internal class SocketOpenTimeoutException(
+    message: String,
+) : Exception(message)
+
+/**
+ * Runs [block] within [timeoutMillis], else throws [SocketOpenTimeoutException] with [reason]:
+ * unlike `withTimeout`'s exception, that one isn't a cancellation.
+ */
+private suspend fun <T> withOpenTimeout(
+    timeoutMillis: Long,
+    reason: String,
+    block: suspend () -> T,
+): T {
+    var finished = false
+    val result = withTimeoutOrNull(timeoutMillis) { block().also { finished = true } }
+    if (!finished) throw SocketOpenTimeoutException(reason)
+    @Suppress("UNCHECKED_CAST") // finished means block() returned, so result is its T (null included).
+    return result as T
+}
+
+/** A Socket.IO packet inside an Engine.IO message packet (`4` + the Socket.IO encoding). */
+private fun encodeMessage(packet: SocketIoPacket): String =
+    EngineIoCodec.encodePacket(EngineIoPacket.Message(SocketIoCodec.encode(packet)))
