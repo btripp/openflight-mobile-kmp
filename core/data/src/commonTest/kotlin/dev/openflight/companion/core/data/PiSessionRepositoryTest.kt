@@ -7,6 +7,7 @@ import assertk.assertThat
 import assertk.assertions.containsExactly
 import assertk.assertions.containsOnly
 import assertk.assertions.doesNotContain
+import assertk.assertions.hasSize
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
@@ -99,6 +100,26 @@ class PiSessionRepositoryTest {
                 "get_profiles",
                 "get_camera_capture_settings",
             )
+        }
+
+    @Test
+    fun retryReconnectsTheCurrentSocketAtOnce() =
+        runPiTest { h ->
+            h.repository.retry()
+
+            assertThat(h.sockets).hasSize(1)
+            assertThat(h.socket.reconnectNowCount).isEqualTo(1)
+        }
+
+    @Test
+    fun retryWhileStoppedDoesNothing() =
+        runPiTest { h ->
+            val socket = h.socket
+            h.repository.stop()
+
+            h.repository.retry()
+
+            assertThat(socket.reconnectNowCount).isEqualTo(0)
         }
 
     @Test
