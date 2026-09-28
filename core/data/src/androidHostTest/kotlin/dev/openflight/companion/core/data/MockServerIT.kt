@@ -18,6 +18,7 @@ import dev.openflight.companion.core.model.pi.DeletionState
 import dev.openflight.companion.core.model.pi.PiLinkState
 import dev.openflight.companion.core.model.pi.PiNotice
 import dev.openflight.companion.core.model.pi.RadarConfigUpdate
+import dev.openflight.companion.core.network.OpenFlightHttpError
 import dev.openflight.companion.core.network.PiCameraClient
 import dev.openflight.companion.core.network.PiControlClient
 import dev.openflight.companion.core.network.WifiShotTransport
@@ -180,6 +181,31 @@ class MockServerIT {
             hasClubApi = server.status("/api/club") == HTTP_OK
             // Our fallbacks key on each route's absence; the two backends have both or neither.
             assertThat(hasClubApi).isEqualTo(hasSse)
+            routeContract()
+        }
+
+        /**
+         * Every control route the app calls, with the method it uses: the app's
+         * [OpenFlightHttpError.UnexpectedStatus.isRouteAbsent] must read the answer as "absent" on
+         * stock main (a GET-only catch-all: GET 404, POST 405) and as "present" on the fork (a POST
+         * without a body gets 400, not 405). A backend that changes these codes fails here, not on a
+         * tester's phone (tester bug, 2026-09: POST /api/club -> 405 wasn't treated as absent).
+         */
+        private fun routeContract() {
+            val routes =
+                listOf(
+                    "GET" to WifiShotTransport.CLUB_PATH,
+                    "POST" to WifiShotTransport.CLUB_PATH,
+                    "POST" to WifiShotTransport.CALIBRATION_PATH,
+                )
+            val observed =
+                routes.map { (method, path) ->
+                    val status = checkNotNull(server.status(path, method)) { "$method $path: no answer" }
+                    assertThat(OpenFlightHttpError.UnexpectedStatus(status).isRouteAbsent, "$method $path -> $status")
+                        .isEqualTo(!hasSse)
+                    "$method $path $status"
+                }
+            steps.pass("route contract (${if (hasSse) "fork: present" else "stock: absent"})", observed.joinToString())
         }
 
         private suspend fun snapshot() {
@@ -209,13 +235,13 @@ class MockServerIT {
                 assertThat(settings.selectedClub.first()).isEqualTo(current.club)
                 steps.pass("connect: club sync (GET /api/club)", "selected=${current.club.wireValue}")
             } else {
-                // Plan R8j: the club follows session_state.club; the explicit read gets 404 from
-                // /api/club and answers from the Socket.IO session instead.
+                // Plan R8j: the club follows session_state.club. No explicit read here: the app never
+                // reads /api/club on a stock Pi (its SSE never connects), so club() must reach the
+                // Socket.IO fallback from a first POST alone, as it does on a phone.
                 val piClub = checkNotNull(pi.club.value?.let(GolfClub::fromWireValue))
                 await("club from session_state") { settings.selectedClub.first() == piClub }
-                assertThat(shots.currentClub().club).isEqualTo(piClub)
                 steps.pass(
-                    "connect: club sync (session_state.club; /api/club 404)",
+                    "connect: club sync (session_state.club)",
                     "selected=${piClub.wireValue}",
                 )
             }
@@ -275,10 +301,12 @@ class MockServerIT {
         }
 
         private suspend fun club() {
-            // Fork: POST /api/club. Stock main (plan R8j): /api/club 404s, so Socket.IO set_club,
-            // confirmed by the club_changed broadcast.
+            // Fork: POST /api/club. Stock main (plan R8j): POST /api/club answers 405 (the GET-only
+            // static catch-all), so Socket.IO set_club, confirmed by the club_changed broadcast.
             val selection = shots.setClub(GolfClub.IRON_7)
             assertThat(selection.club).isEqualTo(GolfClub.IRON_7)
+            // The explicit read now answers from the Socket.IO session (GET /api/club would 404).
+            assertThat(shots.currentClub().club).isEqualTo(GolfClub.IRON_7)
             await("club_changed over Socket.IO") { pi.club.value == GolfClub.IRON_7.wireValue }
             // SSE's club_changed on the fork; the Socket.IO one stands in on stock main.
             await("activeClub follows club_changed") { shots.activeClub.value == GolfClub.IRON_7 }
@@ -296,7 +324,7 @@ class MockServerIT {
             val filed = pi.sessionShots.value.first()
             await("live feed shows the 7-iron shot") { shots.latestShot.value?.timestamp == filed.timestamp }
             assertThat(shots.latestShot.value?.club).isEqualTo(GolfClub.IRON_7.wireValue)
-            val route = if (hasClubApi) "POST /api/club" else "Socket.IO set_club (/api/club 404)"
+            val route = if (hasClubApi) "POST /api/club" else "Socket.IO set_club (POST /api/club 405)"
             steps.pass("set_club -> club_changed", "$route 7-iron; next shot filed as 7-iron")
         }
 

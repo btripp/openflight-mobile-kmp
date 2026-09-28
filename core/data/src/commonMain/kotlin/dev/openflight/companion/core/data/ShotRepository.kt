@@ -123,5 +123,17 @@ class NoActiveTransportException : IllegalStateException("Not connected to OpenF
  */
 class ClubChangeNotConfirmedException : IllegalStateException("The Pi didn't confirm the club change.")
 
+/**
+ * The Pi has no phone-calibration route (a stock backend: `POST` answers 405). Calibration needs
+ * the Pi's phone-connectivity update; shots and club changes keep working over Wi-Fi.
+ */
+class CalibrationUnsupportedException : IllegalStateException(MESSAGE) {
+    companion object {
+        const val MESSAGE: String =
+            "This Pi's software doesn't support phone calibration yet. It needs the OpenFlight " +
+                "phone-connectivity update. Shots and club changes still work over Wi-Fi."
+    }
+}
+
 /** [ShotRepository.shutdownPi] was called while the active transport isn't Wi-Fi. */
 class PiShutdownUnsupportedException : IllegalStateException("Pi shutdown needs the Wi-Fi transport.")

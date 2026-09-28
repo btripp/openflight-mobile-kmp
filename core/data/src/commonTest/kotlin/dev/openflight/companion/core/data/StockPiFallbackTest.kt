@@ -5,6 +5,7 @@ import app.cash.turbine.test
 import assertk.assertFailure
 import assertk.assertThat
 import assertk.assertions.containsExactly
+import assertk.assertions.hasMessage
 import assertk.assertions.hasSize
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
@@ -17,6 +18,7 @@ import dev.openflight.companion.core.database.inMemoryShotHistoryDatabaseBuilder
 import dev.openflight.companion.core.model.ConnectionErrorKind
 import dev.openflight.companion.core.model.ConnectionState
 import dev.openflight.companion.core.model.GolfClub
+import dev.openflight.companion.core.model.PhoneOrientationMeasurement
 import dev.openflight.companion.core.model.ShotEvent
 import dev.openflight.companion.core.network.OpenFlightHttpError
 import dev.openflight.companion.core.socketio.SocketConnectionState
@@ -83,12 +85,19 @@ class StockPiFallbackTest {
                 emitted.clear()
             }
 
-        /** A stock backend without `/api/club`. */
+        /**
+         * A stock backend without `/api/club` or the calibration route: its GET-only static
+         * catch-all answers `GET` with 404 and `POST` with 405 (verified against upstream `main`
+         * 7ca4b40 `--mock`).
+         */
         fun noClubApi() {
             wifi.supportsControls.value = true
-            wifi.setClubResponse = { throw OpenFlightHttpError.UnexpectedStatus(404) }
-            wifi.currentClubResponse = { throw OpenFlightHttpError.UnexpectedStatus(404) }
+            wifi.setClubResponse = { routeAbsent(405) }
+            wifi.currentClubResponse = { routeAbsent(404) }
+            wifi.calibrationResponse = { routeAbsent(405) }
         }
+
+        private fun routeAbsent(status: Int): Nothing = throw OpenFlightHttpError.UnexpectedStatus(status)
 
         suspend fun storedTimestamps(): List<String> {
             history.awaitWrites()
@@ -278,7 +287,7 @@ class StockPiFallbackTest {
             assertThat(h.settings.clubState.value).isEqualTo(GolfClub.IRON_7)
             assertThat(h.repository.activeClub.value).isEqualTo(GolfClub.IRON_7)
 
-            // The 404 is remembered for this connection: the next change goes straight to Socket.IO.
+            // The 405 is remembered for this connection: the next change goes straight to Socket.IO.
             socket.emitted.clear()
             val again = async { h.repository.setClub(GolfClub.DRIVER) }
             socket.server("club_changed", """{"club":"driver"}""")
@@ -328,6 +337,30 @@ class StockPiFallbackTest {
 
             assertFailure { h.repository.setClub(GolfClub.IRON_7) }.isInstanceOf<OpenFlightHttpError.UnexpectedStatus>()
             assertThat(h.sockets).isEmpty()
+        }
+
+    // (c2) Calibration: no route and no Socket.IO equivalent on a stock Pi.
+
+    @Test
+    fun stockPiCalibrationFailsWithAnExplanationNotHttp405() =
+        runStockPiTest { h ->
+            h.noClubApi()
+            h.sseMissing()
+            h.piConnected()
+
+            assertFailure { h.repository.submitCalibration(MEASUREMENT) }
+                .isInstanceOf<CalibrationUnsupportedException>()
+                .hasMessage(CalibrationUnsupportedException.MESSAGE)
+        }
+
+    @Test
+    fun otherCalibrationFailuresAreUnchanged() =
+        runStockPiTest { h ->
+            h.wifi.state.value = ConnectionState.Connected
+            h.wifi.calibrationResponse = { throw OpenFlightHttpError.UnexpectedStatus(500, "tilt out of range") }
+
+            assertFailure { h.repository.submitCalibration(MEASUREMENT) }
+                .isEqualTo(OpenFlightHttpError.UnexpectedStatus(500, "tilt out of range"))
         }
 
     // (d) Connection status.
@@ -407,6 +440,19 @@ class StockPiFallbackTest {
 
     private companion object {
         const val HOST = "192.168.1.20:8080"
+        val MEASUREMENT =
+            PhoneOrientationMeasurement(
+                mountTiltDeg = 12.0,
+                rollDeg = 0.5,
+                gravityXG = 0.01,
+                gravityYG = -0.02,
+                gravityZG = -0.99,
+                tiltStddevDeg = 0.1,
+                rollStddevDeg = 0.2,
+                sampleCount = 120,
+                measuredAt = "2026-09-28T00:00:00Z",
+                deviceModel = "test",
+            )
         const val SSE_404 = "OpenFlight returned HTTP 404: this Pi has no SSE shot stream."
         const val SHOT_1_EVENT_ID = "05e130db-e939-5537-acd3-d54cd64007c0"
         const val CLUB_TIMEOUT_MILLIS = 10_000L

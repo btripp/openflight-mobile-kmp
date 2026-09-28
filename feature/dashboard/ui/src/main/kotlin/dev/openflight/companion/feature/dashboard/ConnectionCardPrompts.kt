@@ -41,7 +41,10 @@ internal fun ConnectionProblemNotice(problem: ConnectionProblem) {
     val hint =
         when (problem.kind) {
             ConnectionProblem.Kind.ADDRESS_REJECTED -> "Fix the address above, then press Go."
-            ConnectionProblem.Kind.LOCAL_NETWORK_DENIED -> null
+
+            // The detail already says what to do (switch to Wi-Fi or update the Pi).
+            ConnectionProblem.Kind.LOCAL_NETWORK_DENIED, ConnectionProblem.Kind.BLUETOOTH_NOT_FOUND -> null
+
             ConnectionProblem.Kind.CONNECTION_FAILED -> "Check the Pi is on and on this network, then Retry."
         }
     OfNotice(

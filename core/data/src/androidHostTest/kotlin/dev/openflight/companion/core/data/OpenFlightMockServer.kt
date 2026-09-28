@@ -38,9 +38,13 @@ internal class OpenFlightMockServer private constructor(
     val isAlive: Boolean get() = process.isAlive
 
     /** The HTTP status of a `GET` to [path], or `null` when nothing answers. */
-    fun status(path: String): Int? =
+    fun status(
+        path: String,
+        method: String = "GET",
+    ): Int? =
         runCatching {
             val connection = URI("http://$host$path").toURL().openConnection() as HttpURLConnection
+            connection.requestMethod = method
             connection.connectTimeout = PROBE_TIMEOUT_MILLIS
             connection.readTimeout = PROBE_TIMEOUT_MILLIS
             try {

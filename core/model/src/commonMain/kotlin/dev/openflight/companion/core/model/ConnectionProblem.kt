@@ -28,12 +28,29 @@ data class ConnectionProblem(
 
         /** Anything else that failed: Retry may help. */
         CONNECTION_FAILED,
+
+        /**
+         * A Bluetooth scan has found no OpenFlight Pi for a while. Stock OpenFlight has no
+         * Bluetooth at all (it needs the Pi's phone-connectivity update, started with `--ble`), and
+         * pairing the Pi in the phone's own Bluetooth settings doesn't help: say so instead of
+         * scanning silently forever (tester bug, 2026-09).
+         */
+        BLUETOOTH_NOT_FOUND,
     }
 
     companion object {
         const val ADDRESS_REJECTED_TITLE: String = "Address not allowed"
         const val LOCAL_NETWORK_DENIED_TITLE: String = "Local network access is off"
         const val CONNECTION_FAILED_TITLE: String = "Can't reach the Pi"
+        const val BLUETOOTH_NOT_FOUND_TITLE: String = "No OpenFlight Pi found over Bluetooth"
+        const val BLUETOOTH_NOT_FOUND_DETAIL: String =
+            "Still scanning. Bluetooth needs the Pi's phone-connectivity update (started with --ble); " +
+                "standard OpenFlight software works over Wi-Fi only. Pairing in the phone's Bluetooth " +
+                "settings isn't needed. Switch to Wi-Fi to connect now."
+
+        /** The problem for a Bluetooth scan that has found nothing for a while. */
+        fun bluetoothNotFound(): ConnectionProblem =
+            ConnectionProblem(Kind.BLUETOOTH_NOT_FOUND, BLUETOOTH_NOT_FOUND_TITLE, BLUETOOTH_NOT_FOUND_DETAIL)
 
         /** The problem to show for this pair of states, or `null` when nothing is wrong (yet). */
         fun of(

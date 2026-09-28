@@ -26,7 +26,15 @@ sealed class OpenFlightHttpError(
     data class UnexpectedStatus(
         val statusCode: Int,
         val serverMessage: String? = null,
-    ) : OpenFlightHttpError(serverMessage ?: defaultStatusMessage(statusCode))
+    ) : OpenFlightHttpError(serverMessage ?: defaultStatusMessage(statusCode)) {
+        /**
+         * The Pi has no such route: a stock backend (upstream `main`, no phone-connectivity
+         * routes). Its GET-only static catch-all `/<path:path>` still matches every URL, so a
+         * missing route answers `GET` with 404 but `POST` with **405**. Check this, never 404
+         * alone (tester bug, 2026-09: club changes and calibration failed with "HTTP 405").
+         */
+        val isRouteAbsent: Boolean get() = statusCode == HTTP_NOT_FOUND || statusCode == HTTP_METHOD_NOT_ALLOWED
+    }
 
     /** The stream's byte channel ended cleanly; the run loop reconnects after this. */
     data object StreamEnded : OpenFlightHttpError("OpenFlight closed the connection.")
@@ -40,5 +48,7 @@ sealed class OpenFlightHttpError(
             }
 
         const val HTTP_TOO_MANY_DEVICES = 503
+        const val HTTP_NOT_FOUND = 404
+        const val HTTP_METHOD_NOT_ALLOWED = 405
     }
 }
