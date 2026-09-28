@@ -117,6 +117,26 @@ final class DashboardUITests: XCTestCase {
         waitForExpectations(timeout: 5)
     }
 
+    /// Issue #15: with the default bag seeded (it has no 2-iron), the club menu lists the bag and
+    /// tucks the other clubs under an "All clubs" submenu.
+    func testClubMenuListsTheBagThenAllClubs() {
+        let app = AppNav.launch(["--ui-testing", "--preview-shot"])
+        AppNav.open(.bag, in: app)
+        XCTAssertTrue(app.descendants(matching: .any)["bag.club.driver"].waitForExistence(timeout: 10))
+        AppNav.open(.practice, in: app)
+
+        let clubMenu = app.buttons["dashboard.clubSelector"]
+        XCTAssertTrue(clubMenu.waitForExistence(timeout: 10))
+        clubMenu.tap()
+        XCTAssertTrue(Self.menuItem(app, "Pitching Wedge").waitForExistence(timeout: 5))
+        XCTAssertFalse(Self.menuItem(app, "2-Iron").exists)
+
+        let allClubs = Self.menuItem(app, "All clubs")
+        XCTAssertTrue(allClubs.waitForExistence(timeout: 5))
+        allClubs.tap()
+        XCTAssertTrue(Self.menuItem(app, "2-Iron").waitForExistence(timeout: 5))
+    }
+
     /// A club in the open menu (not the menu's own label, which may show the same name).
     static func menuItem(_ app: XCUIApplication, _ club: String) -> XCUIElement {
         app.buttons
