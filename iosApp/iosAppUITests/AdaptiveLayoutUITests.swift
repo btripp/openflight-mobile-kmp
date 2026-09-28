@@ -127,7 +127,7 @@ final class AdaptiveLayoutUITests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any)["app.listDetail.list"].exists)
         let source = app.staticTexts["session.history.detail.source"]
         XCTAssertTrue(source.waitForExistence(timeout: 5))
-        XCTAssertEqual(source.label, "Wi-Fi · raspberrypi.local:8080")
+        XCTAssertEqual(source.label, "Network · raspberrypi.local:8080")
 
         // Plan F1d: picking another session replaces the detail (it used to keep the first
         // session's view model), and a tap anywhere on a short row picks it.

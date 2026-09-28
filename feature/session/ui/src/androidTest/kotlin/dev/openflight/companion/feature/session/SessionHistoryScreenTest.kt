@@ -44,7 +44,7 @@ class SessionHistoryScreenTest {
                         "Fri 25 Sep",
                         "10:03 – 10:45",
                         24,
-                        "Wi-Fi",
+                        "Network",
                         isCurrent = true,
                         host = "raspberrypi.local:8080",
                         spokenDate = "Friday 25 September 2026",
@@ -76,7 +76,7 @@ class SessionHistoryScreenTest {
             .assertIsDisplayed()
             .assert(
                 hasContentDescription(
-                    "Friday 25 September 2026, 10:03 to 10:45, 24 shots, Wi-Fi, " +
+                    "Friday 25 September 2026, 10:03 to 10:45, 24 shots, Network, " +
                         "raspberrypi.local:8080, current session",
                 ),
             )
@@ -168,7 +168,7 @@ class SessionHistoryScreenTest {
                             loaded = true,
                             title = "Fri 25 Sep",
                             subtitle = "10:03 – 10:45 · 2 shots",
-                            sourceLine = "Wi-Fi · raspberrypi.local:8080",
+                            sourceLine = "Network · raspberrypi.local:8080",
                             session = SessionUiState(allCount = previewRows.size, shots = previewRows),
                         ),
                     onEvent = { detailEvents += it },
@@ -181,7 +181,7 @@ class SessionHistoryScreenTest {
         composeRule
             .onNodeWithTag(
                 SessionHistoryTestTags.DETAIL_SOURCE,
-            ).assert(hasText("Wi-Fi · raspberrypi.local:8080"))
+            ).assert(hasText("Network · raspberrypi.local:8080"))
         composeRule.onNodeWithTag(SessionTestTags.STATS).assertIsDisplayed()
         composeRule.onNodeWithTag(SessionHistoryTestTags.DETAIL_EXPORT).performClick()
 

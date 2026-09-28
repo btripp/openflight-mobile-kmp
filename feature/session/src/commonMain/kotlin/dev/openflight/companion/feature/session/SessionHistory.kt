@@ -26,7 +26,7 @@ data class SessionHistoryUiState(
  *   added when it isn't this year's).
  * @property spokenDate the same day for a screen reader, e.g. `"Thursday 25 September"`.
  * @property timeRange first to last shot, `"10:03 – 10:45"`, or one time for a one-shot session.
- * @property transportLabel "Wi-Fi", "Bluetooth", or `null` when unknown.
+ * @property transportLabel "Network", "Bluetooth", or `null` when unknown.
  * @property host the Pi it was recorded from, when known (Wi-Fi only).
  * @property isCurrent the session new shots are being filed under.
  */
@@ -88,7 +88,7 @@ data class HistoryProfileChip(
  * One stored session's detail: the same club tabs, stats and shot rows as the live Session screen
  * ([session], whose shot ids are timestamps), plus a heading.
  *
- * @property sourceLine how it was recorded ("Wi-Fi · raspberrypi.local:8080").
+ * @property sourceLine how it was recorded ("Network · raspberrypi.local:8080").
  * @property isCurrent the session new shots are still being filed under.
  * @property profileChips one per profile with shots here, when there are at least two; empty
  *   otherwise (there is nothing to filter).
@@ -156,7 +156,7 @@ internal fun HistorySession.toRow(
 
 internal fun transportLabel(transport: TransportType?): String? =
     when (transport) {
-        TransportType.WIFI -> "Wi-Fi"
+        TransportType.WIFI -> "Network"
         TransportType.BLUETOOTH -> "Bluetooth"
         null -> null
     }

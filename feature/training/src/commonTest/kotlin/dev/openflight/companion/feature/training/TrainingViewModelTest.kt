@@ -146,14 +146,14 @@ class TrainingViewModelTest {
             settings.transport.value = TransportType.BLUETOOTH
 
             viewModel.uiState.testIgnoringRest {
-                val state = awaitUntil { it.availability.disabledReason == "Requires Wi-Fi" }
-                assertThat(state.availability.disabledReason).isEqualTo("Requires Wi-Fi")
+                val state = awaitUntil { it.availability.disabledReason == "Requires Network" }
+                assertThat(state.availability.disabledReason).isEqualTo("Requires Network")
                 assertThat(state.hasSwings).isFalse()
 
                 viewModel.onEvent(TrainingEvent.SelectImplement("stack"))
 
                 val failed = awaitUntil { it.error != null }
-                assertThat(failed.error?.startsWith("This feature needs the Pi over Wi-Fi")).isEqualTo(true)
+                assertThat(failed.error?.startsWith("This feature needs the Pi over the network")).isEqualTo(true)
                 assertThat(failed.selectedImplement.id).isEqualTo("driver")
                 assertThat(piSession.commands).isEmpty()
             }

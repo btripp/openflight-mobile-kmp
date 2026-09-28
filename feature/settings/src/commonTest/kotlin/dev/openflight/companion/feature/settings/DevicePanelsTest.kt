@@ -193,8 +193,8 @@ class DevicePanelsTest {
     @Test
     fun theTriggerCardWaitsWhileConnectedAndExplainsOtherwise() {
         assertThat(DevicePanels.trigger(null, PiFeatureAvailability.Available)).isEqualTo(TriggerCard.Waiting)
-        assertThat(DevicePanels.trigger(null, PiFeatureAvailability.Unavailable("Requires Wi-Fi")))
-            .isEqualTo(TriggerCard.Unavailable("Requires Wi-Fi"))
+        assertThat(DevicePanels.trigger(null, PiFeatureAvailability.Unavailable("Requires Network")))
+            .isEqualTo(TriggerCard.Unavailable("Requires Network"))
     }
 
     @Test

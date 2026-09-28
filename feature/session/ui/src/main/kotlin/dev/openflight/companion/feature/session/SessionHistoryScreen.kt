@@ -322,7 +322,7 @@ private fun SessionHistoryPreview() {
                                 "Thu 25 Sep",
                                 "10:03 – 10:45",
                                 24,
-                                "Wi-Fi",
+                                "Network",
                                 isCurrent = true,
                                 host = "raspberrypi.local:8080",
                             ),

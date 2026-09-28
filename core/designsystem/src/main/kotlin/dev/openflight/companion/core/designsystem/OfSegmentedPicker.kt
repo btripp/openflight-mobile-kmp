@@ -12,7 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 
 /**
- * A two-or-more-way segmented picker, for example the Bluetooth/Wi-Fi transport
+ * A two-or-more-way segmented picker, for example the Bluetooth/Network transport
  * picker on the dashboard. [options] and [selected] are plain strings so this
  * component has no dependency on `core:model`'s enums.
  */
@@ -48,7 +48,7 @@ fun OfSegmentedPicker(
 private fun OfSegmentedPickerPreview() {
     OfTheme {
         OfSegmentedPicker(
-            options = listOf("Bluetooth", "Wi-Fi"),
+            options = listOf("Bluetooth", "Network"),
             selected = "Bluetooth",
             onSelect = {},
             modifier = Modifier.padding(OfSpacing.Md),

@@ -17,7 +17,7 @@ object SessionHistoryTestTags {
     /** Plan F8a1: opens the driving range replaying this session. */
     const val DETAIL_REPLAY_ON_RANGE = "session.history.detail.replayOnRange"
 
-    /** How a stored session was recorded ("Wi-Fi · raspberrypi.local:8080"), plan R8f. */
+    /** How a stored session was recorded ("Network · raspberrypi.local:8080"), plan R8f. */
     const val DETAIL_SOURCE = "session.history.detail.source"
 
     /** The "Current" badge on the session new shots are filed under. */

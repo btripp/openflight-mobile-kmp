@@ -66,7 +66,7 @@ final class PiScreensUITests: XCTestCase {
         let title = app.staticTexts["camera.phaseTitle"]
         XCTAssertTrue(title.waitForExistence(timeout: 5))
         XCTAssertEqual(title.label, "Camera Offline")
-        XCTAssertTrue(app.staticTexts["The camera needs the Pi's live Wi-Fi session (Not connected)."].exists)
+        XCTAssertTrue(app.staticTexts["The camera needs the Pi's live network session (Not connected)."].exists)
         XCTAssertEqual(app.staticTexts["camera.captureStatus"].label, "Not reported yet")
 
         let refresh = app.buttons["camera.refresh"]

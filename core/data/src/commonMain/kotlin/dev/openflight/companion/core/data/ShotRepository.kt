@@ -131,9 +131,9 @@ class CalibrationUnsupportedException : IllegalStateException(MESSAGE) {
     companion object {
         const val MESSAGE: String =
             "This Pi's software doesn't support phone calibration yet. It needs the OpenFlight " +
-                "phone-connectivity update. Shots and club changes still work over Wi-Fi."
+                "phone-connectivity update. Shots and club changes still work over the network."
     }
 }
 
 /** [ShotRepository.shutdownPi] was called while the active transport isn't Wi-Fi. */
-class PiShutdownUnsupportedException : IllegalStateException("Pi shutdown needs the Wi-Fi transport.")
+class PiShutdownUnsupportedException : IllegalStateException("Pi shutdown needs the Network transport.")

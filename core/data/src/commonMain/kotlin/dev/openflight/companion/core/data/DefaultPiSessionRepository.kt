@@ -126,6 +126,10 @@ internal class DefaultPiSessionRepository(
         sessionJob = null
     }
 
+    override fun retry() {
+        activeSocket.value?.reconnectNow()
+    }
+
     override suspend fun refreshSession() = command("get_session")
 
     override suspend fun deleteShot(timestamp: String) {

@@ -12,7 +12,7 @@ sealed interface PiLinkState {
 
     /** The selected transport is Bluetooth: these features need the Pi over Wi-Fi. */
     data object WifiOnly : PiLinkState {
-        override val description: String = "Available on Wi-Fi only"
+        override val description: String = "Available on Network only"
     }
 
     data object Connecting : PiLinkState {

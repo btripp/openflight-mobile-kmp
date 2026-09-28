@@ -64,17 +64,21 @@ final class DashboardUITests: XCTestCase {
         XCTAssertFalse(confirm.waitForExistence(timeout: 2))
     }
 
-    /// Plan R8d: on Wi-Fi the host field offers tap-to-fill hints that fill it without connecting.
+    /// Plan R8d: on Network the host field offers a tap-to-fill hint that fills it without
+    /// connecting. Issue #17: the transport is labelled "Network", and there's no Pi access-point
+    /// (192.168.4.1) hint, since upstream doesn't use access-point mode.
     func testHostHintFillsTheHostField() {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-testing", "--transport", "wifi"]
         app.launch()
 
-        let hint = app.buttons["dashboard.hostHint.192.168.4.1:8080"]
+        let hint = app.buttons["dashboard.hostHint.192.168.1.100:8080"]
         XCTAssertTrue(hint.waitForExistence(timeout: 10))
-        XCTAssertTrue(app.buttons["dashboard.hostHint.192.168.1.100:8080"].exists)
+        XCTAssertTrue(app.segmentedControls["dashboard.transport"].buttons["Network"].exists)
+        XCTAssertFalse(app.segmentedControls["dashboard.transport"].buttons["Wi-Fi"].exists)
+        XCTAssertFalse(app.buttons["dashboard.hostHint.192.168.4.1:8080"].exists)
         hint.tap()
-        XCTAssertEqual(app.textFields["dashboard.host"].value as? String, "192.168.4.1:8080")
+        XCTAssertEqual(app.textFields["dashboard.host"].value as? String, "192.168.1.100:8080")
     }
 
     func testCalibrateAndRangeOpenTheirScreensAndGoBack() {
