@@ -85,7 +85,7 @@ struct CameraContent: View {
         switch state.phase {
         case .offline:
             ("Camera Offline",
-             "The camera needs the Pi's live Wi-Fi session (\(state.availability.disabledReason ?? "")).",
+             "The camera needs the Pi's live network session (\(state.availability.disabledReason ?? "")).",
              "wifi.slash")
         case .notEnabled:
             ("Camera Capture Off",

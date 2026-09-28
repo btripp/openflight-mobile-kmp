@@ -98,7 +98,7 @@ private fun OfStatusChipPreview() {
                 modifier = Modifier.padding(OfSpacing.Sm),
             )
             OfStatusChip(
-                label = "Wi-Fi",
+                label = "Network",
                 tone = StatusTone.Negative,
                 detail = "Too many devices",
                 modifier = Modifier.padding(OfSpacing.Sm),

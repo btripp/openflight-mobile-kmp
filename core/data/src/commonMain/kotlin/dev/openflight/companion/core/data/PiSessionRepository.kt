@@ -294,7 +294,7 @@ class WifiOnlyFeatureException(
     enum class Reason(
         val message: String,
     ) {
-        BLUETOOTH("This feature needs the Pi over Wi-Fi. Switch the transport to Wi-Fi to use it."),
+        BLUETOOTH("This feature needs the Pi over the network. Switch the transport to Network to use it."),
         NOT_CONNECTED("Not connected to the Pi's live session yet."),
     }
 }

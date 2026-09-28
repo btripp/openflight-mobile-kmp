@@ -247,7 +247,7 @@ private fun SessionHistoryDetailPreview() {
                     loaded = true,
                     title = "Thu 25 Sep",
                     subtitle = "10:03 – 10:45 · 2 shots",
-                    sourceLine = "Wi-Fi · raspberrypi.local:8080",
+                    sourceLine = "Network · raspberrypi.local:8080",
                     isCurrent = true,
                     profileChips = listOf(HistoryProfileChip("ann", "Ann", 1), HistoryProfileChip("bo", "Bo", 1)),
                     session = SessionUiState(allCount = previewRows.size, shots = previewRows),

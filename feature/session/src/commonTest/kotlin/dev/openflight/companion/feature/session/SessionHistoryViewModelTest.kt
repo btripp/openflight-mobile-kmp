@@ -79,7 +79,7 @@ class SessionHistoryViewModelTest {
                         date = "Fri 25 Sep",
                         timeRange = "10:03 – 10:45",
                         shotCount = 2,
-                        transportLabel = "Wi-Fi",
+                        transportLabel = "Network",
                         isCurrent = true,
                         host = "pi.local:8080",
                         spokenDate = "Friday 25 September 2026",
@@ -97,10 +97,10 @@ class SessionHistoryViewModelTest {
                 )
                 assertThat(state.sessions[0].shotCountLabel).isEqualTo("2 shots")
                 assertThat(state.sessions[1].shotCountLabel).isEqualTo("1 shot")
-                assertThat(state.sessions[0].detailLine).isEqualTo("10:03 – 10:45 · Wi-Fi · pi.local:8080")
+                assertThat(state.sessions[0].detailLine).isEqualTo("10:03 – 10:45 · Network · pi.local:8080")
                 assertThat(state.sessions[0].accessibilityLabel)
                     .isEqualTo(
-                        "Friday 25 September 2026, 10:03 to 10:45, 2 shots, Wi-Fi, pi.local:8080, current session",
+                        "Friday 25 September 2026, 10:03 to 10:45, 2 shots, Network, pi.local:8080, current session",
                     )
             }
         }
@@ -123,7 +123,7 @@ class SessionHistoryViewModelTest {
             SessionHistoryViewModel(history, now = { "2026-09-25T12:00:00Z" }).uiState.testIgnoringRest {
                 val row = awaitUntil { it.sessions.isNotEmpty() }.sessions.single()
                 assertThat(row.date).isEqualTo("Wed 31 Dec 2025")
-                assertThat(row.detailLine).isEqualTo("23:59 · Wi-Fi")
+                assertThat(row.detailLine).isEqualTo("23:59 · Network")
             }
         }
 
@@ -225,7 +225,7 @@ class SessionHistoryViewModelTest {
                 val state = awaitUntil { it.loaded && it.sourceLine != null }
                 assertThat(state.title).isEqualTo("Fri 25 Sep")
                 assertThat(state.subtitle).isEqualTo("10:00 – 10:10 · 3 shots")
-                assertThat(state.sourceLine).isEqualTo("Wi-Fi · pi.local:8080")
+                assertThat(state.sourceLine).isEqualTo("Network · pi.local:8080")
                 assertThat(state.isCurrent).isFalse()
                 // One profile: nothing to filter.
                 assertThat(state.profileChips).isEmpty()

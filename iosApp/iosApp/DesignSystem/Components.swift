@@ -70,7 +70,7 @@ struct ConfidenceDots: View {
     }
 }
 
-/// Why a Wi-Fi-only control is disabled ("Requires Wi-Fi", "Not connected").
+/// Why a Wi-Fi-only control is disabled ("Requires Network", "Not connected").
 struct DisabledReason: View {
     let reason: String
 

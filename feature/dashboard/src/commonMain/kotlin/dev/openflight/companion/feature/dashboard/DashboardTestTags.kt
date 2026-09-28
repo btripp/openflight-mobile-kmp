@@ -42,7 +42,7 @@ object DashboardTestTags {
 
     fun profileRemove(id: String): String = "dashboard.profile.remove.$id"
 
-    /** A tap-to-fill host hint, by its host (for example "192.168.4.1:8080"). */
+    /** A tap-to-fill host hint, by its host (for example "192.168.1.100:8080"). */
     fun hostHint(host: String): String = "dashboard.hostHint.$host"
 
     /** A detail metric in the latest-shot grid, by its title (for example "Smash"). */

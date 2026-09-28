@@ -119,7 +119,7 @@ private fun snap(
     return (range.first + steps * step).coerceIn(range)
 }
 
-/** The small "why is this disabled" line under a control, for example "Requires Wi-Fi". */
+/** The small "why is this disabled" line under a control, for example "Requires Network". */
 @Composable
 fun OfDisabledReason(
     reason: String,
@@ -145,7 +145,7 @@ private fun OfControlsPreview() {
                     checked = false,
                     onCheckedChange = {},
                     enabled = false,
-                    disabledReason = "Requires Wi-Fi",
+                    disabledReason = "Requires Network",
                 )
                 OfSlider(label = "Min Speed", value = 12, range = 0..50, step = 1, onValueCommitted = {}, unit = " mph")
             }

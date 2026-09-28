@@ -95,10 +95,20 @@ class DashboardConnectionCardTest {
     // region host hints
 
     @Test
-    fun wifiOffersTheAccessPointAndHomeNetworkHints() {
+    fun networkOffersOnlyTheHomeNetworkHint() {
+        // Issue #17: upstream doesn't use the Pi's access-point mode, so 192.168.4.1 isn't offered.
         val hints = ConnectionPanelState(transport = TransportType.WIFI).hostHints.map { it.host }
-        assertThat(hints).containsExactly("192.168.4.1:8080", "192.168.1.100:8080")
+        assertThat(hints).containsExactly("192.168.1.100:8080")
         assertThat(ConnectionPanelState(transport = TransportType.BLUETOOTH).hostHints).isEmpty()
+    }
+
+    @Test
+    fun theWifiTransportIsLabelledNetwork() {
+        assertThat(TransportType.WIFI.label).isEqualTo("Network")
+        assertThat(TransportType.BLUETOOTH.label).isEqualTo("Bluetooth")
+        assertThat(ConnectionPanelState.DEMO_NOTE).isEqualTo(
+            "Demo mode: a pretend Pi over the network. Shots are made up, not measured.",
+        )
     }
 
     @Test
@@ -106,8 +116,8 @@ class DashboardConnectionCardTest {
         runTest {
             viewModel().let { vm ->
                 vm.uiState.testIgnoringRest {
-                    vm.onEvent(DashboardEvent.HostHintSelected("192.168.4.1:8080"))
-                    awaitUntil { it.connection.hostText == "192.168.4.1:8080" }
+                    vm.onEvent(DashboardEvent.HostHintSelected("192.168.1.100:8080"))
+                    awaitUntil { it.connection.hostText == "192.168.1.100:8080" }
                 }
             }
             assertThat(settings.hostWrites).isEmpty()

@@ -24,8 +24,8 @@ sealed interface PiFeatureAvailability {
     }
 
     companion object {
-        /** The selected transport is Bluetooth. */
-        const val REQUIRES_WIFI: String = "Requires Wi-Fi"
+        /** The selected transport is Bluetooth. The Wi-Fi transport is labelled "Network" (issue #17). */
+        const val REQUIRES_WIFI: String = "Requires Network"
 
         /** On Wi-Fi, but the Socket.IO link isn't up (yet). */
         const val NOT_CONNECTED: String = "Not connected"
@@ -34,13 +34,13 @@ sealed interface PiFeatureAvailability {
          * Plan R8e: Bluetooth is a read-and-select link (the Pi refuses destructive commands over
          * unauthenticated BLE), so deleting, clearing and editing profiles need Wi-Fi.
          */
-        const val WIFI_ONLY_ON_BLUETOOTH: String = "Wi-Fi only: Bluetooth can't delete or edit on the Pi"
+        const val WIFI_ONLY_ON_BLUETOOTH: String = "Network only: Bluetooth can't delete or edit on the Pi"
 
         /**
          * Plan R8f: the Session screen's shorter wording for [forDeleteAndClear], shown under its
          * Clear button and on its shot list.
          */
-        const val DELETE_AND_CLEAR_NEED_WIFI: String = "Delete and Clear need Wi-Fi. Bluetooth is read-only."
+        const val DELETE_AND_CLEAR_NEED_WIFI: String = "Delete and Clear need Network. Bluetooth is read-only."
 
         /** [link]'s availability: only [PiLinkState.Connected] allows Wi-Fi-only actions. */
         fun of(link: PiLinkState): PiFeatureAvailability =

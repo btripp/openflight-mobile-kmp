@@ -97,7 +97,7 @@ class SettingsViewModelTest {
 
             viewModel.uiState.testIgnoringRest {
                 val ble = awaitUntil { it.linkState == PiLinkState.WifiOnly && it.radar.sliders.isNotEmpty() }
-                val requiresWifi = PiFeatureAvailability.Unavailable("Requires Wi-Fi")
+                val requiresWifi = PiFeatureAvailability.Unavailable("Requires Network")
                 assertThat(ble.link).isEqualTo(requiresWifi)
                 assertThat(ble.debug.toggle).isEqualTo(requiresWifi)
                 assertThat(ble.cloud.upload).isEqualTo(requiresWifi)
@@ -270,7 +270,7 @@ class SettingsViewModelTest {
             viewModel.effects.test {
                 viewModel.onEvent(SettingsEvent.RequestShutdown)
 
-                assertThat(awaitItem()).isEqualTo(SettingsEffect.Message("Requires Wi-Fi"))
+                assertThat(awaitItem()).isEqualTo(SettingsEffect.Message("Requires Network"))
             }
             assertThat(viewModel.uiState.value.shutdown.confirmationRequired).isFalse()
         }

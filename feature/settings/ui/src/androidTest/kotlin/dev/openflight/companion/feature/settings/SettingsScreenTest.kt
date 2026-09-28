@@ -79,6 +79,17 @@ class SettingsScreenTest {
         composeRule.onNodeWithText("Shot detected").performScrollTo().assertIsDisplayed()
     }
 
+    /** Issue #17: the Wi-Fi transport is called "Network" (the Pi can be on Wi-Fi or Ethernet). */
+    @Test
+    fun givenTheNetworkTransport_whenShown_thenTheTransportRowSaysNetwork() {
+        show(previewSettingsState(transport = TransportType.WIFI))
+
+        composeRule
+            .onNode(hasText("Network") and hasAnyAncestor(hasTestTag(SettingsTestTags.CONNECTION)))
+            .assertIsDisplayed()
+        composeRule.onAllNodes(hasText("Wi-Fi")).assertCountEquals(0)
+    }
+
     @Test
     fun givenDebugOn_whenShown_thenTheLogPathShowsAndTheToggleSendsToggleDebug() {
         show(previewSettingsState(debugEnabled = true))

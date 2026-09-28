@@ -21,7 +21,7 @@ final class SessionHistoryUITests: XCTestCase {
         // One VoiceOver stop per row, spelled out (the shared `accessibilityLabel`).
         XCTAssertTrue(
             current.label.contains(
-                "Friday 25 September 2026, 10:03 to 10:45, 3 shots, Wi-Fi, raspberrypi.local:8080, current session"
+                "Friday 25 September 2026, 10:03 to 10:45, 3 shots, Network, raspberrypi.local:8080, current session"
             ),
             "row: \(current.label)"
         )
@@ -35,7 +35,7 @@ final class SessionHistoryUITests: XCTestCase {
 
         let source = app.staticTexts["session.history.detail.source"]
         XCTAssertTrue(source.waitForExistence(timeout: 5))
-        XCTAssertEqual(source.label, "Wi-Fi · raspberrypi.local:8080")
+        XCTAssertEqual(source.label, "Network · raspberrypi.local:8080")
         XCTAssertTrue(app.descendants(matching: .any)["session.history.current"].exists)
         XCTAssertEqual(stat(app, "Shots").value as? String, "3")
 

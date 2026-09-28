@@ -5,9 +5,12 @@ import androidx.activity.ComponentActivity
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.UriHandler
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTextContains
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -80,20 +83,31 @@ class DashboardConnectionCardScreenTest {
     }
 
     @Test
-    fun givenWifi_whenTheAccessPointHintIsTapped_thenItFillsTheHost() {
+    fun givenNetwork_whenTheHomeNetworkHintIsTapped_thenItFillsTheHost() {
         show(ConnectionPanelState(transport = TransportType.WIFI))
 
-        composeRule.onNodeWithTag(DashboardTestTags.hostHint("192.168.4.1:8080")).performClick()
+        composeRule.onNodeWithTag(DashboardTestTags.hostHint("192.168.1.100:8080")).performClick()
 
-        assertEquals(listOf<DashboardEvent>(DashboardEvent.HostHintSelected("192.168.4.1:8080")), events)
-        composeRule.onNodeWithTag(DashboardTestTags.hostHint("192.168.1.100:8080")).assertIsDisplayed()
+        assertEquals(listOf<DashboardEvent>(DashboardEvent.HostHintSelected("192.168.1.100:8080")), events)
+    }
+
+    /** Issue #17: upstream doesn't use the Pi's access-point mode, so 192.168.4.1 isn't suggested. */
+    @Test
+    fun givenNetwork_whenShown_thenTheTransportSaysNetworkAndThereIsNoAccessPointHint() {
+        show(ConnectionPanelState(transport = TransportType.WIFI))
+
+        composeRule.onNodeWithTag(DashboardTestTags.hostHint("192.168.4.1:8080")).assertDoesNotExist()
+        composeRule.onAllNodes(hasText("192.168.4.1", substring = true), useUnmergedTree = true).assertCountEquals(0)
+        // The picker option (and, while not connected, the status title) says "Network".
+        composeRule.onAllNodes(hasText("Network"), useUnmergedTree = true).onFirst().assertIsDisplayed()
+        composeRule.onAllNodes(hasText("Wi-Fi"), useUnmergedTree = true).assertCountEquals(0)
     }
 
     @Test
     fun givenBluetooth_whenShown_thenThereAreNoHostHints() {
         show(ConnectionPanelState(transport = TransportType.BLUETOOTH))
 
-        composeRule.onNodeWithTag(DashboardTestTags.hostHint("192.168.4.1:8080")).assertDoesNotExist()
+        composeRule.onNodeWithTag(DashboardTestTags.hostHint("192.168.1.100:8080")).assertDoesNotExist()
     }
 
     @Test
