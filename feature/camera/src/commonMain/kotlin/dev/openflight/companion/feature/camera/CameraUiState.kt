@@ -78,6 +78,11 @@ data class CameraUiState(
     val previewError: String?,
     val replays: List<ReplayRow>,
     val replay: CameraReplayState,
+    /**
+     * Plan F14: Demo mode has no camera: the screen shows this placeholder in place of the preview
+     * and replays; `null` otherwise.
+     */
+    val demoPlaceholder: String? = null,
 ) {
     /** "1456×1088 @ 240 fps" from [settings], when the Pi reports them. */
     val captureSummary: String?
@@ -92,6 +97,11 @@ data class CameraUiState(
     companion object {
         /** At most this many replayable shots are listed. */
         const val MAX_REPLAYS: Int = 10
+
+        /** Plan F14: the camera screen in Demo mode. */
+        const val DEMO_PLACEHOLDER: String =
+            "Demo mode has no camera. With a real OpenFlight Pi and its high-speed camera, the live " +
+                "preview and each shot's slow-motion replay show here."
     }
 }
 

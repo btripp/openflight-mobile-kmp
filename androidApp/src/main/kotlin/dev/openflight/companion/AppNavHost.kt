@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 package dev.openflight.companion
 
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -8,6 +9,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.navigation.NavDestination
 import androidx.navigation.NavDestination.Companion.hasRoute
@@ -31,6 +33,7 @@ import dev.openflight.companion.feature.calibration.CalibrationRoute
 import dev.openflight.companion.feature.camera.CameraRoute
 import dev.openflight.companion.feature.dashboard.DashboardRoute
 import dev.openflight.companion.feature.range.DrivingRangeRoute
+import dev.openflight.companion.feature.range.ShotTrailPreviewCanvas
 import dev.openflight.companion.feature.session.SessionHistoryDetailRoute
 import dev.openflight.companion.feature.session.SessionHistoryRoute
 import dev.openflight.companion.feature.session.SessionRoute
@@ -220,7 +223,13 @@ private fun AppGraph(
             )
         }
         composable<Calibration> { CalibrationRoute(onBack = onBack) }
-        composable<Range> { DrivingRangeRoute(onExit = onBack, autoplay = launchOptions.previewFlight) }
+        composable<Range> {
+            DrivingRangeRoute(
+                onExit = onBack,
+                autoplay = launchOptions.previewFlight,
+                freezeProgress = launchOptions.rangeFreezeProgress,
+            )
+        }
         composable<Session> {
             SessionRoute(
                 onBack = onBack,
@@ -258,6 +267,16 @@ private fun AppGraph(
                 onBack = onBack,
                 onOpenCalibration = { navController.navigate(Calibration) },
                 onOpenCamera = { navController.navigate(Camera) },
+                // Plan F8a2t: the shot trail preview, drawn by the range's own renderer.
+                shotTrailPreview = { trail, theme ->
+                    ShotTrailPreviewCanvas(
+                        trail.selected,
+                        trail.keepLast,
+                        trail.landingEffect,
+                        theme,
+                        Modifier.fillMaxSize(),
+                    )
+                },
             )
         }
         composable<Bag> {

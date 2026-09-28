@@ -11,6 +11,9 @@ import assertk.assertions.isFalse
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
 import dev.openflight.companion.core.data.AppLifecycle
+import dev.openflight.companion.core.data.LandingEffect
+import dev.openflight.companion.core.data.RangeThemeSetting
+import dev.openflight.companion.core.data.ShotTrailStyle
 import dev.openflight.companion.core.data.TransportType
 import dev.openflight.companion.core.insights.CalloutField
 import dev.openflight.companion.core.insights.UnitSystem
@@ -365,6 +368,105 @@ class SettingsViewModelTest {
             viewModel.onEvent(SettingsEvent.PreviewCallout)
 
             assertThat(speech.spoken).isEmpty()
+        }
+
+    // Plan F8a2a: the range theme, added at the end to keep this file's diff mergeable (§4a A7).
+
+    @Test
+    fun theRangeThemeDefaultsToDayAndOffersEveryThemeInOrder() =
+        runTest {
+            viewModel.uiState.testIgnoringRest {
+                val state = awaitUntil { it.host == "pi.local:8080" }
+
+                assertThat(state.rangeTheme.selected).isEqualTo(RangeThemeSetting.DAY)
+                assertThat(state.rangeTheme.options.map { it.theme }).containsExactly(
+                    RangeThemeSetting.DAY,
+                    RangeThemeSetting.DUSK,
+                    RangeThemeSetting.NIGHT,
+                    RangeThemeSetting.LINKS,
+                )
+                assertThat(state.rangeTheme.options.map { it.label }).containsExactly("Day", "Dusk", "Night", "Links")
+            }
+        }
+
+    @Test
+    fun pickingARangeThemePersistsItAndShowsIt() =
+        runTest {
+            viewModel.uiState.testIgnoringRest {
+                viewModel.onEvent(SettingsEvent.SetRangeTheme(RangeThemeSetting.NIGHT))
+
+                assertThat(awaitUntil { it.rangeTheme.selected == RangeThemeSetting.NIGHT }.rangeTheme.selected)
+                    .isEqualTo(RangeThemeSetting.NIGHT)
+                assertThat(settings.rangeTheme.value).isEqualTo(RangeThemeSetting.NIGHT)
+            }
+        }
+
+    // Plan F8a2t: the shot trail, added at the end to keep this file's diff mergeable (§4a A7).
+
+    @Test
+    fun theShotTrailDefaultsToClassicAndOffersEveryStyleInOrder() =
+        runTest {
+            viewModel.uiState.testIgnoringRest {
+                val trail = awaitUntil { it.host == "pi.local:8080" }.shotTrail
+
+                assertThat(trail.selected).isEqualTo(ShotTrailStyle.CLASSIC)
+                assertThat(trail.keepLastLabel).isEqualTo("Off")
+                assertThat(trail.landingEffectLabel).isEqualTo("Off")
+                assertThat(trail.styles.map { it.style }).isEqualTo(ShotTrailStyle.entries.toList())
+                assertThat(trail.styles.map { it.label }).containsExactly(
+                    "Classic",
+                    "Broadcast glow",
+                    "Comet",
+                    "Club colour",
+                    "Dotted",
+                    "Smoke",
+                    "Neon",
+                    "Speed heat",
+                    "Rainbow",
+                    "Spin ribbon",
+                    "Ground track",
+                )
+                assertThat(trail.keepOptions.map { it.label }).containsExactly("Off", "Last 3", "Last 5", "Last 10")
+                assertThat(trail.landingEffects.map { it.label }).containsExactly("Off", "Ring", "Burst")
+            }
+        }
+
+    @Test
+    fun pickingTheShotTrailOptionsPersistsThemAndShowsThem() =
+        runTest {
+            viewModel.uiState.testIgnoringRest {
+                viewModel.onEvent(SettingsEvent.SetShotTrail(ShotTrailStyle.SMOKE))
+                viewModel.onEvent(SettingsEvent.SetShotTrailKeepLast(3))
+                viewModel.onEvent(SettingsEvent.SetLandingEffect(LandingEffect.RING))
+
+                val trail =
+                    awaitUntil {
+                        it.shotTrail.selected == ShotTrailStyle.SMOKE &&
+                            it.shotTrail.keepLast == 3 &&
+                            it.shotTrail.landingEffect == LandingEffect.RING
+                    }.shotTrail
+                assertThat(trail.selectedLabel).isEqualTo("Smoke")
+                assertThat(trail.keepLastLabel).isEqualTo("Last 3")
+                assertThat(settings.shotTrail.value).isEqualTo(ShotTrailStyle.SMOKE)
+                assertThat(settings.shotTrailKeepLast.value).isEqualTo(3)
+                assertThat(settings.landingEffect.value).isEqualTo(LandingEffect.RING)
+            }
+        }
+
+    @Test
+    fun showTotalDistanceIsOnByDefaultAndTheToggleSharesTheRangesSetting() =
+        runTest {
+            viewModel.uiState.testIgnoringRest {
+                assertThat(awaitItem().showTotalDistance).isTrue()
+
+                viewModel.onEvent(SettingsEvent.SetShowTotalDistance(false))
+                awaitUntil { !it.showTotalDistance }
+                assertThat(settings.showTotalDistance.value).isFalse()
+
+                // The range's quick settings write the same key; Settings follows it.
+                settings.setShowTotalDistance(true)
+                awaitUntil { it.showTotalDistance }
+            }
         }
 
     /** Like `test`, but tolerates the extra intermediate states `combine` may emit after the assertions. */

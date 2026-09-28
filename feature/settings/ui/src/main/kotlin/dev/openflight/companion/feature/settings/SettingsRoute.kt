@@ -16,6 +16,7 @@ fun SettingsRoute(
     onOpenCalibration: (() -> Unit)? = null,
     onOpenCamera: (() -> Unit)? = null,
     viewModel: SettingsViewModel = koinViewModel(),
+    shotTrailPreview: ShotTrailPreview? = null,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val messages = rememberOfMessageHostState()
@@ -33,6 +34,7 @@ fun SettingsRoute(
         messages = messages,
         onOpenCalibration = onOpenCalibration,
         onOpenCamera = onOpenCamera,
+        shotTrailPreview = shotTrailPreview,
     )
 }
 
@@ -94,4 +96,28 @@ object SettingsTestTags {
     const val GROUP_DATA = "settings.group.data"
     const val OPEN_CALIBRATION = "settings.openCalibration"
     const val OPEN_CAMERA = "settings.openCamera"
+
+    // Plan F8a2a: the range theme picker (Practice group).
+    const val RANGE_THEME = "settings.rangeTheme"
+
+    // Plan F8a2t: the shot trail card (Practice group).
+    const val SHOT_TRAIL_CARD = "settings.shotTrail.card"
+    const val SHOT_TRAIL = "settings.shotTrail"
+    const val SHOT_TRAIL_KEEP = "settings.shotTrail.keepLast"
+    const val LANDING_EFFECT = "settings.shotTrail.landingEffect"
+    const val SHOT_TRAIL_PREVIEW = "settings.shotTrail.preview"
+
+    // Plan F8f: "Show total distance" (plan F5b's toggle, Practice group).
+    const val SHOW_TOTAL_DISTANCE = "settings.showTotalDistance"
+
+    // Plan F14: Demo mode (Device group), added at the end to keep this file's diff mergeable.
+    const val DEMO_CARD = "settings.demo.card"
+    const val DEMO_SWITCH = "settings.demo.switch"
+    const val DEMO_AUTO_FIRE = "settings.demo.autoFire"
+    const val DEMO_CLEAR = "settings.demo.clear"
+    const val DEMO_CLEAR_CONFIRM = "settings.demo.clear.confirm"
+    const val DEMO_CLEAR_CANCEL = "settings.demo.clear.cancel"
+
+    /** An automatic-shot interval chip, by its seconds (0 is Off). */
+    fun demoAutoFire(seconds: Int): String = "settings.demo.autoFire.$seconds"
 }

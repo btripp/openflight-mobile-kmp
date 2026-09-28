@@ -2,9 +2,18 @@
 package dev.openflight.companion.core.testing
 
 import dev.openflight.companion.core.data.CalloutTrigger
+import dev.openflight.companion.core.data.DEFAULT_SHOT_TRAIL_KEEP_LAST
+import dev.openflight.companion.core.data.DEFAULT_SHOW_TOTAL_DISTANCE
+import dev.openflight.companion.core.data.DemoModeRepository
+import dev.openflight.companion.core.data.LandingEffect
+import dev.openflight.companion.core.data.RangeShowSetting
+import dev.openflight.companion.core.data.RangeThemeSetting
+import dev.openflight.companion.core.data.SHOT_TRAIL_KEEP_OPTIONS
 import dev.openflight.companion.core.data.SettingsRepository
 import dev.openflight.companion.core.data.ShotRepository
+import dev.openflight.companion.core.data.ShotTrailStyle
 import dev.openflight.companion.core.data.TransportType
+import dev.openflight.companion.core.data.ViewingProfile
 import dev.openflight.companion.core.insights.CalloutField
 import dev.openflight.companion.core.insights.UnitSystem
 import dev.openflight.companion.core.model.CalibrationResult
@@ -16,6 +25,7 @@ import dev.openflight.companion.core.model.ShotEvent
 import kotlinx.coroutines.flow.MutableStateFlow
 
 /** A [SettingsRepository] over plain state flows. */
+@Suppress("TooManyFunctions") // Mirrors the SettingsRepository surface.
 class FakeSettingsRepository(
     transport: TransportType = TransportType.WIFI,
     host: String = SettingsRepository.DEFAULT_HOST,
@@ -69,6 +79,68 @@ class FakeSettingsRepository(
 
     override suspend fun setCalloutTrigger(trigger: CalloutTrigger) {
         calloutTrigger.value = trigger
+    }
+
+    // Plan F8a2a: the range theme, added at the end to keep this file's diff mergeable (§4a A7).
+
+    override val rangeTheme = MutableStateFlow(RangeThemeSetting.DEFAULT)
+
+    override suspend fun setRangeTheme(theme: RangeThemeSetting) {
+        rangeTheme.value = theme
+    }
+
+    // Plan F8a2t: the shot trail, added at the end to keep this file's diff mergeable (§4a A7).
+
+    override val shotTrail = MutableStateFlow(ShotTrailStyle.DEFAULT)
+
+    override suspend fun setShotTrail(style: ShotTrailStyle) {
+        shotTrail.value = style
+    }
+
+    override val shotTrailKeepLast = MutableStateFlow(DEFAULT_SHOT_TRAIL_KEEP_LAST)
+
+    override suspend fun setShotTrailKeepLast(count: Int) {
+        if (count in SHOT_TRAIL_KEEP_OPTIONS) shotTrailKeepLast.value = count
+    }
+
+    override val landingEffect = MutableStateFlow(LandingEffect.DEFAULT)
+
+    override suspend fun setLandingEffect(effect: LandingEffect) {
+        landingEffect.value = effect
+    }
+
+    // Plan F8f: range quick settings, added at the end to keep this file's diff mergeable (§4a A7).
+
+    override val rangeShow = MutableStateFlow(RangeShowSetting.DEFAULT)
+
+    override suspend fun setRangeShow(show: RangeShowSetting) {
+        rangeShow.value = show
+    }
+
+    override val showTotalDistance = MutableStateFlow(DEFAULT_SHOW_TOTAL_DISTANCE)
+
+    override suspend fun setShowTotalDistance(show: Boolean) {
+        showTotalDistance.value = show
+    }
+
+    override val viewingProfile = MutableStateFlow<ViewingProfile>(ViewingProfile.FollowActive)
+
+    override suspend fun setViewingProfile(profile: ViewingProfile) {
+        viewingProfile.value = profile
+    }
+
+    // Plan F14: Demo mode, added at the end to keep this file's diff mergeable (§4a A7).
+
+    override val demoMode = MutableStateFlow(false)
+
+    override suspend fun setDemoMode(enabled: Boolean) {
+        demoMode.value = enabled
+    }
+
+    override val demoAutoFireSeconds = MutableStateFlow(DemoModeRepository.DEFAULT_AUTO_FIRE_SECONDS)
+
+    override suspend fun setDemoAutoFireSeconds(seconds: Int) {
+        if (seconds in DemoModeRepository.AUTO_FIRE_OPTIONS) demoAutoFireSeconds.value = seconds
     }
 }
 

@@ -47,6 +47,11 @@ struct CalibrationContent: View {
 
             ScrollView {
                 VStack(spacing: 18) {
+                    // Plan F14: Demo mode has no radar; say so before anything else.
+                    if let needsHardware = state.needsHardware {
+                        NoticeRow(title: "Needs a real OpenFlight Pi", detail: needsHardware, tone: .warning)
+                            .accessibilityIdentifier(CalibrationTestTags.shared.NEEDS_HARDWARE)
+                    }
                     instructions
                     transportCard
                     measurementCard

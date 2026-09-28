@@ -34,6 +34,10 @@ import kotlin.uuid.Uuid
  *
  * Writes go through one queue consumed in order on [scope], so a `shot` is always filed before
  * its `shot_update`, and a write never waits on the caller's thread.
+ *
+ * Plan F14: with [demoWorld] this is Demo mode's history instead, over the same database: its
+ * sessions are written with `source = 'DEMO'`, and every list, stat, delete and clear sees only
+ * those, while the phone's own history (the default) never sees them.
  */
 @OptIn(ExperimentalTime::class, ExperimentalUuidApi::class)
 @Suppress("TooManyFunctions") // The repository surface plus the queue helpers.
@@ -43,6 +47,7 @@ internal class DefaultShotHistoryRepository(
     private val now: () -> Long = { Clock.System.now().toEpochMilliseconds() },
     private val newSessionId: () -> String = { Uuid.random().toString() },
     private val log: (String) -> Unit = ::println,
+    private val demoWorld: Boolean = false,
 ) : ShotHistoryRepository {
     /** A repository with a [HistoryDatabase] of its own (tests). */
     constructor(
@@ -57,6 +62,9 @@ internal class DefaultShotHistoryRepository(
     ) : this(HistoryDatabase(openDatabase, scope, fallbackDatabase, log), scope, now, newSessionId, log)
 
     override val isPersistent: StateFlow<Boolean> = database.isPersistent
+
+    /** The `sessions.source` this repository writes and reads (plan F14). */
+    private val world: String = if (demoWorld) SessionEntity.SOURCE_DEMO else SessionEntity.SOURCE_LOCAL
 
     private val currentSession = MutableStateFlow<SessionEntity?>(null)
     private val mutableCurrentSessionId = MutableStateFlow<String?>(null)
@@ -76,7 +84,10 @@ internal class DefaultShotHistoryRepository(
 
     override fun sessions(includeImported: Boolean): Flow<List<HistorySession>> =
         database.observe { db ->
-            db.shotHistoryDao().observeSessions(includeImported).map { rows -> rows.map { it.toHistorySession() } }
+            db
+                .shotHistoryDao()
+                .observeSessionsOf(world, includeImported && !demoWorld)
+                .map { rows -> rows.map { it.toHistorySession() } }
         }
 
     override fun shots(
@@ -98,11 +109,12 @@ internal class DefaultShotHistoryRepository(
         database.observe { db ->
             db
                 .shotHistoryDao()
-                .observeShotsForClub(
+                .observeShotsForClubIn(
                     club = club.wireValue,
                     profileId = profileId?.takeIf { it.isNotBlank() },
                     sinceEpochMillis = (window as? ShotWindow.Since)?.epochMillis ?: Long.MIN_VALUE,
                     sessionLimit = (window as? ShotWindow.LastSessions)?.count ?: NO_LIMIT,
+                    demo = demoWorld,
                 ).map { entities -> entities.map { it.toHistoryShot() } }
         }
 
@@ -116,6 +128,7 @@ internal class DefaultShotHistoryRepository(
                 startedAtEpochMillis = now(),
                 host = host?.takeIf { transport == TransportType.WIFI },
                 transport = transport.name,
+                source = world,
             )
         currentSession.value = session
         mutableCurrentSessionId.value = session.id
@@ -131,12 +144,15 @@ internal class DefaultShotHistoryRepository(
     override fun deleteShots(timestamps: Collection<String>) {
         if (timestamps.isEmpty()) return
         val list = timestamps.toList()
-        enqueue { it.deleteByTimestamps(list) }
+        enqueue { it.deleteByTimestampsIn(list, world) }
     }
 
-    override fun clearAll() = enqueue { it.clearAll() }
+    override fun clearAll() = enqueue { if (demoWorld) it.clearDemo() else it.clearAll() }
 
-    override fun clearImported() = enqueue { it.clearImported() }
+    override fun clearImported() {
+        // Imports belong to the phone's own history; Demo mode has none to delete.
+        if (!demoWorld) enqueue { it.clearImported() }
+    }
 
     override fun setStarred(
         shotId: Long,
@@ -188,6 +204,38 @@ internal class DefaultShotHistoryRepository(
         return stored.await()
     }
 
+    /**
+     * Plan F14 ([DemoShotHistoryRepository.seedIfEmpty]): stores [sessions] as Demo mode sessions,
+     * each shot in its own row with its profile kept, unless demo sessions exist already. Through
+     * the queue, like [importSession]; the caller waits for it.
+     */
+    internal suspend fun seedDemoIfEmpty(sessions: List<DemoSeedSession>): Boolean {
+        val seeded = CompletableDeferred<Boolean>()
+        writes.trySend { dao ->
+            try {
+                if (dao != null && dao.sessionCountOf(SessionEntity.SOURCE_DEMO) == 0) {
+                    sessions.forEach { session ->
+                        dao.insertSessionWithShots(
+                            SessionEntity(
+                                id = newSessionId(),
+                                startedAtEpochMillis = session.startedAtEpochMillis,
+                                host = DemoModeRepository.DEMO_HOST,
+                                transport = TransportType.WIFI.name,
+                                source = SessionEntity.SOURCE_DEMO,
+                                title = session.title,
+                            ),
+                            session.shots.toDemoEntities(),
+                        )
+                    }
+                    seeded.complete(true)
+                }
+            } finally {
+                seeded.complete(false)
+            }
+        }
+        return seeded.await()
+    }
+
     /** Suspends until every write queued so far has been applied (tests). */
     internal suspend fun awaitWrites() {
         val done = CompletableDeferred<Unit>()
@@ -203,7 +251,14 @@ internal class DefaultShotHistoryRepository(
     }
 
     private fun startUnknownSession(): SessionEntity {
-        val session = SessionEntity(id = newSessionId(), startedAtEpochMillis = now(), host = null, transport = UNKNOWN)
+        val session =
+            SessionEntity(
+                id = newSessionId(),
+                startedAtEpochMillis = now(),
+                host = null,
+                transport = UNKNOWN,
+                source = world,
+            )
         // Two first shots racing each other must still share one session.
         if (currentSession.compareAndSet(null, session)) mutableCurrentSessionId.value = session.id
         return currentSession.value ?: session

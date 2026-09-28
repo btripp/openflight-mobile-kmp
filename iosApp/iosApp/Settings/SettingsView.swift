@@ -8,7 +8,7 @@ import SwiftUI
 /// state.
 ///
 /// Plan F1d: grouped into Device (connection, calibrate, camera, launch monitor, power, simulators,
-/// radar, shutdown), Practice (units, audio call-outs) and Data (cloud upload, debug logging), like
+/// radar, shutdown), Practice (units, audio call-outs, range theme) and Data (cloud upload, debug logging), like
 /// Android. The Device group's "Calibrate radar" and "Camera" rows push `AppRoute`s onto the
 /// Settings tab's own `NavigationStack`.
 struct SettingsView: View {
@@ -34,11 +34,15 @@ struct SettingsContent: View {
     var showDeviceLinks = false
 
     @State private var showingShutdown = false
+    /// Plan F8a2t: the shot trail preview is taller on a regular width (iPad).
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     var body: some View {
         Form {
             // Device
             connectionSection
+            // Plan F14: try the app without a Pi.
+            DemoModeSection(demo: state.demo, send: send)
             if showDeviceLinks { deviceLinksSection }
             launchMonitorSection
             if let power = state.power { powerStatusSection(power) }
@@ -48,6 +52,8 @@ struct SettingsContent: View {
             // Practice
             unitsSection
             calloutsSection
+            rangeThemeSection
+            shotTrailSection
             // Data
             cloudSection
             // Hidden until the Pi reports its debug mode: never offer "Start" before that is known.
@@ -92,8 +98,104 @@ struct SettingsContent: View {
             }
             .pickerStyle(.segmented)
             .accessibilityIdentifier("settings.units")
+            // Plan F8f (plan F5b's toggle): the same key as the range quick settings' "Numbers".
+            Toggle(isOn: Binding(
+                get: { state.showTotalDistance },
+                set: { send(SettingsEventSetShowTotalDistance(show: $0)) }
+            )) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Show total distance")
+                    Text("The estimated total and roll (est.) next to carry on the range")
+                        .font(.of(.caption))
+                        .foregroundStyle(Theme.creamDim)
+                }
+            }
+            .tint(Theme.gold)
+            .accessibilityIdentifier("settings.showTotalDistance")
         } header: {
             header("UNITS", group: "Practice")
+        }
+        .listRowBackground(Theme.bgCard)
+    }
+
+    // MARK: Range theme
+
+    /// Plan F8a2a: how the driving range looks. The tags are the Kotlin options' own instances.
+    private var rangeThemeBinding: Binding<RangeThemeSetting> {
+        Binding(get: { state.rangeTheme.selected }, set: { send(SettingsEventSetRangeTheme(theme: $0)) })
+    }
+
+    private var rangeThemeSection: some View {
+        Section {
+            Picker("Range theme", selection: rangeThemeBinding) {
+                ForEach(state.rangeTheme.options, id: \.theme.storageValue) { option in
+                    Text(option.label).tag(option.theme)
+                }
+            }
+            .pickerStyle(.segmented)
+            .accessibilityIdentifier("settings.rangeTheme")
+        } header: {
+            header("RANGE THEME")
+        }
+        .listRowBackground(Theme.bgCard)
+    }
+
+    // MARK: Shot trail
+
+    /// Plan F8a2t: how the range draws a shot's trail, with a live preview drawn by the range's own
+    /// renderer. The tags are the Kotlin options' own instances (and counts).
+    private var shotTrailBinding: Binding<ShotTrailStyle> {
+        Binding(get: { state.shotTrail.selected }, set: { send(SettingsEventSetShotTrail(style: $0)) })
+    }
+
+    private var shotTrailKeepBinding: Binding<Int32> {
+        Binding(get: { state.shotTrail.keepLast }, set: { send(SettingsEventSetShotTrailKeepLast(count: $0)) })
+    }
+
+    private var landingEffectBinding: Binding<LandingEffect> {
+        Binding(get: { state.shotTrail.landingEffect }, set: { send(SettingsEventSetLandingEffect(effect: $0)) })
+    }
+
+    private var shotTrailSection: some View {
+        Section {
+            ShotTrailPreviewView(
+                style: state.shotTrail.selected,
+                keepLast: state.shotTrail.keepLast,
+                landingEffect: state.shotTrail.landingEffect,
+                theme: state.rangeTheme.selected
+            )
+            .frame(height: horizontalSizeClass == .regular ? 220 : 170)
+            .listRowInsets(EdgeInsets(top: 8, leading: 8, bottom: 8, trailing: 8))
+            .accessibilityIdentifier("settings.shotTrail.preview")
+            Picker("Style", selection: shotTrailBinding) {
+                ForEach(state.shotTrail.styles, id: \.style.storageValue) { option in
+                    Text(option.label).tag(option.style)
+                }
+            }
+            .pickerStyle(.menu)
+            .accessibilityIdentifier("settings.shotTrail")
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Keep last shots").font(.footnote).foregroundStyle(Theme.creamDim)
+                Picker("Keep last shots", selection: shotTrailKeepBinding) {
+                    ForEach(state.shotTrail.keepOptions, id: \.count) { option in
+                        Text(option.label).tag(option.count)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .accessibilityIdentifier("settings.shotTrail.keepLast")
+            }
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Landing effect").font(.footnote).foregroundStyle(Theme.creamDim)
+                Picker("Landing effect", selection: landingEffectBinding) {
+                    ForEach(state.shotTrail.landingEffects, id: \.effect.storageValue) { option in
+                        Text(option.label).tag(option.effect)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .accessibilityIdentifier("settings.shotTrail.landingEffect")
+            }
+        } header: {
+            header("SHOT TRAIL")
         }
         .listRowBackground(Theme.bgCard)
     }
@@ -111,8 +213,9 @@ struct SettingsContent: View {
 
     private var connectionSection: some View {
         Section {
-            row("Transport", state.transport.label_)
-            row("Host", state.host)
+            // Plan F14: Demo mode's pretend Pi is on Wi-Fi, whatever transport the real Pi uses.
+            row("Transport", state.demo.enabled ? "Demo Pi (Wi-Fi)" : state.transport.label_)
+            if !state.demo.enabled { row("Host", state.host) }
             row("Shot stream", state.connectionState.description_)
             LabeledContent("Live session") {
                 StatusPill(text: state.linkDescription, color: linkColor)

@@ -52,6 +52,10 @@ class RangeProjection(
     private var centerX = 0.0
     private var centerY = 0.0
 
+    /** Plan F8a2a: the camera's position on the ground (scene x and z), where haze is measured from. */
+    val cameraX: Double get() = originX
+    val cameraZ: Double get() = originZ
+
     /** Pixels per unit of (camera-space offset / depth). */
     var focalLengthPixels: Double = 0.0
         private set
@@ -219,6 +223,66 @@ class RangeProjection(
         val z = originZ + forwardZ / length * HORIZON_DISTANCE_METERS
         val depth = depth(x, 0.0, z)
         return if (depth <= NEAR_PLANE_METERS) Float.NEGATIVE_INFINITY else screenY(x, 0.0, z, depth)
+    }
+
+    /**
+     * Plan F8a2a: [projectInto] for a direction at infinity rather than a point: the horizontal
+     * unit direction ([directionX], [directionZ]) raised by an angle whose tangent is
+     * [elevationTangent]. Like [horizonY] it's measured from the ground far away, so it turns with
+     * the camera but never moves as the camera travels. Returns false (and NaN) when the direction
+     * is less than [minCosine] in front of the camera's view axis, which keeps near-sideways
+     * directions from projecting to absurd coordinates.
+     */
+    @Suppress("LongParameterList") // A direction, its output slot and a cutoff.
+    fun projectDirectionInto(
+        directionX: Double,
+        directionZ: Double,
+        elevationTangent: Double,
+        out: FloatArray,
+        index: Int,
+        minCosine: Double,
+    ): Boolean {
+        val x = originX + directionX * HORIZON_DISTANCE_METERS
+        val y = elevationTangent * HORIZON_DISTANCE_METERS
+        val z = originZ + directionZ * HORIZON_DISTANCE_METERS
+        val depth = depth(x, y, z)
+        if (depth <= minCosine * HORIZON_DISTANCE_METERS || depth <= NEAR_PLANE_METERS) {
+            out[index] = Float.NaN
+            out[index + 1] = Float.NaN
+            return false
+        }
+        out[index] = screenX(x, y, z, depth)
+        out[index + 1] = screenY(x, y, z, depth)
+        return true
+    }
+
+    /**
+     * Plan F8a2p, the depth-fog distance of the ground point ([x], [z]): its distance along the
+     * camera's horizontal heading, plus the camera's height times its downward slope. It's the one
+     * distance whose inverse is linear in screen y ([groundPixelsBelowHorizon]), so a single
+     * vertical gradient hazes the whole ground exactly, and every hazed shape uses it too. On a
+     * screen row it's the same for every x: the haze never shows a seam across the range. Looking
+     * straight down it's the camera's height.
+     */
+    fun hazeDistance(
+        x: Double,
+        z: Double,
+    ): Double {
+        val length = sqrt(forwardX * forwardX + forwardZ * forwardZ)
+        if (length < MIN_HORIZONTAL_LENGTH) return abs(originY)
+        return ((x - originX) * forwardX + (z - originZ) * forwardZ - originY * forwardY) / length
+    }
+
+    /**
+     * Plan F8a2p: how far below the horizon ([horizonY]) the ground at [hazeDistance]
+     * [distanceMeters] appears, in pixels: `focal × height / (cos² pitch × distance)`. NaN when the
+     * horizon isn't on any canvas row (looking straight down or up) or the camera is at or below
+     * the ground.
+     */
+    fun groundPixelsBelowHorizon(distanceMeters: Double): Float {
+        val length = sqrt(forwardX * forwardX + forwardZ * forwardZ)
+        if (length < MIN_HORIZONTAL_LENGTH || originY <= 0.0 || distanceMeters <= 0.0) return Float.NaN
+        return (focalLengthPixels * originY / (length * length * distanceMeters)).toFloat()
     }
 
     companion object {

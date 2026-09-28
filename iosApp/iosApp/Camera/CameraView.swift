@@ -54,9 +54,14 @@ struct CameraContent: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
-                feed
-                capture
-                replays
+                if let placeholder = state.demoPlaceholder {
+                    // Plan F14: Demo mode has no camera to show.
+                    demoPlaceholder(placeholder)
+                } else {
+                    feed
+                    capture
+                    replays
+                }
             }
             .padding(.horizontal, 20)
             .padding(.bottom, 24)
@@ -94,6 +99,30 @@ struct CameraContent: View {
         default:
             ("", "", "")
         }
+    }
+
+    /// Plan F14: where the preview would be, a note that Demo mode has no camera.
+    private func demoPlaceholder(_ message: String) -> some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 20).fill(.black.opacity(0.45))
+            VStack(spacing: 10) {
+                Image(systemName: "video.slash")
+                    .font(.system(size: 34))
+                    .foregroundStyle(Theme.creamMuted)
+                    .accessibilityHidden(true)
+                Text("No Camera in Demo Mode")
+                    .font(.ofDisplay(.title2))
+                Text(message)
+                    .font(.of(.subheadline))
+                    .foregroundStyle(Theme.creamDim)
+                    .multilineTextAlignment(.center)
+            }
+            .padding(24)
+        }
+        .aspectRatio(4 / 3, contentMode: .fit)
+        .overlay { RoundedRectangle(cornerRadius: 20).stroke(Theme.cream.opacity(0.1), lineWidth: 1) }
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("camera.demoPlaceholder")
     }
 
     @ViewBuilder

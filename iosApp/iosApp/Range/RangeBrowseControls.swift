@@ -198,6 +198,8 @@ struct RangeSessionSheet: View {
 /// it, the overlay highlights it).
 struct RangeShotList: View {
     let browse: RangeBrowseState
+    /// Plan F8f: the carry in the chosen units.
+    var numbers: RangeNumbers?
     let onSelect: (String) -> Void
 
     var body: some View {
@@ -230,7 +232,7 @@ struct RangeShotList: View {
                     .font(.of(.body))
                     .foregroundStyle(Theme.cream)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                Text("\(RangeFormat.number(shot.carryYards, decimals: 0)) yd")
+                Text(carryText(shot))
                     .font(.of(.body, weight: .semibold).monospacedDigit())
                     .foregroundStyle(selected ? Theme.gold : Theme.cream)
             }
@@ -243,6 +245,14 @@ struct RangeShotList: View {
         .buttonStyle(.plain)
         .accessibilityAddTraits(selected ? .isSelected : [])
         .accessibilityIdentifier(RangeTestTags.shared.shot(id: shot.id))
+    }
+
+    /// "264 yd", or "241 m" in metric (plan F8f).
+    private func carryText(_ shot: RangeShotItem) -> String {
+        guard let numbers, numbers.units == .metric else {
+            return "\(RangeFormat.number(shot.carryYards, decimals: 0)) yd"
+        }
+        return "\(numbers.distance(yards: shot.carryYards, decimals: 0)) m"
     }
 }
 
@@ -285,7 +295,7 @@ struct RangeBrowseChips: View {
                 .accessibilityIdentifier(RangeTestTags.shared.RESET_VIEW)
             }
             if let rollOut {
-                Text(Self.rollOutSummary(rollOut))
+                Text(state.camera.numbers.rollOutSummary(rollOut: rollOut))
                     .font(.of(.caption, weight: .semibold).monospacedDigit())
                     .foregroundStyle(Theme.cream)
                     .padding(.horizontal, 12)
@@ -336,12 +346,5 @@ struct RangeBrowseChips: View {
 
     private var showsRollOut: Bool {
         state.phase is RangePhaseLanded || state.phase is RangePhaseWaiting
-    }
-
-    /// "Total est. 285 yd · roll 21": total and roll are always estimates (plan §0.2), like
-    /// Android's `rollOutSummary`.
-    static func rollOutSummary(_ rollOut: RangeRollOut) -> String {
-        "Total est. \(Int(rollOut.totalYards.rounded())) yd · roll \(Int(rollOut.rollYards.rounded()))"
-            + (rollOut.carryEstimated ? " · carry est." : "")
     }
 }

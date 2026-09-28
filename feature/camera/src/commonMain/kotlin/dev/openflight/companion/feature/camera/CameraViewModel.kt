@@ -3,6 +3,8 @@ package dev.openflight.companion.feature.camera
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import dev.openflight.companion.core.data.DemoModeOff
+import dev.openflight.companion.core.data.DemoModeRepository
 import dev.openflight.companion.core.data.PiSessionRepository
 import dev.openflight.companion.core.model.GolfClub
 import dev.openflight.companion.core.model.pi.CameraCaptureSettings
@@ -44,6 +46,8 @@ class CameraViewModel(
     private val piSession: PiSessionRepository,
     private val previewIntervalMillis: Long = PREVIEW_INTERVAL_MILLIS,
     private val retryIntervalMillis: Long = RETRY_INTERVAL_MILLIS,
+    // Plan F14: Demo mode shows a placeholder instead of a camera.
+    private val demoMode: DemoModeRepository = DemoModeOff,
 ) : ViewModel() {
     /** The last poll's outcome; `null` before the first answer of this visit. */
     private val preview = MutableStateFlow<PreviewOutcome?>(null)
@@ -60,6 +64,8 @@ class CameraViewModel(
             replayState,
             ->
             buildState(PiFeatureAvailability.of(link), settings, outcome, rows, replayState)
+        }.combine(demoMode.enabled) { state, demo ->
+            state.copy(demoPlaceholder = CameraUiState.DEMO_PLACEHOLDER.takeIf { demo })
         }.stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),

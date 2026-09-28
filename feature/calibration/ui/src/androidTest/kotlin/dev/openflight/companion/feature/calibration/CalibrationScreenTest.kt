@@ -35,6 +35,15 @@ class CalibrationScreenTest {
         }
     }
 
+    /** Plan F14: Demo mode has no radar, so the screen says so and Apply stays off. */
+    @Test
+    fun given_demoMode_whenShown_thenItSaysItNeedsHardwareAndApplyIsDisabled() {
+        show(readyState(transport = TransportType.WIFI).copy(needsHardware = CalibrationUiState.DEMO_NEEDS_HARDWARE))
+
+        composeRule.onNodeWithTag(CalibrationTestTags.NEEDS_HARDWARE).assertIsDisplayed()
+        composeRule.onNodeWithTag(CalibrationTestTags.APPLY).assertIsNotEnabled()
+    }
+
     @Test
     fun given_readyMeasurementOverWifi_whenShown_thenApplyIsEnabled() {
         show(readyState(transport = TransportType.WIFI))

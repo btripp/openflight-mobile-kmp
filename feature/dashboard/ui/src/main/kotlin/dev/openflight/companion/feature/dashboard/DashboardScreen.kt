@@ -27,6 +27,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import dev.openflight.companion.core.data.TransportType
+import dev.openflight.companion.core.designsystem.OfButton
 import dev.openflight.companion.core.designsystem.OfCard
 import dev.openflight.companion.core.designsystem.OfColorTokens
 import dev.openflight.companion.core.designsystem.OfDropdownMenu
@@ -176,7 +177,7 @@ private fun MetricsContent(
 ) {
     when (uiState) {
         is DashboardUiState.Waiting -> {
-            EmptyState()
+            EmptyState(demo = uiState.connection.demo)
         }
 
         is DashboardUiState.Live -> {
@@ -186,6 +187,7 @@ private fun MetricsContent(
                     uiState.units,
                     uiState.latestEnrichment,
                     onViewOnRange = onViewOnRange?.let { view -> { view(uiState.latest.eventId) } },
+                    demo = uiState.connection.demo,
                 )
                 ShotFlash(trigger = shotFlashes, modifier = Modifier.matchParentSize())
             }
@@ -202,17 +204,22 @@ private fun ConnectionCard(
     onOpenCalibration: () -> Unit,
 ) {
     OfCard(modifier = Modifier.fillMaxWidth(), contentSpacing = OfSpacing.Md) {
-        OfSegmentedPicker(
-            options = TransportType.entries.map { it.label },
-            selected = panel.transport.label,
-            onSelect = { label ->
-                val transport = TransportType.entries.first { it.label == label }
-                if (transport != panel.transport) onEvent(DashboardEvent.TransportChanged(transport))
-            },
-            modifier = Modifier.fillMaxWidth(),
-        )
+        // Plan F14: Demo mode's pretend Pi needs no transport or address.
+        if (!panel.demo) {
+            OfSegmentedPicker(
+                options = TransportType.entries.map { it.label },
+                selected = panel.transport.label,
+                onSelect = { label ->
+                    val transport = TransportType.entries.first { it.label == label }
+                    if (transport != panel.transport) onEvent(DashboardEvent.TransportChanged(transport))
+                },
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
         StatusRow(panel, onRetry = { onEvent(DashboardEvent.Retry) })
+        if (panel.demo) DemoControls(onEvent)
         panel.visibleProblem?.let { ConnectionProblemNotice(it) }
+        if (panel.showTryDemo) TryDemo(onEvent)
         if (panel.showHostField) {
             OfTextField(
                 value = panel.hostText,
@@ -241,6 +248,39 @@ private fun ConnectionCard(
             modifier = Modifier.fillMaxWidth().testTag(DashboardTestTags.CALIBRATE_RADAR),
         )
         panel.helpLink?.let { HelpLink(it) }
+    }
+}
+
+/** Plan F14: what Demo mode is, "Hit a shot" and the way back to a real Pi. */
+@Composable
+private fun DemoControls(onEvent: (DashboardEvent) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(OfSpacing.Sm)) {
+        OfText(text = ConnectionPanelState.DEMO_NOTE, role = OfTextRole.BodySmall, color = OfColorTokens.CreamDim)
+        Row(horizontalArrangement = Arrangement.spacedBy(OfSpacing.Sm)) {
+            OfButton(
+                text = ConnectionPanelState.HIT_SHOT_LABEL,
+                onClick = { onEvent(DashboardEvent.HitDemoShot) },
+                modifier = Modifier.weight(1f).testTag(DashboardTestTags.HIT_SHOT),
+            )
+            OfOutlinedButton(
+                text = ConnectionPanelState.EXIT_DEMO_LABEL,
+                onClick = { onEvent(DashboardEvent.ExitDemo) },
+                modifier = Modifier.weight(1f).testTag(DashboardTestTags.EXIT_DEMO),
+            )
+        }
+    }
+}
+
+/** Plan F14: the entry to Demo mode, while no Pi is connected. */
+@Composable
+private fun TryDemo(onEvent: (DashboardEvent) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(OfSpacing.Xs)) {
+        OfOutlinedButton(
+            text = ConnectionPanelState.TRY_DEMO_LABEL,
+            onClick = { onEvent(DashboardEvent.TryDemo) },
+            modifier = Modifier.fillMaxWidth().testTag(DashboardTestTags.TRY_DEMO),
+        )
+        OfText(text = ConnectionPanelState.TRY_DEMO_NOTE, role = OfTextRole.BodySmall, color = OfColorTokens.CreamDim)
     }
 }
 
@@ -309,7 +349,7 @@ private fun ClubSelector(
 }
 
 @Composable
-private fun EmptyState() {
+private fun EmptyState(demo: Boolean = false) {
     Column(
         modifier = Modifier.fillMaxWidth().heightIn(min = 300.dp).testTag(DashboardTestTags.EMPTY_STATE),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -317,13 +357,15 @@ private fun EmptyState() {
     ) {
         OfText(text = "Waiting for a shot", role = OfTextRole.Title, textAlign = TextAlign.Center)
         OfText(
-            text = "Connect to your OpenFlight Pi, then hit a ball.",
+            text = if (demo) ConnectionPanelState.DEMO_EMPTY_NOTE else CONNECT_NOTE,
             role = OfTextRole.BodySmall,
             color = OfColorTokens.CreamDim,
             textAlign = TextAlign.Center,
         )
     }
 }
+
+private const val CONNECT_NOTE = "Connect to your OpenFlight Pi, then hit a ball."
 
 /** ContentView.swift `statusColor`: green connected, orange working, red failed, gray idle. */
 private fun ConnectionState.tone(): StatusTone =

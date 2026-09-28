@@ -14,6 +14,7 @@ import dev.openflight.companion.core.model.pi.CameraReplay
 import dev.openflight.companion.core.model.pi.PiFeatureAvailability
 import dev.openflight.companion.core.model.pi.PiLinkState
 import dev.openflight.companion.core.model.pi.ShotDetail
+import dev.openflight.companion.core.testing.FakeDemoModeRepository
 import dev.openflight.companion.core.testing.FakePiSessionRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -237,6 +238,20 @@ class CameraViewModelTest {
 
         assertThat(rows.map { it.club }).isEqualTo(listOf("Pitching Wedge", null))
     }
+
+    /** Plan F14: Demo mode has no camera, so the screen shows a placeholder. */
+    @Test
+    fun demoModeShowsTheCameraPlaceholder() =
+        runCameraTest {
+            val demo = FakeDemoModeRepository(enabled = true)
+            val demoViewModel = CameraViewModel(piSession, demoMode = demo)
+            demoViewModel.uiState.test {
+                assertThat(awaitUntil { it.demoPlaceholder != null }.demoPlaceholder)
+                    .isEqualTo(CameraUiState.DEMO_PLACEHOLDER)
+                demo.setEnabled(false)
+                assertThat(awaitUntil { it.demoPlaceholder == null }.demoPlaceholder).isEqualTo(null)
+            }
+        }
 
     private fun answer(preview: CameraPreview) = CameraViewModel.PreviewOutcome.Answer(preview)
 

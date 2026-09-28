@@ -2,7 +2,16 @@
 package dev.openflight.companion.feature.settings
 
 import dev.openflight.companion.core.data.CalloutTrigger
+import dev.openflight.companion.core.data.DEFAULT_SHOT_TRAIL_KEEP_LAST
+import dev.openflight.companion.core.data.DEFAULT_SHOW_TOTAL_DISTANCE
+import dev.openflight.companion.core.data.DemoModeRepository
+import dev.openflight.companion.core.data.LandingEffect
+import dev.openflight.companion.core.data.RangeThemeSetting
+import dev.openflight.companion.core.data.SHOT_TRAIL_KEEP_OPTIONS
+import dev.openflight.companion.core.data.ShotTrailStyle
 import dev.openflight.companion.core.data.TransportType
+import dev.openflight.companion.core.data.pickerLabel
+import dev.openflight.companion.core.data.shotTrailKeepLabel
 import dev.openflight.companion.core.insights.CalloutField
 import dev.openflight.companion.core.insights.UnitSystem
 import dev.openflight.companion.core.model.ConnectionProblem
@@ -49,6 +58,14 @@ data class SettingsUiState(
     val trigger: TriggerCard = TriggerCard.Waiting,
     // Plan F7: audio call-outs, added at the end to keep this file's diff mergeable (§4a A7).
     val callouts: CalloutSettingsUiState = CalloutSettingsUiState(),
+    // Plan F8a2a: the range theme, added at the end to keep this file's diff mergeable (§4a A7).
+    val rangeTheme: RangeThemeUiState = RangeThemeUiState(),
+    // Plan F8a2t: the shot trail, added at the end to keep this file's diff mergeable (§4a A7).
+    val shotTrail: ShotTrailUiState = ShotTrailUiState(),
+    // Plan F8f (plan F5b's toggle): the estimated total next to carry, appended (§4a A7).
+    val showTotalDistance: Boolean = DEFAULT_SHOW_TOTAL_DISTANCE,
+    // Plan F14: Demo mode, added at the end to keep this file's diff mergeable (§4a A7).
+    val demo: DemoSettingsUiState = DemoSettingsUiState(),
 )
 
 /** A simulator connector's severity bucket (`SimStatus.tsx`'s `severity`). */
@@ -224,3 +241,103 @@ data class CalloutFieldRow(
     val canMoveUp: Boolean,
     val canMoveDown: Boolean,
 )
+
+/**
+ * Plan F8a2a: the Practice group's range theme picker: the persisted choice, and every option in
+ * order with its label (so SwiftUI builds its picker tags from Kotlin instances, like
+ * [CalloutSettingsUiState.availableTriggers]).
+ */
+data class RangeThemeUiState(
+    val selected: RangeThemeSetting = RangeThemeSetting.DEFAULT,
+    val options: List<RangeThemeOption> = RangeThemeOption.ALL,
+)
+
+/** One range theme the picker offers. */
+data class RangeThemeOption(
+    val theme: RangeThemeSetting,
+    val label: String,
+) {
+    companion object {
+        val ALL: List<RangeThemeOption> = RangeThemeSetting.entries.map { RangeThemeOption(it, it.pickerLabel) }
+    }
+}
+
+/**
+ * Plan F8a2t: the Practice group's "Shot trail" picker: the persisted style, "Keep last shots" and
+ * landing effect, and every option in order with its label (so SwiftUI builds its pickers from
+ * Kotlin instances, like [RangeThemeUiState]).
+ */
+data class ShotTrailUiState(
+    val selected: ShotTrailStyle = ShotTrailStyle.DEFAULT,
+    val keepLast: Int = DEFAULT_SHOT_TRAIL_KEEP_LAST,
+    val landingEffect: LandingEffect = LandingEffect.DEFAULT,
+    val styles: List<ShotTrailOption> = ShotTrailOption.ALL,
+    val keepOptions: List<ShotTrailKeepOption> = ShotTrailKeepOption.ALL,
+    val landingEffects: List<LandingEffectOption> = LandingEffectOption.ALL,
+) {
+    val selectedLabel: String get() = styles.firstOrNull { it.style == selected }?.label.orEmpty()
+    val keepLastLabel: String get() = keepOptions.firstOrNull { it.count == keepLast }?.label.orEmpty()
+    val landingEffectLabel: String get() = landingEffects.firstOrNull { it.effect == landingEffect }?.label.orEmpty()
+}
+
+/** One shot trail style the picker offers. */
+data class ShotTrailOption(
+    val style: ShotTrailStyle,
+    val label: String,
+) {
+    companion object {
+        val ALL: List<ShotTrailOption> = ShotTrailStyle.entries.map { ShotTrailOption(it, it.pickerLabel) }
+    }
+}
+
+/** One "Keep last shots" choice. */
+data class ShotTrailKeepOption(
+    val count: Int,
+    val label: String,
+) {
+    companion object {
+        val ALL: List<ShotTrailKeepOption> =
+            SHOT_TRAIL_KEEP_OPTIONS.map { count -> ShotTrailKeepOption(count, shotTrailKeepLabel(count)) }
+    }
+}
+
+/** One landing effect the picker offers. */
+data class LandingEffectOption(
+    val effect: LandingEffect,
+    val label: String,
+) {
+    companion object {
+        val ALL: List<LandingEffectOption> = LandingEffect.entries.map { LandingEffectOption(it, it.pickerLabel) }
+    }
+}
+
+/**
+ * Plan F14: Settings › Device › Demo mode: the switch, the automatic-shot interval and "Clear demo
+ * data" (confirmed first, like every destructive action).
+ *
+ * @property confirmingClear the "Clear demo data?" confirmation is showing.
+ */
+data class DemoSettingsUiState(
+    val enabled: Boolean = false,
+    val autoFireSeconds: Int = DemoModeRepository.DEFAULT_AUTO_FIRE_SECONDS,
+    val autoFireOptions: List<Int> = DemoModeRepository.AUTO_FIRE_OPTIONS,
+    val confirmingClear: Boolean = false,
+) {
+    companion object {
+        const val TITLE = "Demo mode"
+        const val SUMMARY =
+            "Try every screen with a pretend Pi and made-up shots. No hardware needed. " +
+                "Demo sessions are kept apart from your own."
+        const val AUTO_FIRE_LABEL = "Automatic shots"
+        const val CLEAR_LABEL = "Clear demo data"
+        const val CLEAR_CONFIRM_TITLE = "Clear demo data?"
+        const val CLEAR_CONFIRM_MESSAGE =
+            "This deletes every demo session and shot. Your own sessions stay. The sample sessions " +
+                "come back the next time you turn Demo mode on."
+        const val CLEAR_CONFIRM_ACTION = "Clear"
+        const val CLEARED_MESSAGE = "Demo data cleared."
+
+        /** "Off" or "Every 10 s". */
+        fun autoFireLabel(seconds: Int): String = if (seconds <= 0) "Off" else "Every $seconds s"
+    }
+}

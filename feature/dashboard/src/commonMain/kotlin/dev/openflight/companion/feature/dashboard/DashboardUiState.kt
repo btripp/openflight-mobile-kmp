@@ -84,6 +84,8 @@ sealed interface DashboardEffect {
  * @property showClubConfirmation the once-per-launch "is this the right club?" prompt (plan R8d).
  * @property problem why the phone can't reach the Pi, in words (plan R8f), or `null`.
  * @property profile the profile picker beside the club (plan R8f).
+ * @property demo plan F14: Demo mode is on: a pretend Pi is connected over Wi-Fi, and every shot is
+ *   made up and labelled "Demo". The card offers Exit and Hit a shot instead of the transport picker.
  */
 data class ConnectionPanelState(
     val transport: TransportType = SettingsRepository.DEFAULT_TRANSPORT,
@@ -97,6 +99,7 @@ data class ConnectionPanelState(
     val showClubConfirmation: Boolean = false,
     val problem: ConnectionProblem? = null,
     val profile: ProfilePickerState = ProfilePickerState(),
+    val demo: Boolean = false,
 ) {
     /**
      * The problem the card spells out. A Local Network denial has its own block with the way out
@@ -109,6 +112,10 @@ data class ConnectionPanelState(
     val hostHints: List<HostHint>
         get() = if (showHostField) HOST_HINTS else emptyList()
 
+    /** Plan F14: "Try without a Pi", offered while no Pi is connected and Demo mode is off. */
+    val showTryDemo: Boolean
+        get() = !demo && state != ConnectionState.Connected && !piLinkConnected
+
     /**
      * The docs link on the card (Expo `openflight-docs-link`): the build guide while nothing is
      * connected, the troubleshooting guide after a failed attempt, none once connected.
@@ -116,7 +123,7 @@ data class ConnectionPanelState(
     val helpLink: ConnectionHelpLink?
         get() =
             when {
-                state == ConnectionState.Connected || piLinkConnected -> null
+                demo || state == ConnectionState.Connected || piLinkConnected -> null
                 state is ConnectionState.Error -> ConnectionHelpLink.TROUBLESHOOTING
                 else -> ConnectionHelpLink.BUILD_GUIDE
             }
@@ -130,7 +137,12 @@ data class ConnectionPanelState(
 
     /** "OpenFlight Pi" once connected, otherwise the transport's name. */
     val statusTitle: String
-        get() = if (state == ConnectionState.Connected) CONNECTED_TITLE else transport.label
+        get() =
+            when {
+                demo -> DEMO_TITLE
+                state == ConnectionState.Connected -> CONNECTED_TITLE
+                else -> transport.label
+            }
 
     /** Retry replaces the spinner whenever the state allows it (`ConnectionState.canRetry`). */
     val showRetry: Boolean
@@ -141,10 +153,31 @@ data class ConnectionPanelState(
         get() = !state.canRetry && state != ConnectionState.Connected
 
     val showHostField: Boolean
-        get() = transport == TransportType.WIFI
+        get() = transport == TransportType.WIFI && !demo
 
     companion object {
         const val CONNECTED_TITLE = "OpenFlight Pi"
+
+        /** Plan F14: the card's title in Demo mode. */
+        const val DEMO_TITLE = "Demo Pi"
+
+        /** Plan F14: the entry to Demo mode. */
+        const val TRY_DEMO_LABEL = "Try without a Pi"
+
+        /** Plan F14: under the entry: what Demo mode is. */
+        const val TRY_DEMO_NOTE = "No Pi yet? Explore every screen with a pretend Pi and made-up shots."
+
+        /** Plan F14: under the card's title in Demo mode. */
+        const val DEMO_NOTE = "Demo mode: a pretend Pi over Wi-Fi. Shots are made up, not measured."
+
+        const val EXIT_DEMO_LABEL = "Exit demo"
+        const val HIT_SHOT_LABEL = "Hit a shot"
+
+        /** Plan F14: the empty state's hint in Demo mode. */
+        const val DEMO_EMPTY_NOTE = "Tap Hit a shot, or Simulate on the range or Sessions, to see a made-up shot."
+
+        /** Plan F14: the tag on every demo shot. */
+        const val DEMO_TAG = "Demo"
 
         /** Plan R8d: the Pi's own access point, then a typical home-router address. */
         val HOST_HINTS: List<HostHint> =

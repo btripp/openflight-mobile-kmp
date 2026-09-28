@@ -4,6 +4,8 @@ package dev.openflight.companion.feature.range
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.remember
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.click
@@ -16,6 +18,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.pinch
+import androidx.compose.ui.test.swipe
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import dev.openflight.companion.core.data.HistoryShot
 import dev.openflight.companion.core.designsystem.OfTheme
@@ -141,6 +144,54 @@ class RangeReplayTest {
         composeRule.onNodeWithTag(RangeTestTags.RESET_VIEW).assertDoesNotExist()
     }
 
+    /** Plan F8a2p: one finger drags the range like a map; the ground under it follows. */
+    @Test
+    fun given_range_when_oneFingerDragsDown_then_viewPansDownrangeAndResets() {
+        val viewModel = setRange(OfWindowClass.COMPACT)
+        composeRule.onNodeWithTag(RangeTestTags.SCENE).performTouchInput {
+            swipe(start = Offset(centerX, height * 0.55f), end = Offset(centerX, height * 0.75f), durationMillis = 400)
+        }
+
+        composeRule.onNodeWithTag(RangeTestTags.RESET_VIEW).assertIsDisplayed()
+        val view = viewModel.uiState.value.browse.view
+        assert(view.panZ < -1.0) { "panZ was ${view.panZ}" }
+        assertEquals(1.0, view.zoom)
+
+        composeRule.onNodeWithTag(RangeTestTags.RESET_VIEW).performClick()
+        composeRule.waitUntil(REPLAY_TIMEOUT_MILLIS) { viewModel.uiState.value.browse.view.isIdentity }
+    }
+
+    /** Plan F8a2p: one finger dragged sideways slides the range with it (the view moves the other way). */
+    @Test
+    fun given_range_when_oneFingerDragsRight_then_viewPansSideways() {
+        val viewModel = setRange(OfWindowClass.COMPACT)
+        composeRule.onNodeWithTag(RangeTestTags.SCENE).performTouchInput {
+            swipe(
+                start = Offset(width * 0.3f, height * 0.6f),
+                end = Offset(width * 0.7f, height * 0.6f),
+                durationMillis = 400,
+            )
+        }
+
+        composeRule.waitUntil(REPLAY_TIMEOUT_MILLIS) { viewModel.uiState.value.browse.view.panX < -1.0 }
+        assertEquals(0.0, viewModel.uiState.value.browse.view.orbitYawDegrees)
+    }
+
+    /** Plan F8a2p: zoom is pinch-only on screen; TalkBack zooms through the scene's custom actions. */
+    @Test
+    fun given_talkBack_when_zoomActions_then_viewZoomsInAndOut() {
+        val viewModel = setRange(OfWindowClass.COMPACT)
+        val scene = composeRule.onNodeWithTag(RangeTestTags.SCENE)
+
+        customAction(scene, "Zoom in")
+        composeRule.waitUntil(REPLAY_TIMEOUT_MILLIS) { viewModel.uiState.value.browse.view.zoom > 1.4 }
+
+        customAction(scene, "Zoom out")
+        composeRule.waitUntil(REPLAY_TIMEOUT_MILLIS) {
+            kotlin.math.abs(viewModel.uiState.value.browse.view.zoom - 1.0) < 1e-6
+        }
+    }
+
     @Test
     fun given_liveShotDuringReplay_when_chipTapped_then_returnsToLive() {
         history.put("s1", listOf(stored(2, "pw", 120.0), stored(1, "driver", 250.0)))
@@ -164,6 +215,15 @@ class RangeReplayTest {
         setRange(OfWindowClass.COMPACT, replaySessionId = "s1")
         composeRule.onNodeWithTag(RangeTestTags.TRANSPORT).assertIsDisplayed()
         composeRule.onNodeWithTag(RangeTestTags.SHOT_LIST).assertDoesNotExist()
+    }
+
+    /** Runs the scene's TalkBack custom action named [label], as TalkBack's actions menu would. */
+    private fun customAction(
+        node: SemanticsNodeInteraction,
+        label: String,
+    ) {
+        val actions = node.fetchSemanticsNode().config[SemanticsActions.CustomActions]
+        composeRule.runOnUiThread { actions.first { it.label == label }.action() }
     }
 
     private fun isSelectedShot(id: String): Boolean =

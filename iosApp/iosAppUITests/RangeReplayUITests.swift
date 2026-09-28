@@ -84,8 +84,9 @@ final class RangeReplayUITests: XCTestCase {
     }
 
     /// Plan F8b performance check: `--preview-history-bulk` stores a 220-shot session; its overlay
-    /// draws the newest 200 (the cap) and says so, and stays live under a slow orbit drag. The
-    /// redraw rate and render cost are in the `RangeCanvas` log ("range redraws …").
+    /// draws the newest 200 (the cap) and says so, and stays live under a slow one-finger pan (plan
+    /// F8a2p; an orbit before) and a pinch. The redraw rate and render cost are in the
+    /// `RangeCanvas` log ("range redraws …").
     func testBulkOverlayDrawsTheCapUnderAGesture() {
         let app = launchRange(extra: ["--preview-history-bulk"])
         let sheet = openSessions(app)
@@ -115,8 +116,8 @@ final class RangeReplayUITests: XCTestCase {
 
     // MARK: View gestures
 
-    /// A pinch zooms the view (the follow camera steps aside), a double tap resets it; a drag
-    /// orbits, and the "Reset view" chip resets that.
+    /// A pinch zooms the view (the follow camera steps aside), a double tap resets it; plan F8a2p:
+    /// a one-finger drag pans like a map, and the "Reset view" chip resets that.
     func testPinchThenDoubleTapResetsTheView() {
         let app = launchRange()
         let scene = element("range.scene", in: app)
@@ -136,13 +137,39 @@ final class RangeReplayUITests: XCTestCase {
         waitForExpectations(timeout: 5)
         XCTAssertFalse(app.buttons["range.resetView"].exists)
 
-        // One finger across the scene orbits.
-        let start = scene.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.5))
-        start.press(forDuration: 0.05, thenDragTo: scene.coordinate(withNormalizedOffset: CGVector(dx: 0.7, dy: 0.5)))
-        expectation(for: NSPredicate(format: "value CONTAINS %@ AND NOT (value CONTAINS %@)", "orbit", "orbit 0 degrees"), evaluatedWith: scene)
+        // One finger across the scene slides the range with it: the view moves left, no orbit.
+        let start = scene.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.6))
+        start.press(forDuration: 0.05, thenDragTo: scene.coordinate(withNormalizedOffset: CGVector(dx: 0.7, dy: 0.6)))
+        expectation(
+            for: NSPredicate(format: "value CONTAINS %@ AND value CONTAINS %@", "orbit 0 degrees", "metres left"),
+            evaluatedWith: scene
+        )
         waitForExpectations(timeout: 5)
 
         app.buttons["range.resetView"].tap()
+        expectation(for: NSPredicate(format: "value == %@", "Default view"), evaluatedWith: scene)
+        waitForExpectations(timeout: 5)
+    }
+
+    /// Plan F8a2p: a one-finger drag down the scene pulls the far range toward the viewer (the view
+    /// moves downrange), in live mode, and zoom stays pinch-only (no zoom buttons on screen).
+    func testOneFingerDragDownPansDownrange() {
+        let app = launchRange()
+        let scene = element("range.scene", in: app)
+        XCTAssertTrue(scene.waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["Zoom in"].exists)
+        XCTAssertFalse(app.buttons["Zoom out"].exists)
+
+        let start = scene.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.55))
+        start.press(forDuration: 0.05, thenDragTo: scene.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.72)))
+        expectation(
+            for: NSPredicate(format: "value BEGINSWITH %@ AND value CONTAINS %@", "Zoom 100 percent", "metres downrange"),
+            evaluatedWith: scene
+        )
+        waitForExpectations(timeout: 5)
+        XCTAssertTrue(app.buttons["range.resetView"].exists)
+
+        scene.doubleTap()
         expectation(for: NSPredicate(format: "value == %@", "Default view"), evaluatedWith: scene)
         waitForExpectations(timeout: 5)
     }

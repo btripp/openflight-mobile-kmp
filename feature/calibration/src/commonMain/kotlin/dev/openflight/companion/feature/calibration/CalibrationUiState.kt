@@ -19,6 +19,11 @@ data class CalibrationUiState(
     val host: String,
     /** Whether the active Bluetooth transport can carry control commands. Ignored on Wi-Fi. */
     val bluetoothReady: Boolean,
+    /**
+     * Plan F14: why calibration can't run at all right now ([DEMO_NEEDS_HARDWARE] in Demo mode, which
+     * has no radar to level), or `null`. The screen shows it in place of Apply.
+     */
+    val needsHardware: String? = null,
 ) {
     /**
      * Apply is enabled only when the measurement is send-ready, the active transport can carry
@@ -29,11 +34,17 @@ data class CalibrationUiState(
         get() {
             val measurement = (sensor as? SensorUiState.Sampling)?.measurement
             return measurement?.isReadyToSend == true &&
+                needsHardware == null &&
                 (transport == TransportType.WIFI || bluetoothReady) &&
                 submit !is SubmitUiState.Submitting
         }
 
     companion object {
+        /** Plan F14: Demo mode's answer to "calibrate the radar". */
+        const val DEMO_NEEDS_HARDWARE =
+            "Radar calibration needs a real OpenFlight Pi and radar. Demo mode has no hardware to level, " +
+                "so there's nothing to calibrate. Exit Demo mode and connect your Pi to calibrate."
+
         val Initial =
             CalibrationUiState(
                 sensor =

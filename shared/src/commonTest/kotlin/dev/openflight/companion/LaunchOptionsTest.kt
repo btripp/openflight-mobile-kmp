@@ -5,6 +5,9 @@ import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isTrue
+import dev.openflight.companion.core.data.RangeShowSetting
+import dev.openflight.companion.core.data.RangeThemeSetting
+import dev.openflight.companion.core.data.ShotTrailStyle
 import dev.openflight.companion.core.data.TransportType
 import kotlin.test.Test
 
@@ -120,5 +123,43 @@ class LaunchOptionsTest {
         assertThat(options.previewPiMock).isTrue()
         assertThat(options.usesFakeRepository).isTrue()
         assertThat(LaunchOptions.fromArguments(listOf("app")).previewPiMock).isFalse()
+    }
+
+    @Test
+    fun rangeThemeSeedsAKnownThemeAndIgnoresAnythingElse() {
+        fun theme(vararg arguments: String) = LaunchOptions.fromArguments(listOf("app") + arguments).rangeTheme
+
+        assertThat(theme("--range-theme", "night")).isEqualTo(RangeThemeSetting.NIGHT)
+        assertThat(theme("--range-theme", "links")).isEqualTo(RangeThemeSetting.LINKS)
+        assertThat(theme("--range-theme", "vaporwave")).isEqualTo(null)
+        assertThat(theme("--range-theme")).isEqualTo(null)
+        assertThat(theme()).isEqualTo(null)
+        assertThat(LaunchOptions.fromArguments(listOf("app", "--range-theme", "dusk")).usesFakeRepository).isFalse()
+    }
+
+    @Test
+    fun shotTrailSeedsAKnownStyleAndIgnoresAnythingElse() {
+        fun trail(vararg arguments: String) = LaunchOptions.fromArguments(listOf("app") + arguments).shotTrail
+
+        for (style in ShotTrailStyle.entries) assertThat(trail("--shot-trail", style.storageValue)).isEqualTo(style)
+        assertThat(trail("--shot-trail", "fireworks")).isEqualTo(null)
+        assertThat(trail("--shot-trail")).isEqualTo(null)
+        assertThat(trail()).isEqualTo(null)
+    }
+
+    @Test
+    fun rangeShowSeedsAKnownChoiceAndUiTestsStartLive() {
+        fun options(vararg arguments: String) = LaunchOptions.fromArguments(listOf("app") + arguments)
+
+        for (show in RangeShowSetting.entries) {
+            assertThat(options("--range-show", show.storageValue).rangeShowSeed).isEqualTo(show)
+        }
+        assertThat(options("--range-show", "everything").rangeShow).isEqualTo(null)
+        // A fake-repository launch resets it to live; a normal launch leaves the stored choice alone.
+        assertThat(options("--ui-testing").rangeShowSeed).isEqualTo(RangeShowSetting.LIVE)
+        assertThat(options("--ui-testing", "--range-show", "last_10").rangeShowSeed).isEqualTo(RangeShowSetting.LAST_10)
+        assertThat(options().rangeShowSeed).isEqualTo(null)
+        assertThat(options("--preview-profiles").previewProfiles).isTrue()
+        assertThat(options().previewProfiles).isFalse()
     }
 }

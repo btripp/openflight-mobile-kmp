@@ -3,6 +3,8 @@ package dev.openflight.companion.feature.calibration
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import dev.openflight.companion.core.data.DemoModeOff
+import dev.openflight.companion.core.data.DemoModeRepository
 import dev.openflight.companion.core.data.SettingsRepository
 import dev.openflight.companion.core.data.ShotRepository
 import dev.openflight.companion.core.data.TransportType
@@ -36,6 +38,8 @@ class CalibrationViewModel(
      * non-null intrinsic) outside an instrumented/Robolectric environment.
      */
     deviceModelProvider: () -> String = ::deviceModel,
+    // Plan F14: in Demo mode there's no radar to calibrate; the screen says so.
+    demoMode: DemoModeRepository = DemoModeOff,
 ) : ViewModel() {
     /** The host field's text while the user edits it; `null` shows the saved host. */
     private val hostDraft = MutableStateFlow<String?>(null)
@@ -72,7 +76,8 @@ class CalibrationViewModel(
                 )
         }
 
-    private val panel = combine(settings.transport, settings.host, shots.supportsControls, ::Panel)
+    private val panel =
+        combine(settings.transport, settings.host, shots.supportsControls, demoMode.enabled, ::Panel)
 
     val uiState: StateFlow<CalibrationUiState> =
         combine(sensorState, submitState, panel, hostDraft) { sensor, submit, saved, draft ->
@@ -82,6 +87,7 @@ class CalibrationViewModel(
                 transport = saved.transport,
                 host = draft ?: saved.host,
                 bluetoothReady = saved.bluetoothReady,
+                needsHardware = CalibrationUiState.DEMO_NEEDS_HARDWARE.takeIf { saved.demo },
             )
         }.stateIn(
             scope = viewModelScope,
@@ -133,6 +139,7 @@ class CalibrationViewModel(
         val transport: TransportType,
         val host: String,
         val bluetoothReady: Boolean,
+        val demo: Boolean,
     )
 
     companion object {

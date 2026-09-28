@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 package dev.openflight.companion.feature.range
 
+import dev.openflight.companion.core.data.ShotTrailStyle
 import dev.openflight.companion.core.flight.FlightTrajectory
 import dev.openflight.companion.core.flight.RangeCameraPose
 import dev.openflight.companion.core.flight.RangeQualityProfile
@@ -13,14 +14,22 @@ import dev.openflight.companion.core.flight.Vec3
  * estimated roll-out. Shared by the Android Canvas and the iOS Canvas (plan F8c2), which only paint
  * what this holds, in this order:
  *
- * 1. the backdrop: sky gradient from 0 to [RangeScene.backdropHorizon], [RangeVisualStyle.ground]
- *    below it;
- * 2. [RangeScene.polygons], then the trees in [RangeScene.treeOrder], then the visible labels;
- * 3. the [overlay] (club-group strokes, landing dots, then the selection) when there is one;
- * 4. with no [geometry]: the roll-out if there's an overlay, and stop;
- * 5. once landed (progress ≥ 1): the [landing] polygons and the roll-out;
- * 6. the ball's shadow (an oval) when [shadowVisible], the [tracer] ribbon, and the ball at the
- *    tracer's tip when it's in front of the camera.
+ * 1. the backdrop: the [RangeVisualStyle.sky] gradient from 0 to [RangeScene.backdropHorizon];
+ *    the [RangeScene.sky]'s sun glow and disc, then its visible ridges far to near (plan F8a2a);
+ *    [RangeVisualStyle.ground] from the horizon down;
+ * 2. the ground (plan F8a2p): [RangeScene.fairway], [RangeScene.stripes] with
+ *    [RangeVisualStyle.stripeGradient], [RangeScene.groundPolygons], then the haze overlay
+ *    ([RangeHaze.overlayStops] from [RangeScene.hazeTopY] to [RangeScene.hazeBottomY]) from the
+ *    horizon down;
+ * 3. [RangeScene.polygons], then the trees in [RangeScene.treeOrder] (trunk, then each crown
+ *    tone), then the labels that are [WorldLabel.drawn] (not under the [setObstructions] UI);
+ * 4. the [overlay] (club-group strokes, landing dots, then the selection) when there is one;
+ * 5. with no [geometry]: the roll-out if there's an overlay, and stop;
+ * 6. once landed (progress ≥ 1): the [landing] polygons and the roll-out;
+ * 7. the ball's shadow (an oval) when [shadowVisible], then (plan F8a2t) every visible layer of
+ *    the [trail] in order (the earlier trails kept by "Keep last shots", the landing effect, then
+ *    the chosen [ShotTrailStyle]'s outlines), and the ball at the [tracer]'s tip when it's in front
+ *    of the camera. The earlier trails are drawn even with no [geometry].
  *
  * [prepare] re-projects only when the pose or the canvas changed since the last frame, and rewrites
  * the same [PathSink]s and arrays: nothing in it allocates.
@@ -41,6 +50,12 @@ class RangeFrame<P : PathSink>(
     private var projectedPose: RangeCameraPose? = null
     private var dirty = true
 
+    /** Plan F8a2p: the overlaid UI the labels and far markers keep clear of. */
+    private val obstructions = RangeObstructions()
+    private var obstructionsDirty = true
+    private var minLabelPixels = style.minLabelSize
+    private var maxLabelPixels = style.maxLabelSize
+
     var geometry: FlightGeometry? = null
         private set
     private var geometryFor: ActiveFlight? = null
@@ -48,7 +63,17 @@ class RangeFrame<P : PathSink>(
     var landing: List<WorldPolygon<P>> = emptyList()
         private set
 
-    val tracer: TracerRibbon<P> = TracerRibbon(newPath())
+    /** Plan F8a2t: the shot trail in the chosen style, the kept earlier trails and the landing effect. */
+    val trail: ShotTrail<P> = ShotTrail(style, newPath)
+
+    /** The live tracer's runs (painted into [trail]) and the ball's position at its tip. */
+    val tracer: TracerRibbon<P> get() = trail.ribbon
+
+    private var trailFor: RangeTrailState? = null
+    private var priorFlightsFor: List<ActiveFlight>? = null
+    private var priorGeometries: List<FlightGeometry> = emptyList()
+    private var priorsDirty = false
+    private var trailStyle = ShotTrailStyle.DEFAULT
 
     /** Plan F8a1: the overlay's static trajectories, when overlaying. */
     var overlay: OverlayGeometry<P>? = null
@@ -105,6 +130,29 @@ class RangeFrame<P : PathSink>(
         dirty = true
     }
 
+    /**
+     * Plan F8a2p: the overlaid UI's rectangles in canvas pixels (`left, top, right, bottom` each),
+     * which the yardage labels and far markers keep clear of ([RangeScene.obstruct]). Cheap to call
+     * every frame: only a change re-applies them.
+     */
+    fun setObstructions(packed: FloatArray) {
+        if (obstructions.set(packed)) obstructionsDirty = true
+    }
+
+    /**
+     * Plan F8a2p: the labels' font size range in pixels (the style's `minLabelSize` and
+     * `maxLabelSize` at the platform's density), for measuring their boxes against the obstructions.
+     */
+    fun setLabelPixels(
+        minPixels: Float,
+        maxPixels: Float,
+    ) {
+        if (minPixels == minLabelPixels && maxPixels == maxLabelPixels) return
+        minLabelPixels = minPixels
+        maxLabelPixels = maxPixels
+        obstructionsDirty = true
+    }
+
     /** The flight to show (the same instance keeps its geometry); needs a canvas ([resize]) first. */
     fun setFlight(
         flight: ActiveFlight?,
@@ -115,8 +163,43 @@ class RangeFrame<P : PathSink>(
         geometryFor = flight
         geometry = flight?.let { FlightGeometry.build(it.trajectory, projection, segments) }
         landing = geometry?.let { scene.landingMarker(it.landing) }.orEmpty()
-        tracer.ensureCapacity(segments)
+        trail.ensureCapacity(segments)
+        trail.setFlight(flight?.spinRpm, flight?.clubColorIndex ?: 0)
         dirty = true
+    }
+
+    /**
+     * Plan F8a2t: the trail options ([RangeTrailState]: the style, the landing effect and the
+     * earlier live shots to keep, newest first) and whether effects are frozen (reduced motion).
+     * Cheap to call every frame: the same state instance changes nothing. Needs a canvas ([resize])
+     * first, like [setFlight].
+     */
+    fun setTrail(
+        state: RangeTrailState,
+        staticEffects: Boolean,
+    ) {
+        trail.setOptions(state.style, state.landingEffect, staticEffects)
+        val projection = projection ?: return
+        if (state === trailFor) return
+        trailFor = state
+        if (state.style != trailStyle) {
+            trailStyle = state.style
+            priorsDirty = true
+        }
+        if (state.priorFlights != priorFlightsFor) {
+            val segments = QUALITY.tracerPointCount
+            priorFlightsFor = state.priorFlights
+            val kept = state.priorFlights.take(ShotTrail.PRIOR_LAYERS)
+            // Plan F8f: past the newest few, kept trails are summary ribbons (fewer segments).
+            priorGeometries =
+                kept.mapIndexed { index, prior ->
+                    val resolution = if (index < ShotTrail.FULL_PRIORS) segments else ShotTrail.SUMMARY_PRIOR_SEGMENTS
+                    FlightGeometry.build(prior.trajectory, projection, resolution)
+                }
+            trail.ensureCapacity(segments)
+            trail.setPriors(priorGeometries, kept.map { it.clubColorIndex })
+            priorsDirty = true
+        }
     }
 
     /** Plan F8a1: the overlay to draw (built once per list of flights) and its highlighted shot. */
@@ -153,11 +236,13 @@ class RangeFrame<P : PathSink>(
 
     /**
      * Projects everything for [pose] (only if it or anything else changed) and builds the tracer,
-     * shadow and ball for playback [progress] in 0..1. Returns false before the first [resize].
+     * shadow and ball for playback [progress] in 0..1, and (plan F8a2t) the trail and its landing
+     * effect [landedSeconds] after touchdown. Returns false before the first [resize].
      */
     fun prepare(
         pose: RangeCameraPose,
         progress: Float,
+        landedSeconds: Float = 0f,
     ): Boolean {
         val projection = projection ?: return false
         if (dirty || pose != projectedPose) {
@@ -168,9 +253,26 @@ class RangeFrame<P : PathSink>(
             overlay?.reproject(projection)
             for (index in landing.indices) landing[index].project(projection, scene.scratch)
             projectRollOut(projection)
+            for (index in priorGeometries.indices) priorGeometries[index].reproject(projection)
             dirty = false
+            obstructionsDirty = true
+            priorsDirty = true
         }
-        geometry?.let { prepareFlight(it, progress) }
+        if (obstructionsDirty) {
+            scene.obstruct(obstructions, style.labelHeightMeters, minLabelPixels, maxLabelPixels)
+            obstructionsDirty = false
+        }
+        if (priorsDirty) {
+            trail.buildPriors()
+            priorsDirty = false
+        }
+        val shown = geometry
+        if (shown == null) {
+            trail.clear()
+        } else {
+            prepareFlight(shown, progress)
+            trail.buildLandingEffect(shown, projection, progress >= 1f, landedSeconds)
+        }
         return true
     }
 
@@ -188,7 +290,7 @@ class RangeFrame<P : PathSink>(
             shadowRadiusX = geometry.valueAt(geometry.shadowRadiiX, at)
             shadowRadiusY = geometry.valueAt(geometry.shadowRadiiY, at)
         }
-        tracer.build(geometry, at)
+        trail.build(geometry, at)
         ballRadius = geometry.valueAt(geometry.ballRadii, at)
     }
 

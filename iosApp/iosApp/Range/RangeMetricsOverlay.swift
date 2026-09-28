@@ -4,9 +4,13 @@ import SwiftUI
 
 /// The range's metrics (reference `RangeMetricsOverlay.swift`): ball speed and carry on top; at the
 /// bottom the club error, the estimated-flight badge and the detail metrics with the "NEXT CLUB"
-/// selector, in one row in landscape or a two-column grid in portrait. While a ball flies and
-/// through the landing dwell (the shared `compactMetrics`, plan R7b) the detail metrics fold into
-/// one strip so the lower half of the scene, where the ball lands, stays visible.
+/// selector, laid out by the shared `detailLayout` (plan F8a2p, as on Android): one row in
+/// landscape, two compact rows of four over a portrait scene, the roomy two-column grid docked to
+/// the side, and one strip while a ball flies and through the landing dwell (the shared
+/// `compactMetrics`, plan R7b) so the landing area stays visible.
+///
+/// Plan F8a2p: over the scene the ball speed and carry cards are compact too, so the tee view keeps
+/// most of the screen, and every card reports its frame as a range obstruction.
 struct RangeMetricsOverlay: View {
     let state: DrivingRangeUiState
     let isLandscape: Bool
@@ -19,6 +23,11 @@ struct RangeMetricsOverlay: View {
     let onSelectClub: (GolfClub) -> Void
 
     private var shot: ShotEvent? { state.displayedShot }
+    /// Plan F8f: the chosen units (the range quick settings and Settings › Practice share them).
+    private var numbers: RangeNumbers { state.camera.numbers }
+    private var layout: RangeDetailLayout {
+        DrivingRangeUiStateKt.detailLayout(state, landscape: isLandscape, docked: docksToSide)
+    }
     private var club: RangeClubState { state.club }
 
     var body: some View {
@@ -59,16 +68,20 @@ struct RangeMetricsOverlay: View {
         HStack(spacing: 12) {
             RangePrimaryMetric(
                 title: "BALL SPEED",
-                value: RangeFormat.number(shot.map { KotlinDouble(value: $0.ballSpeedMph) }, decimals: 1),
-                unit: "MPH",
+                value: numbers.speed(mph: shot.map { KotlinDouble(value: $0.ballSpeedMph) }, decimals: 1),
+                unit: numbers.speedUnit.uppercased(),
+                compact: !docksToSide,
                 accessibilityIdentifier: RangeTestTags.shared.BALL_SPEED
             )
+            .rangeObstruction("ballSpeed")
             RangePrimaryMetric(
                 title: "CARRY",
-                value: RangeFormat.number(shot.map { KotlinDouble(value: $0.estimatedCarryYards) }, decimals: 0),
-                unit: "YDS",
+                value: numbers.distance(yards: shot.map { KotlinDouble(value: $0.estimatedCarryYards) }, decimals: 0),
+                unit: numbers.distanceUnit.uppercased(),
+                compact: !docksToSide,
                 accessibilityIdentifier: RangeTestTags.shared.CARRY
             )
+            .rangeObstruction("carry")
         }
         .frame(maxWidth: isLandscape ? 540 : .infinity)
     }
@@ -83,6 +96,7 @@ struct RangeMetricsOverlay: View {
                     .padding(.vertical, 6)
                     .background(.black.opacity(0.64), in: Capsule())
                     .accessibilityIdentifier(RangeTestTags.shared.CLUB_ERROR)
+                    .rangeObstruction("clubError")
             }
 
             if DrivingRangeUiStateKt.usesEstimatedFlight(state) {
@@ -93,12 +107,15 @@ struct RangeMetricsOverlay: View {
                     .padding(.vertical, 6)
                     .background(.black.opacity(0.5), in: Capsule())
                     .accessibilityIdentifier(RangeTestTags.shared.ESTIMATED)
+                    .rangeObstruction("estimated")
             }
 
-            if DrivingRangeUiStateKt.compactMetrics(state) {
+            if layout == .strip {
                 compactStrip
+                    .rangeObstruction("details")
             } else {
                 detailPanel
+                    .rangeObstruction("details")
             }
         }
         .animation(.easeInOut(duration: 0.25), value: DrivingRangeUiStateKt.compactMetrics(state))
@@ -122,8 +139,9 @@ struct RangeMetricsOverlay: View {
     @ViewBuilder
     private var detailPanel: some View {
         let metrics = detailMetrics
+        let spacing: CGFloat = layout == .grid ? 8 : 6
         Group {
-            if isLandscape {
+            if layout == .row {
                 HStack(spacing: 8) {
                     clubMetric
                     ForEach(metrics) { metric in
@@ -132,8 +150,8 @@ struct RangeMetricsOverlay: View {
                 }
             } else {
                 LazyVGrid(
-                    columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 2),
-                    spacing: 8
+                    columns: Array(repeating: GridItem(.flexible(), spacing: spacing), count: Int(layout.columns)),
+                    spacing: spacing
                 ) {
                     clubMetric
                     ForEach(metrics) { metric in
@@ -149,7 +167,11 @@ struct RangeMetricsOverlay: View {
 
     private var detailMetrics: [RangeMetricValue] {
         [
-            RangeMetricValue(title: "CLUB SPEED", value: RangeFormat.number(shot?.clubSpeedMph, decimals: 1), unit: "mph"),
+            RangeMetricValue(
+                title: "CLUB SPEED",
+                value: numbers.speed(mph: shot?.clubSpeedMph, decimals: 1),
+                unit: numbers.speedUnit
+            ),
             RangeMetricValue(title: "SMASH", value: RangeFormat.number(shot?.smashFactor, decimals: 2), unit: ""),
             RangeMetricValue(title: "LAUNCH", value: RangeFormat.number(shot?.launchAngleVertical, decimals: 1), unit: "°"),
             RangeMetricValue(
@@ -185,6 +207,7 @@ struct RangeMetricsOverlay: View {
                         .tracking(0.8)
                         .foregroundStyle(.white.opacity(0.68))
                         .lineLimit(1)
+                        .minimumScaleFactor(0.7)
                     Text(club.selected.displayName)
                         .font(.subheadline.weight(.bold))
                         .lineLimit(1)
@@ -238,6 +261,8 @@ private struct RangePrimaryMetric: View {
     let title: String
     let value: String
     let unit: String
+    /// Plan F8a2p: a shorter card over the scene.
+    var compact = false
     let accessibilityIdentifier: String
 
     var body: some View {
@@ -248,7 +273,7 @@ private struct RangePrimaryMetric: View {
                 .foregroundStyle(.white.opacity(0.72))
             HStack(alignment: .firstTextBaseline, spacing: 4) {
                 Text(value)
-                    .font(.system(size: 38, weight: .heavy, design: .rounded))
+                    .font(.system(size: compact ? 28 : 38, weight: .heavy, design: .rounded))
                     .monospacedDigit()
                     .minimumScaleFactor(0.65)
                     .lineLimit(1)
@@ -259,7 +284,7 @@ private struct RangePrimaryMetric: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 14)
-        .padding(.vertical, 10)
+        .padding(.vertical, compact ? 6 : 10)
         .background(.black.opacity(0.48), in: RoundedRectangle(cornerRadius: 18))
         .overlay {
             RoundedRectangle(cornerRadius: 18)

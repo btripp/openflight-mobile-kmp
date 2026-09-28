@@ -4,6 +4,7 @@ package dev.openflight.companion
 import dev.openflight.companion.core.data.AppLifecycle
 import dev.openflight.companion.core.data.ShotHistoryRepository
 import dev.openflight.companion.core.data.ShotRepository
+import dev.openflight.companion.core.speech.SpeechEngine
 import dev.openflight.companion.feature.bag.BagViewModel
 import dev.openflight.companion.feature.bag.ClubAnalysisViewModel
 import dev.openflight.companion.feature.bag.ClubDetailViewModel
@@ -118,4 +119,11 @@ class KoinHelper : KoinComponent {
      * the first connection.
      */
     fun currentHistorySessionId(): String? = get<ShotHistoryRepository>().currentSessionId.value
+
+    /** Plan F14: Demo mode, for the app shell's Demo badge. */
+    fun demoMode(): DemoModeBridge = DemoModeBridge(get())
+
+    /** Plan F14: the `--callout-probe` call-out log, or `null` without that launch hook. */
+    fun calloutProbe(): CalloutProbeBridge? =
+        (get<SpeechEngine>() as? CalloutProbeSpeechEngine)?.let(::CalloutProbeBridge)
 }

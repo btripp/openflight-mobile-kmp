@@ -10,6 +10,7 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.scale
+import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.unit.dp
@@ -34,11 +35,18 @@ internal class RangeRenderer(
     /** The camera of the last drawn frame: gestures pan along the ground and taps select through it. */
     val currentProjection: RangeProjection? get() = frame.projection
 
-    private val skyGradient =
-        listOf(RangeGradientStop(0f, style.skyTop), RangeGradientStop(1f, style.skyHorizon))
-            .toVerticalBrush(startY = 0f, endY = 1f)
+    private val skyGradient = style.sky.toVerticalBrush(startY = 0f, endY = 1f)
+
+    /** Plan F8a2p: the rough and fairway are flat; the haze overlay and the soft stripes are gradients. */
     private val groundColor = style.ground.toColor()
-    private val tracerColor = style.tracer.toColor()
+    private val fairwayColor = style.fairway.toColor()
+    private val haze = MovableLinearGradient(style.haze.overlayStops)
+    private val stripeGradients = scene.stripes.map { MovableLinearGradient(style.stripeGradient) }
+
+    /** Plan F8a2a: the sun's glow on a unit circle at the origin, moved and scaled onto the sun per frame. */
+    private val sunGlow = style.sun.glow.toUnitRadialBrush()
+    private val sunDiscColor = style.sun.disc.toColor()
+    private val ridgeColors = scene.sky.ridges.map { it.color.toColor() }
     private val ballColor = style.ball.toColor()
     private val shadowColor = style.shadow.toColor()
     private val selectedColor = style.overlaySelected.toColor()
@@ -58,11 +66,13 @@ internal class RangeRenderer(
         labelHeightMeters: Float,
         minLabelPixels: Float,
         rollOutLabel: TextLayoutResult? = null,
+        landedSeconds: Float = 0f,
     ) {
-        if (!frame.prepare(pose, progress)) return
+        if (!frame.prepare(pose, progress, landedSeconds)) return
         val projection = frame.projection ?: return
         with(drawScope) {
             drawBackdrop(projection)
+            drawGround(projection)
             drawPolygons(scene.polygons)
             drawTrees()
             drawLabels(labelHeightMeters, minLabelPixels)
@@ -70,6 +80,8 @@ internal class RangeRenderer(
             overlay?.let { drawOverlay(it) }
             if (frame.geometry == null) {
                 if (overlay != null) drawRollOut(rollOutLabel)
+                // Plan F8a2t: the kept earlier trails stay while no flight is shown.
+                drawTrail()
             } else {
                 if (progress >= 1f) {
                     drawPolygons(frame.landing)
@@ -136,23 +148,84 @@ internal class RangeRenderer(
         }
     }
 
-    /** Sky down to the horizon, distant ground below it (the ground plane is finite). */
+    /**
+     * Sky down to the horizon, then (plan F8a2a) the sun and the far ridges, then (plan F8a2p) the
+     * flat rough from the horizon down; [drawGround] hazes it.
+     */
     private fun DrawScope.drawBackdrop(projection: RangeProjection) {
         val horizon = scene.backdropHorizon(projection.height)
-        if (horizon < projection.height) {
-            drawRect(groundColor, topLeft = Offset(0f, horizon), size = Size(size.width, size.height - horizon))
-        }
         if (horizon > 0f) {
             scale(scaleX = 1f, scaleY = horizon, pivot = Offset.Zero) {
                 drawRect(skyGradient, size = Size(size.width, 1f))
             }
+        }
+        val sky = scene.sky
+        if (sky.sunVisible) {
+            translate(sky.sunX, sky.sunY) {
+                scale(sky.sunGlowRadius, pivot = Offset.Zero) {
+                    drawCircle(sunGlow, radius = 1f, center = Offset.Zero)
+                }
+            }
+            drawCircle(sunDiscColor, radius = sky.sunDiscRadius, center = Offset(sky.sunX, sky.sunY))
+        }
+        val ridges = sky.ridges
+        for (index in ridges.indices) {
+            val ridge = ridges[index]
+            if (ridge.visible) drawPath(ridge.path.path, ridgeColors[index])
+        }
+        if (horizon < projection.height) {
+            drawRect(groundColor, topLeft = Offset(0f, horizon), size = Size(size.width, size.height - horizon))
+        }
+    }
+
+    /**
+     * Plan F8a2p: the fairway, its soft stripes and the rest of the ground, then the haze overlay
+     * from the horizon down, laid per pose from [RangeScene.hazeTopY] to [RangeScene.hazeBottomY].
+     */
+    private fun DrawScope.drawGround(projection: RangeProjection) {
+        val fairway = scene.fairway
+        if (fairway.visible) drawPath(fairway.path.path, fairwayColor)
+        val stripes = scene.stripes
+        for (index in stripes.indices) {
+            val stripe = stripes[index]
+            if (!stripe.gradientVisible) continue
+            val gradient = stripeGradients[index]
+            gradient.layOut(stripe.startX, stripe.startY, stripe.endX, stripe.endY)
+            drawPath(stripe.polygon.path.path, gradient.brush)
+        }
+        drawPolygons(scene.groundPolygons)
+        if (scene.hazeVisible) {
+            val top = scene.backdropHorizon(projection.height)
+            if (top < projection.height) {
+                haze.layOut(0f, scene.hazeTopY, 0f, scene.hazeBottomY)
+                drawRect(haze.brush, topLeft = Offset(0f, top), size = Size(size.width, projection.height - top))
+            }
+        }
+    }
+
+    /**
+     * Plan F8a2t: every visible layer of the shot trail in order (the kept earlier trails, the
+     * landing effect, then the style's outlines), in its packed colour or its club palette colour.
+     */
+    private fun DrawScope.drawTrail() {
+        val layers = frame.trail.layers
+        for (index in layers.indices) {
+            val layer = layers[index]
+            if (!layer.visible) continue
+            val color =
+                if (layer.paletteIndex >= 0) {
+                    OfClubPalette.color(layer.paletteIndex).copy(alpha = (layer.argb ushr ALPHA_SHIFT) / CHANNEL_MAX)
+                } else {
+                    Color(layer.argb)
+                }
+            drawPath(layer.path.path, color)
         }
     }
 
     private fun DrawScope.drawPolygons(polygons: List<WorldPolygon<ComposePathSink>>) {
         for (index in polygons.indices) {
             val polygon = polygons[index]
-            if (polygon.visible) drawPath(polygon.path.path, polygon.color.toColor())
+            if (polygon.visible) drawPath(polygon.path.path, Color(polygon.argb))
         }
     }
 
@@ -160,19 +233,12 @@ internal class RangeRenderer(
         val order = scene.treeOrder
         for (position in order.indices) {
             val tree = scene.trees[order[position]]
-            if (tree.trunk.visible) drawPath(tree.trunk.path.path, tree.trunk.color.toColor())
-            drawSphere(tree.crown)
-            drawSphere(tree.crownTop)
-        }
-    }
-
-    private fun DrawScope.drawSphere(sphere: WorldSphere) {
-        if (sphere.visible) {
-            drawCircle(
-                sphere.color.toColor(),
-                radius = sphere.screenRadius,
-                center = Offset(sphere.screenX, sphere.screenY),
-            )
+            if (tree.trunk.visible) drawPath(tree.trunk.path.path, Color(tree.trunk.argb))
+            val crowns = tree.crowns
+            for (index in crowns.indices) {
+                val crown = crowns[index]
+                if (crown.visible) drawPath(crown.path.path, Color(crown.argb))
+            }
         }
     }
 
@@ -183,7 +249,7 @@ internal class RangeRenderer(
         val labels = scene.labels
         for (index in labels.indices) {
             val label = labels[index]
-            if (!label.visible || index >= labelLayouts.size) continue
+            if (!label.drawn || index >= labelLayouts.size) continue
             val layout = labelLayouts[index]
             val fontPixels = label.fontPixels(labelHeightMeters, minLabelPixels, labelFontPixels)
             val factor = fontPixels / labelFontPixels
@@ -209,9 +275,9 @@ internal class RangeRenderer(
             )
         }
 
-        val tracer = frame.tracer
-        drawPath(tracer.path.path, tracerColor)
+        drawTrail()
 
+        val tracer = frame.tracer
         val tipX = tracer.tipX
         val tipY = tracer.tipY
         if (!tipX.isNaN()) {
@@ -219,3 +285,6 @@ internal class RangeRenderer(
         }
     }
 }
+
+private const val ALPHA_SHIFT = 24
+private const val CHANNEL_MAX = 255f

@@ -43,9 +43,9 @@ class ViewTransformTest {
         val back = ViewTransform().pannedBy(-1_000.0, 1_000.0)
         assertThat(back.panX).isEqualTo(bounds.minX)
         assertThat(back.panZ).isEqualTo(bounds.maxZ)
-        // The pivot (145 m downrange) can reach the far end of the 390 m range and the tee.
-        assertThat(bounds.minZ).isEqualTo(-245.0)
-        assertThat(bounds.maxZ).isEqualTo(145.0)
+        // The pivot (about 109 m downrange) can reach the far end of the 390 m range and the tee.
+        assertThat(bounds.minZ).isCloseTo(-(390.0 - RangeCameraPlanner.TARGET_DOWNRANGE_METERS), 1e-9)
+        assertThat(bounds.maxZ).isEqualTo(RangeCameraPlanner.TARGET_DOWNRANGE_METERS)
         assertThat(bounds.maxX).isEqualTo(90.0)
     }
 
@@ -134,6 +134,100 @@ class ViewTransformTest {
 
         assertThat(after.x.toDouble()).isCloseTo(560.0, 0.5)
         assertThat(after.y.toDouble()).isCloseTo(1_450.0, 0.5)
+    }
+
+    // Plan F8a2p: the map-like gestures.
+
+    @Test
+    fun aOneFingerDragDownMovesTheViewDownrangeAndUpMovesItBack() {
+        val down = ViewTransform.IDENTITY.draggedAlongGround(base, WIDTH, HEIGHT, 540f, 1_300f, 540f, 1_500f)
+        assertThat(down.panZ).isLessThan(0.0)
+        assertThat(down.panX).isCloseTo(0.0, 1e-6)
+
+        val up = ViewTransform.IDENTITY.draggedAlongGround(base, WIDTH, HEIGHT, 540f, 1_500f, 540f, 1_300f)
+        assertThat(up.panZ).isGreaterThan(0.0)
+    }
+
+    @Test
+    fun aOneFingerDragRightSlidesTheRangeRightSoTheViewMovesLeft() {
+        val right = ViewTransform.IDENTITY.draggedAlongGround(base, WIDTH, HEIGHT, 400f, 1_400f, 700f, 1_400f)
+        assertThat(right.panX).isLessThan(0.0)
+        assertThat(right.panZ).isCloseTo(0.0, 1e-6)
+    }
+
+    @Test
+    fun theDraggedGroundFollowsTheFinger() {
+        val start = ViewTransform(zoom = 1.4)
+        val grabbed = RangeProjection(start.applyTo(base), WIDTH, HEIGHT).unprojectToGround(600f, 1_450f)!!
+
+        val dragged = start.draggedAlongGround(base, WIDTH, HEIGHT, 600f, 1_450f, 640f, 1_500f)
+        val after = RangeProjection(dragged.applyTo(base), WIDTH, HEIGHT).project(grabbed)
+
+        assertThat(after.x.toDouble()).isCloseTo(640.0, 0.5)
+        assertThat(after.y.toDouble()).isCloseTo(1_500.0, 0.5)
+    }
+
+    @Test
+    fun aDragNearTheHorizonPansAtMostOneStepAndStaysInBounds() {
+        val horizon = RangeProjection(base, WIDTH, HEIGHT).horizonY()
+        val step =
+            ViewTransform.IDENTITY.draggedAlongGround(
+                base,
+                WIDTH,
+                HEIGHT,
+                540f,
+                horizon + 2f,
+                540f,
+                horizon + 40f,
+            )
+        assertThat(sqrt(step.panX * step.panX + step.panZ * step.panZ))
+            .isLessThan(ViewTransform.MAX_PAN_STEP_METERS + 1e-6)
+
+        var flung = ViewTransform.IDENTITY
+        repeat(40) { flung = flung.draggedAlongGround(base, WIDTH, HEIGHT, 540f, horizon + 2f, 540f, horizon + 40f) }
+        assertThat(flung.panZ).isEqualTo(PanBounds.STANDARD.minZ)
+    }
+
+    @Test
+    fun aPinchZoomsAboutItsCentre() {
+        val centreX = 300f
+        val centreY = 1_300f
+        val grabbed = RangeProjection(base, WIDTH, HEIGHT).unprojectToGround(centreX, centreY)!!
+
+        val zoomed = ViewTransform.IDENTITY.zoomedAbout(2.0, base, WIDTH, HEIGHT, centreX, centreY)
+        assertThat(zoomed.zoom).isCloseTo(2.0, 1e-9)
+        val after = RangeProjection(zoomed.applyTo(base), WIDTH, HEIGHT).project(grabbed)
+
+        assertThat(after.x.toDouble()).isCloseTo(centreX.toDouble(), 0.5)
+        assertThat(after.y.toDouble()).isCloseTo(centreY.toDouble(), 0.5)
+    }
+
+    @Test
+    fun aPinchOverTheSkyZoomsAboutTheCentreAndTheClampHolds() {
+        val sky = ViewTransform.IDENTITY.zoomedAbout(2.0, base, WIDTH, HEIGHT, WIDTH / 2, 10f)
+        assertThat(sky).isEqualTo(ViewTransform(zoom = 2.0))
+
+        val atMax = ViewTransform(zoom = ViewTransform.MAX_ZOOM)
+        assertThat(atMax.zoomedAbout(3.0, base, WIDTH, HEIGHT, 300f, 1_300f)).isSameInstanceAs(atMax)
+    }
+
+    @Test
+    fun theScreenReaderZoomStepsByOneAndAHalfWithinTheClamp() {
+        assertThat(ViewTransform.IDENTITY.zoomedBySteps(1).zoom).isCloseTo(1.5, 1e-9)
+        assertThat(ViewTransform.IDENTITY.zoomedBySteps(-1).zoom).isCloseTo(1 / 1.5, 1e-9)
+        assertThat(ViewTransform(zoom = ViewTransform.MAX_ZOOM).canZoomIn).isFalse()
+        assertThat(ViewTransform(zoom = ViewTransform.MIN_ZOOM).canZoomOut).isFalse()
+        assertThat(ViewTransform.IDENTITY.canZoomIn && ViewTransform.IDENTITY.canZoomOut).isTrue()
+    }
+
+    @Test
+    fun theDescriptionNamesZoomOrbitAndPan() {
+        assertThat(ViewTransform.IDENTITY.description).isEqualTo("Default view")
+        assertThat(ViewTransform(zoom = 2.5).description).isEqualTo("Zoom 250 percent, orbit 0 degrees")
+        assertThat(ViewTransform(panX = -12.2, panZ = -40.0).description)
+            .isEqualTo("Zoom 100 percent, orbit 0 degrees, 40 metres downrange, 12 metres left")
+        assertThat(ViewTransform(panX = 3.0, panZ = 20.0).description)
+            .isEqualTo("Zoom 100 percent, orbit 0 degrees, 20 metres back, 3 metres right")
     }
 
     private fun horizontalDistance(

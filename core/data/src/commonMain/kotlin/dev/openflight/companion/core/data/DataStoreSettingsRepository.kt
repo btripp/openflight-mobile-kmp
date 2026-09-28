@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.floatPreferencesKey
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import dev.openflight.companion.core.insights.CalloutField
 import dev.openflight.companion.core.insights.UnitSystem
@@ -153,6 +154,99 @@ internal class DataStoreSettingsRepository(
         dataStore.edit { it[CALLOUT_TRIGGER_KEY] = trigger.storageValue }
     }
 
+    // Plan F8a2a: the range theme, added at the end to keep this file's diff mergeable (§4a A7).
+
+    override val rangeTheme: Flow<RangeThemeSetting> =
+        preferences
+            .map { RangeThemeSetting.fromStorageValue(it[RANGE_THEME_KEY]) ?: RangeThemeSetting.DEFAULT }
+            .distinctUntilChanged()
+
+    override suspend fun setRangeTheme(theme: RangeThemeSetting) {
+        dataStore.edit { it[RANGE_THEME_KEY] = theme.storageValue }
+    }
+
+    // Plan F8a2t: the shot trail, added at the end to keep this file's diff mergeable (§4a A7).
+
+    override val shotTrail: Flow<ShotTrailStyle> =
+        preferences
+            .map { ShotTrailStyle.fromStorageValue(it[SHOT_TRAIL_KEY]) ?: ShotTrailStyle.DEFAULT }
+            .distinctUntilChanged()
+
+    override suspend fun setShotTrail(style: ShotTrailStyle) {
+        dataStore.edit { it[SHOT_TRAIL_KEY] = style.storageValue }
+    }
+
+    override val shotTrailKeepLast: Flow<Int> =
+        preferences
+            .map { stored ->
+                stored[SHOT_TRAIL_KEEP_LAST_KEY]?.takeIf { it in SHOT_TRAIL_KEEP_OPTIONS }
+                    ?: DEFAULT_SHOT_TRAIL_KEEP_LAST
+            }.distinctUntilChanged()
+
+    override suspend fun setShotTrailKeepLast(count: Int) {
+        if (count !in SHOT_TRAIL_KEEP_OPTIONS) return
+        dataStore.edit { it[SHOT_TRAIL_KEEP_LAST_KEY] = count }
+    }
+
+    override val landingEffect: Flow<LandingEffect> =
+        preferences
+            .map { LandingEffect.fromStorageValue(it[LANDING_EFFECT_KEY]) ?: LandingEffect.DEFAULT }
+            .distinctUntilChanged()
+
+    override suspend fun setLandingEffect(effect: LandingEffect) {
+        dataStore.edit { it[LANDING_EFFECT_KEY] = effect.storageValue }
+    }
+
+    // Plan F8f: range quick settings, added at the end to keep this file's diff mergeable (§4a A7).
+
+    override val rangeShow: Flow<RangeShowSetting> =
+        preferences
+            .map { RangeShowSetting.fromStorageValue(it[RANGE_SHOW_KEY]) ?: RangeShowSetting.DEFAULT }
+            .distinctUntilChanged()
+
+    override suspend fun setRangeShow(show: RangeShowSetting) {
+        dataStore.edit { it[RANGE_SHOW_KEY] = show.storageValue }
+    }
+
+    override val showTotalDistance: Flow<Boolean> =
+        preferences
+            .map { it[SHOW_TOTAL_DISTANCE_KEY] ?: DEFAULT_SHOW_TOTAL_DISTANCE }
+            .distinctUntilChanged()
+
+    override suspend fun setShowTotalDistance(show: Boolean) {
+        dataStore.edit { it[SHOW_TOTAL_DISTANCE_KEY] = show }
+    }
+
+    override val viewingProfile: Flow<ViewingProfile> =
+        preferences
+            .map { ViewingProfile.fromStorageValue(it[VIEWING_PROFILE_KEY]) ?: ViewingProfile.FollowActive }
+            .distinctUntilChanged()
+
+    override suspend fun setViewingProfile(profile: ViewingProfile) {
+        dataStore.edit { it[VIEWING_PROFILE_KEY] = profile.storageValue }
+    }
+
+    // Plan F14: Demo mode.
+
+    override val demoMode: Flow<Boolean> =
+        preferences.map { it[DEMO_MODE_KEY] ?: false }.distinctUntilChanged()
+
+    override suspend fun setDemoMode(enabled: Boolean) {
+        dataStore.edit { it[DEMO_MODE_KEY] = enabled }
+    }
+
+    override val demoAutoFireSeconds: Flow<Int> =
+        preferences
+            .map { stored ->
+                stored[DEMO_AUTO_FIRE_KEY]?.takeIf { it in DemoModeRepository.AUTO_FIRE_OPTIONS }
+                    ?: DemoModeRepository.DEFAULT_AUTO_FIRE_SECONDS
+            }.distinctUntilChanged()
+
+    override suspend fun setDemoAutoFireSeconds(seconds: Int) {
+        if (seconds !in DemoModeRepository.AUTO_FIRE_OPTIONS) return
+        dataStore.edit { it[DEMO_AUTO_FIRE_KEY] = seconds }
+    }
+
     companion object {
         /** DataStore requires the `.preferences_pb` extension for preferences files. */
         const val FILE_NAME = "openflight.preferences_pb"
@@ -174,6 +268,23 @@ internal class DataStoreSettingsRepository(
         private val CALLOUT_RATE_KEY = floatPreferencesKey("calloutRate")
         private val CALLOUT_FIELDS_KEY = stringPreferencesKey("calloutFields")
         private val CALLOUT_TRIGGER_KEY = stringPreferencesKey("calloutTrigger")
+
+        // Plan F8a2a: the range theme.
+        private val RANGE_THEME_KEY = stringPreferencesKey("rangeTheme")
+
+        // Plan F8a2t: the shot trail.
+        private val SHOT_TRAIL_KEY = stringPreferencesKey("shotTrail")
+        private val SHOT_TRAIL_KEEP_LAST_KEY = intPreferencesKey("shotTrailKeepLast")
+        private val LANDING_EFFECT_KEY = stringPreferencesKey("landingEffect")
+
+        // Plan F8f: range quick settings.
+        private val RANGE_SHOW_KEY = stringPreferencesKey("rangeShow")
+        private val SHOW_TOTAL_DISTANCE_KEY = booleanPreferencesKey("showTotalDistance")
+        private val VIEWING_PROFILE_KEY = stringPreferencesKey("viewingProfile")
+
+        // Plan F14: Demo mode.
+        private val DEMO_MODE_KEY = booleanPreferencesKey("demoMode")
+        private val DEMO_AUTO_FIRE_KEY = intPreferencesKey("demoAutoFireSeconds")
     }
 }
 

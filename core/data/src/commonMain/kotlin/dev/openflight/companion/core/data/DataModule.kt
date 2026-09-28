@@ -45,7 +45,7 @@ val dataModule: Module =
         }
         single { PiControlClient(httpClient = get()) }
         single<SettingsRepository> { DataStoreSettingsRepository(dataStore = get()) }
-        single<ShotRepository> {
+        single<ShotRepository>(DataBindings.Real) {
             DefaultShotRepository(
                 settings = get(),
                 bluetoothTransport = get<BleShotTransport>(),
@@ -53,18 +53,20 @@ val dataModule: Module =
                 scope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
                 piControl = get(),
                 // R6b: started/stopped with the shot stream; delete/clear reach the Pi through it.
-                piSession = get(),
+                piSession = get(DataBindings.Real),
                 // R8h: every live shot is also filed in the persistent history.
-                persistentHistory = get(),
+                persistentHistory = get(DataBindings.Real),
             )
         }
+        // Plan F14: the default the app uses; `shared` binds its Demo-mode switch in its place.
+        single<ShotRepository> { get(DataBindings.Real) }
         // R8d: foreground-only transports. The shell reports the lifecycle; the policy follows it.
         single { AppLifecycle() }
         single {
             LifecycleConnectionPolicy(get<AppLifecycle>().state, get(), CoroutineScope(Dispatchers.Unconfined))
         }
         // R6a: the Wi-Fi-only Socket.IO session API, sharing the HttpClient's engine.
-        single<PiSessionRepository> {
+        single<PiSessionRepository>(DataBindings.Real) {
             val httpClient = get<HttpClient>()
             DefaultPiSessionRepository(
                 settings = get(),
@@ -75,6 +77,8 @@ val dataModule: Module =
                 bluetooth = get<BleShotTransport>(),
             )
         }
+        // Plan F14: the default, as for ShotRepository above.
+        single<PiSessionRepository> { get(DataBindings.Real) }
         // F3 (A2): the running game for the call-outs, and final shots as events.
         single<ActiveGameRepository> { DefaultActiveGameRepository() }
         single<FinalShotStream> { DefaultFinalShotStream(get<ShotRepository>().history) }

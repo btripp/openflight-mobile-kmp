@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -21,8 +22,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -33,6 +36,8 @@ import androidx.compose.ui.layout.Measurable
 import androidx.compose.ui.layout.MeasurePolicy
 import androidx.compose.ui.layout.MeasureResult
 import androidx.compose.ui.layout.MeasureScope
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -63,6 +68,12 @@ import dev.openflight.companion.core.designsystem.rememberOfWindowClass
  * @param windowClass injectable for tests and previews; defaults to [rememberOfWindowClass]. On an
  *   [OfWindowClass.EXPANDED] window in landscape the metrics move into a docked side panel
  *   ([MetricsDock]) instead of overlaying the scene (plan F1b, §4a A3).
+ * @param freezeProgress debug: hold every flight at this playback progress ([RangeCanvas]).
+ * @param initialQuickSettings open with the quick settings showing (previews and screenshots).
+ *
+ * Plan F8f: the controls row's gear opens the range quick settings: a sheet over the scene on
+ * compact and medium windows, a side panel beside the scene (and the tablet panes) on expanded
+ * ones. Every change applies to the scene at once.
  */
 @Composable
 fun DrivingRangeScreen(
@@ -72,18 +83,46 @@ fun DrivingRangeScreen(
     onExit: () -> Unit,
     modifier: Modifier = Modifier,
     windowClass: OfWindowClass = rememberOfWindowClass(),
+    freezeProgress: Float? = null,
+    initialQuickSettings: Boolean = false,
 ) {
     var showSessions by rememberSaveable { mutableStateOf(false) }
+    var showQuickSettings by rememberSaveable { mutableStateOf(initialQuickSettings) }
     val browse = uiState.browse
-    if (windowClass == OfWindowClass.EXPANDED && !browse.isLive) {
-        // Plan F8a1: on a tablet, the replay/overlay shots sit in a side pane; a tap selects one.
-        OfListDetailPane(
-            hasSelection = true,
-            windowClass = windowClass,
-            listFraction = SHOT_LIST_FRACTION,
-            modifier = modifier,
-            list = { RangeShotList(browse, onSelect = { onEvent(DrivingRangeEvent.SelectShot(it)) }) },
-            detail = {
+    val sidePanel = windowClass == OfWindowClass.EXPANDED
+    val openQuickSettings = { showQuickSettings = !showQuickSettings }
+    BoxWithConstraints(modifier = modifier) {
+        val screenHeight = maxHeight
+        Row(modifier = Modifier.fillMaxSize()) {
+            val stageModifier = Modifier.weight(1f).fillMaxHeight()
+            if (windowClass == OfWindowClass.EXPANDED && !browse.isLive) {
+                // Plan F8a1: on a tablet, the replay/overlay shots sit in a side pane; a tap selects one.
+                OfListDetailPane(
+                    hasSelection = true,
+                    windowClass = windowClass,
+                    listFraction = SHOT_LIST_FRACTION,
+                    modifier = stageModifier,
+                    list = {
+                        RangeShotList(
+                            browse,
+                            onSelect = { onEvent(DrivingRangeEvent.SelectShot(it)) },
+                            numbers = uiState.camera.numbers,
+                        )
+                    },
+                    detail = {
+                        RangeStage(
+                            uiState,
+                            reduceMotion,
+                            onEvent,
+                            onExit,
+                            windowClass,
+                            onOpenSessions = { showSessions = true },
+                            onOpenQuickSettings = openQuickSettings,
+                            freezeProgress = freezeProgress,
+                        )
+                    },
+                )
+            } else {
                 RangeStage(
                     uiState,
                     reduceMotion,
@@ -91,19 +130,28 @@ fun DrivingRangeScreen(
                     onExit,
                     windowClass,
                     onOpenSessions = { showSessions = true },
+                    onOpenQuickSettings = openQuickSettings,
+                    modifier = stageModifier,
+                    freezeProgress = freezeProgress,
                 )
-            },
-        )
-    } else {
-        RangeStage(
-            uiState,
-            reduceMotion,
-            onEvent,
-            onExit,
-            windowClass,
-            onOpenSessions = { showSessions = true },
-            modifier,
-        )
+            }
+            if (sidePanel && showQuickSettings) {
+                RangeQuickSettingsPanel(
+                    uiState = uiState,
+                    onEvent = onEvent,
+                    onClose = { showQuickSettings = false },
+                    modifier = Modifier.width(QuickSettingsWidth).fillMaxHeight().safeDrawingPadding(),
+                )
+            }
+        }
+        if (!sidePanel && showQuickSettings) {
+            RangeQuickSettingsSheet(
+                uiState = uiState,
+                onEvent = onEvent,
+                onDismiss = { showQuickSettings = false },
+                maxHeight = screenHeight * QUICK_SHEET_FRACTION,
+            )
+        }
     }
     if (showSessions) {
         RangeSessionSheet(sessions = browse.sessions, onEvent = onEvent, onDismiss = { showSessions = false })
@@ -119,7 +167,9 @@ private fun RangeStage(
     onExit: () -> Unit,
     windowClass: OfWindowClass,
     onOpenSessions: () -> Unit,
+    onOpenQuickSettings: () -> Unit,
     modifier: Modifier = Modifier,
+    freezeProgress: Float? = null,
 ) {
     BoxWithConstraints(modifier = modifier.fillMaxSize().background(OfColorTokens.BgDeep)) {
         val isLandscape = maxWidth > maxHeight
@@ -132,7 +182,9 @@ private fun RangeStage(
                     onEvent = onEvent,
                     onExit = onExit,
                     onOpenSessions = onOpenSessions,
+                    onOpenQuickSettings = onOpenQuickSettings,
                     modifier = Modifier.fillMaxSize(),
+                    freezeProgress = freezeProgress,
                 )
             }
 
@@ -145,8 +197,10 @@ private fun RangeStage(
                         onEvent = onEvent,
                         onExit = onExit,
                         onOpenSessions = onOpenSessions,
+                        onOpenQuickSettings = onOpenQuickSettings,
                         showMetrics = false,
                         modifier = Modifier.weight(1f).fillMaxHeight(),
+                        freezeProgress = freezeProgress,
                     )
                     MetricsDock(
                         uiState = uiState,
@@ -172,17 +226,25 @@ private fun SceneLayer(
     onEvent: (DrivingRangeEvent) -> Unit,
     onExit: () -> Unit,
     onOpenSessions: () -> Unit,
+    onOpenQuickSettings: () -> Unit,
     modifier: Modifier = Modifier,
     showMetrics: Boolean = true,
+    freezeProgress: Float? = null,
 ) {
     val browse = uiState.browse
+    // Plan F8a2p: the overlaid UI's bounds, which the scene's labels and far markers keep clear of.
+    val obstructions = remember { RangeObstructionTracker() }
+    val obstructionRects by remember { derivedStateOf { obstructions.packed() } }
     Box(modifier = modifier) {
         RangeCanvas(
             flight = uiState.activeFlight,
             cameraMode = uiState.cameraMode,
             reduceMotion = reduceMotion,
             onFlightCompleted = { onEvent(DrivingRangeEvent.FlightCompleted) },
-            modifier = Modifier.fillMaxSize(),
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .onGloballyPositioned { obstructions.canvasBounds = it.boundsInRoot() },
             view = browse.view,
             rollOut = uiState.rollOut,
             overlay = browse.overlayFlights,
@@ -191,6 +253,10 @@ private fun SceneLayer(
             onViewChanged = { onEvent(DrivingRangeEvent.ViewChanged(it)) },
             onResetView = { onEvent(DrivingRangeEvent.ResetView) },
             onSelectLanding = { onEvent(DrivingRangeEvent.SelectShot(it)) },
+            theme = uiState.camera.theme,
+            freezeProgress = freezeProgress,
+            obstructions = obstructionRects,
+            trail = uiState.camera.trail,
         )
         Box(modifier = Modifier.fillMaxSize().background(Shade))
         Box(modifier = Modifier.fillMaxSize().safeDrawingPadding()) {
@@ -205,15 +271,22 @@ private fun SceneLayer(
                     onReplay = { onEvent(DrivingRangeEvent.Replay) },
                     onToggleCamera = { onEvent(DrivingRangeEvent.ToggleCameraMode) },
                     onOpenSessions = onOpenSessions,
+                    onOpenQuickSettings = onOpenQuickSettings,
                     onExit = onExit,
+                    obstructions = obstructions,
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
                 )
-                BrowseChips(uiState, onEvent, Modifier.padding(horizontal = 14.dp))
+                BrowseChips(
+                    uiState,
+                    onEvent,
+                    Modifier.padding(horizontal = 14.dp).rangeObstruction("chips", obstructions),
+                )
                 if (showMetrics) {
                     RangeMetricsOverlay(
                         uiState = uiState,
                         isLandscape = isLandscape,
                         onSelectClub = { onEvent(DrivingRangeEvent.ClubSelected(it)) },
+                        obstructions = obstructions,
                         modifier = Modifier.weight(1f),
                     )
                 } else {
@@ -224,12 +297,15 @@ private fun SceneLayer(
                     RangeBrowseBar(
                         browse = browse,
                         onEvent = onEvent,
-                        modifier = Modifier.padding(start = 14.dp, end = 14.dp, bottom = 10.dp),
+                        modifier =
+                            Modifier
+                                .padding(start = 14.dp, end = 14.dp, bottom = 10.dp)
+                                .rangeObstruction("browseBar", obstructions),
                     )
                 }
             }
             if (uiState is DrivingRangeUiState.Ready && browse.isLive) {
-                ReadyCard(modifier = Modifier.align(Alignment.Center))
+                ReadyCard(modifier = Modifier.align(Alignment.Center).rangeObstruction("ready", obstructions))
             }
         }
     }
@@ -265,8 +341,10 @@ private fun Controls(
     onReplay: () -> Unit,
     onToggleCamera: () -> Unit,
     onOpenSessions: () -> Unit,
+    onOpenQuickSettings: () -> Unit,
     onExit: () -> Unit,
     modifier: Modifier = Modifier,
+    obstructions: RangeObstructionTracker? = null,
 ) {
     // Plan F8d-B: the status pill sits between Exit and the buttons only when its whole label fits
     // there on one line; otherwise it drops to its own line under them ([ControlsLayout]) instead
@@ -277,7 +355,11 @@ private fun Controls(
             OfOutlinedButton(
                 text = "Exit",
                 onClick = onExit,
-                modifier = Modifier.background(ControlBackground, PillShape).testTag(RangeTestTags.EXIT),
+                modifier =
+                    Modifier
+                        .background(ControlBackground, PillShape)
+                        .rangeObstruction("exit", obstructions)
+                        .testTag(RangeTestTags.EXIT),
             )
             OfStatusChip(
                 label = uiState.phase.label,
@@ -285,10 +367,11 @@ private fun Controls(
                 modifier =
                     Modifier
                         .background(ControlBackground, PillShape)
+                        .rangeObstruction("status", obstructions)
                         .padding(horizontal = 12.dp, vertical = 6.dp)
                         .testTag(RangeTestTags.STATUS),
             )
-            ControlButtons(uiState, onReplay, onToggleCamera, onOpenSessions)
+            ControlButtons(uiState, onReplay, onToggleCamera, onOpenSessions, onOpenQuickSettings, obstructions)
         },
         measurePolicy = ControlsLayout(gap = 10.dp),
     )
@@ -332,17 +415,24 @@ private class ControlsLayout(
     }
 }
 
-/** Follow/Fixed, History and (when there's a shot to fly again) Replay. */
+/**
+ * Follow/Fixed, History, (when there's a shot to fly again) Replay and (plan F8f) the quick
+ * settings gear. They wrap onto a second line rather than clip when a narrow phone can't fit them.
+ */
 @Composable
 private fun ControlButtons(
     uiState: DrivingRangeUiState,
     onReplay: () -> Unit,
     onToggleCamera: () -> Unit,
     onOpenSessions: () -> Unit,
+    onOpenQuickSettings: () -> Unit,
+    obstructions: RangeObstructionTracker?,
 ) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    FlowRow(
+        modifier = Modifier.rangeObstruction("buttons", obstructions),
+        itemVerticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         CameraModeToggle(
             mode = uiState.cameraMode,
@@ -362,6 +452,7 @@ private fun ControlButtons(
                 modifier = Modifier.background(ControlBackground, PillShape).testTag(RangeTestTags.REPLAY),
             )
         }
+        RangeQuickSettingsButton(onClick = onOpenQuickSettings)
     }
 }
 
@@ -436,7 +527,7 @@ private fun RangePhase.tone(): StatusTone =
         is RangePhase.Unavailable -> StatusTone.Negative
     }
 
-/** The scrim over the scene that keeps the controls readable (plan F8c1: shared with iOS). */
+/** The scrim that keeps the controls readable (plan F8c1: shared with iOS; the same in every theme). */
 private val Shade =
     RangeTheme.DAY.style.shade
         .toVerticalBrush()
@@ -447,4 +538,10 @@ private const val SHOT_LIST_FRACTION = 0.3f
 
 /** The docked metrics panel's fixed width (plan F1b): wide enough for the two-column metrics grid. */
 private val DockWidth = 340.dp
+
+/** Plan F8f: the quick settings side panel's width on an expanded window. */
+private val QuickSettingsWidth = 360.dp
+
+/** Plan F8f: the quick settings sheet covers at most this much of a compact window's height. */
+private const val QUICK_SHEET_FRACTION = 0.55f
 private val DockBackground = OfColorTokens.BgCard

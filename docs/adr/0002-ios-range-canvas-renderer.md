@@ -92,3 +92,35 @@ RealityKit for the range.
   iPhone simulator and 60 fps for a 200-shot overlay on an iPad simulator.
 - **Rollback.** Revert F8c2 and turn the RealityKit flag back on. F8c1 is behaviour-neutral on
   Android, so it doesn't need reverting.
+
+## Note: F8a2a atmosphere pass and themes (2026-09-27)
+
+F8a2a changed DAY on purpose, so F8c1's "pixel-identical to the old Android range" no longer
+holds. Parity between the platforms still holds by construction, and the ΔE < 3 check was
+re-baselined against the new look for every theme.
+
+- **Still shared data.** The haze, the multi-band sky, the sun, the far ridges, the grass mottling,
+  the three-tone lobed trees with contact shadows and the tracer glow are all in
+  `RangeVisualStyle` and the shared scene. Each platform only fills paths.
+- **Same geometry.** Crown lobes and ridges are written as polygons into `PathSink`s, not drawn
+  as platform circles, so both platforms fill the same outlines.
+- **Colours per pose.** Haze is measured from the camera. Each hazed shape's colour is recomputed
+  once per re-projection and packed to 8-bit `0xAARRGGBB` in Kotlin (no allocation). Both
+  platforms therefore fill the same rounded colour.
+- **Platform gradients.** Only two gradients are the platform's own: the sky's multi-stop linear
+  gradient and the sun glow's radial gradient.
+- **Measured parity.** Android emulator vs iPhone 17 simulator, fixed pose and follow camera at
+  p = 0.5, all four themes: worst sampled CIEDE2000 0.80.
+- **Vector only.** There are still no bundled raster assets; every shape is procedural.
+
+## Addendum: F8a2t shot trail styles
+
+- **Trails are shared layers.** The eleven shot trail styles, the kept earlier trails and the
+  landing effects are all written by the shared `ShotTrail` into a fixed list of `TrailLayer`s
+  (a `PathSink` plus a packed `0xAARRGGBB`, or a club palette index). Colour and alpha changes
+  along a trail (comet, smoke, speed heat, rainbow, the spin ribbon's two faces) are bands of
+  separate fills, never platform gradients, so each platform only fills the visible layers in order.
+- **No per-frame allocation.** The layers, run buffers and colours are preallocated; a frame only
+  rewrites paths and ints.
+- **Measured parity.** Android emulator vs iPhone 17 simulator, follow camera at p = 0.5, all
+  eleven styles on DAY and NIGHT: worst sampled CIEDE2000 0.99.

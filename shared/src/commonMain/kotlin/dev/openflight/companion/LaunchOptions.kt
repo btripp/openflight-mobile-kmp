@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 package dev.openflight.companion
 
+import dev.openflight.companion.core.data.RangeShowSetting
+import dev.openflight.companion.core.data.RangeThemeSetting
+import dev.openflight.companion.core.data.ShotTrailStyle
 import dev.openflight.companion.core.data.TransportType
 
 /**
@@ -33,9 +36,10 @@ import dev.openflight.companion.core.data.TransportType
  * @property previewPiSession swap in [PreviewPiSessionRepository]: a connected Pi whose deletes and
  *   clears are confirmed after a short delay (plan R8f). Use with [uiTesting].
  * @property previewPiSessionStuck like [previewPiSession], but the Pi never answers.
- * @property rangeFreezeProgress iOS only (plan F8c2), for screenshots: `--range-freeze-progress
- *   0.5` holds every range flight at that playback progress (0..1, clamped). At 1 the flight lands
- *   and the follow camera is shown fully settled.
+ * @property rangeFreezeProgress plan F8c2 (iOS) and F8a2a (Android), for screenshots:
+ *   `--range-freeze-progress 0.5` (Android `--ef range_freeze_progress 0.5`) holds every range
+ *   flight at that playback progress (0..1, clamped). At 1 the flight lands and the follow camera
+ *   is shown fully settled.
  * @property rangeRealityKit iOS only (plan F8c2): `--range-realitykit` draws the range with the
  *   previous RealityKit scene instead of the Canvas renderer. Kept for one release (ADR 0002).
  * @property previewLiveShots plan F8b: with [usesFakeRepository], the preview Pi "hits" a new copy
@@ -48,6 +52,23 @@ import dev.openflight.companion.core.data.TransportType
  *   the range, Session and Games offer "Simulate shot"; each simulate delivers a new, different
  *   preview shot ([PreviewShotRepository.simulatedShot]) through the live path, with no server.
  *   `--preview-pi-mock`.
+ * @property shotTrail plan F8a2t: persisted as the shot trail before the UI starts, like
+ *   [rangeTheme]: `--shot-trail comet` (Android `--es shot_trail comet`), any
+ *   `ShotTrailStyle.storageValue`, for deterministic captures of each style.
+ * @property rangeTheme plan F8a2a: persisted as the range theme before the UI starts (a settings
+ *   seed like [transport]). `--range-theme day|dusk|night|links` (Android `--es range_theme night`).
+ * @property rangeShow plan F8f: persisted as the range's "Show" choice before the UI starts:
+ *   `--range-show last_5` (Android `--es range_show last_5`), any `RangeShowSetting.storageValue`.
+ *   A fake-repository launch ([usesFakeRepository]) without it starts on live, so a UI test that
+ *   left another choice stored can't change the next test's range. Such a launch also resets the
+ *   device's "Viewing profile" to follow the active one.
+ * @property previewProfiles plan F8f: the Pi reports the roster of [previewHistory]'s shots (Ann,
+ *   active, and Bo; [PreviewProfilesPiSessionRepository]), for the range's "Viewing profile".
+ *   `--preview-profiles` (Android `--ez preview_profiles true`).
+ * @property demoMode plan F14: `--demo-mode on|off` (Android `--es demo_mode on`) turns Demo mode on
+ *   or off before the UI starts. Any scripted launch without it starts with Demo mode off.
+ * @property calloutProbe plan F14: `--callout-probe` turns call-outs on and writes each one down
+ *   ([CalloutProbeSpeechEngine]) instead of speaking it, for the iOS UI tests.
  */
 data class LaunchOptions(
     val uiTesting: Boolean = false,
@@ -66,9 +87,19 @@ data class LaunchOptions(
     val previewLiveShots: Boolean = false,
     val previewHistoryBulk: Boolean = false,
     val previewPiMock: Boolean = false,
+    val rangeTheme: RangeThemeSetting? = null,
+    val shotTrail: ShotTrailStyle? = null,
+    val rangeShow: RangeShowSetting? = null,
+    val previewProfiles: Boolean = false,
+    val demoMode: Boolean? = null,
+    val calloutProbe: Boolean = false,
 ) {
     val usesFakeRepository: Boolean
         get() = uiTesting || previewShot || previewPi || previewPiMock
+
+    /** Plan F8f: the "Show" choice to store before the UI starts, if any (see [rangeShow]). */
+    val rangeShowSeed: RangeShowSetting?
+        get() = rangeShow ?: RangeShowSetting.LIVE.takeIf { usesFakeRepository }
 
     companion object {
         const val UI_TESTING = "--ui-testing"
@@ -87,6 +118,21 @@ data class LaunchOptions(
         const val PREVIEW_LIVE_SHOTS = "--preview-live-shots"
         const val PREVIEW_HISTORY_BULK = "--preview-history-bulk"
         const val PREVIEW_PI_MOCK = "--preview-pi-mock"
+        const val RANGE_THEME = "--range-theme"
+        const val SHOT_TRAIL = "--shot-trail"
+        const val RANGE_SHOW = "--range-show"
+        const val PREVIEW_PROFILES = "--preview-profiles"
+
+        const val DEMO_MODE = "--demo-mode"
+        const val CALLOUT_PROBE = "--callout-probe"
+
+        /** `on`/`off` (also `true`/`false`) as [LaunchOptions.demoMode]; anything else is `null`. */
+        fun demoModeFromValue(value: String?): Boolean? =
+            when (value?.lowercase()) {
+                "on", "true" -> true
+                "off", "false" -> false
+                else -> null
+            }
 
         /** How often `--preview-live-shots` delivers a shot. */
         const val PREVIEW_LIVE_SHOT_INTERVAL_MILLIS = 5_000L
@@ -121,6 +167,12 @@ data class LaunchOptions(
                 previewLiveShots = PREVIEW_LIVE_SHOTS in arguments,
                 previewHistoryBulk = PREVIEW_HISTORY_BULK in arguments,
                 previewPiMock = PREVIEW_PI_MOCK in arguments,
+                rangeTheme = valueAfter(RANGE_THEME)?.let(RangeThemeSetting::fromStorageValue),
+                shotTrail = valueAfter(SHOT_TRAIL)?.let(ShotTrailStyle::fromStorageValue),
+                rangeShow = valueAfter(RANGE_SHOW)?.let(RangeShowSetting::fromStorageValue),
+                previewProfiles = PREVIEW_PROFILES in arguments,
+                demoMode = demoModeFromValue(valueAfter(DEMO_MODE)),
+                calloutProbe = CALLOUT_PROBE in arguments,
             )
         }
     }

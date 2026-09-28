@@ -5,12 +5,16 @@ import com.rickclephas.kmp.nativecoroutines.NativeCoroutinesIgnore
 import dev.openflight.companion.core.data.ActiveGameRepository
 import dev.openflight.companion.core.data.AppLifecycle
 import dev.openflight.companion.core.data.ConditionsRepository
+import dev.openflight.companion.core.data.DataBindings
+import dev.openflight.companion.core.data.DemoModeRepository
+import dev.openflight.companion.core.data.DemoShotHistoryRepository
 import dev.openflight.companion.core.data.FinalShotStream
 import dev.openflight.companion.core.data.LifecycleConnectionPolicy
 import dev.openflight.companion.core.data.PiSessionRepository
 import dev.openflight.companion.core.data.SettingsRepository
 import dev.openflight.companion.core.data.ShotHistoryRepository
 import dev.openflight.companion.core.data.ShotRepository
+import dev.openflight.companion.core.data.ViewingProfile
 import dev.openflight.companion.core.data.dataModule
 import dev.openflight.companion.core.speech.ScreenReaderMonitor
 import dev.openflight.companion.core.speech.SpeechEngine
@@ -24,12 +28,16 @@ import dev.openflight.companion.feature.range.rangeModule
 import dev.openflight.companion.feature.session.sessionModule
 import dev.openflight.companion.feature.settings.settingsModule
 import dev.openflight.companion.feature.training.trainingModule
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import org.koin.core.Koin
 import org.koin.core.context.startKoin
 import org.koin.core.module.Module
 import org.koin.dsl.KoinAppDeclaration
 import org.koin.dsl.module
 import org.koin.mp.KoinPlatform
+import kotlin.time.Clock
 
 /** Every module the app graph needs. Android adds `androidContext(...)` when it starts Koin. */
 val appModules: List<Module> =
@@ -51,6 +59,10 @@ val appModules: List<Module> =
         calloutModule(),
         // Plan F9a: the games and Activities ViewModels.
         gamesModule,
+        // Plan F14: Demo mode, and the switch in front of the Pi-facing repositories (must stay after
+        // dataModule: it replaces dataModule's default ShotRepository, PiSessionRepository and
+        // ShotHistoryRepository bindings).
+        demoModule(),
     )
 
 /**
@@ -113,14 +125,48 @@ suspend fun Koin.applyLaunchOptions(options: LaunchOptions) {
         val koin = this
         val mockPi =
             PreviewDevicePiSessionRepository(mockMode = true) { number ->
-                (koin.get<ShotRepository>() as? LocalEditsShotRepository)
-                    ?.deliver(PreviewShotRepository.simulatedShot(number))
+                // Plan F8f: stamped with the active profile at detection, like the Pi's.
+                val active =
+                    koin
+                        .get<PiSessionRepository>()
+                        .profiles.value.activeProfile
+                (koin.get<ShotRepository>() as? LocalEditsShotRepository)?.deliver(
+                    PreviewShotRepository
+                        .simulatedShot(number)
+                        .copy(profileId = active?.id, profileName = active?.name),
+                )
             }
         loadModules(listOf(module { single<PiSessionRepository> { mockPi } }), allowOverride = true)
     }
+    if (options.previewProfiles) {
+        // Plan F8f: the preview history's two people, for the range's "Viewing profile".
+        val withRoster = PreviewProfilesPiSessionRepository(get<PiSessionRepository>())
+        loadModules(listOf(module { single<PiSessionRepository> { withRoster } }), allowOverride = true)
+    }
+    seedSettings(options)
+}
+
+/**
+ * The launch options' settings seeds, stored before the UI starts, and plan F14's launch hooks: a
+ * scripted launch starts with Demo mode off unless it asks for it (`--demo-mode on`), so a test
+ * never inherits a Demo mode left on by an earlier run; and `--callout-probe` writes call-outs down
+ * instead of speaking them, for the iOS UI tests.
+ */
+private suspend fun Koin.seedSettings(options: LaunchOptions) {
     val settings = get<SettingsRepository>()
+    if (options != LaunchOptions()) getOrNull<DemoModeRepository>()?.setEnabled(options.demoMode ?: false)
+    if (options.calloutProbe) {
+        val probe = CalloutProbeSpeechEngine()
+        loadModules(listOf(module { single<SpeechEngine> { probe } }), allowOverride = true)
+        settings.setCalloutsEnabled(true)
+    }
     options.transport?.let { settings.setTransport(it) }
     options.host?.let { settings.setHost(it) }
+    options.rangeTheme?.let { settings.setRangeTheme(it) }
+    options.shotTrail?.let { settings.setShotTrail(it) }
+    options.rangeShowSeed?.let { settings.setRangeShow(it) }
+    // Plan F8f: a UI-test launch starts on the active profile, whatever an earlier test picked.
+    if (options.usesFakeRepository) settings.setViewingProfile(ViewingProfile.FollowActive)
 }
 
 private fun previewModule(
@@ -202,3 +248,40 @@ fun Koin.shotCallouts(): ShotCalloutCoordinator {
     coordinator.start()
     return coordinator
 }
+
+// Plan F14: Demo mode, added at the end to keep this file's diff mergeable (§4a A7).
+
+/**
+ * Demo mode ([DemoController]) and the app's Pi-facing repositories: each is a switch in front of
+ * `dataModule`'s real implementation (bound under [DataBindings.Real]) and Demo mode's pretend Pi, so
+ * every ViewModel keeps its interface and Demo mode turns on and off without a relaunch. A function
+ * for the same initialization-order reason as [calloutModule].
+ */
+private fun demoModule(): Module =
+    module {
+        single {
+            DemoController(
+                settings = get(),
+                history = get<DemoShotHistoryRepository>(DataBindings.DemoHistory),
+                mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
+                workScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
+                clock = { Clock.System.now().toEpochMilliseconds() },
+            )
+        }
+        single<DemoModeRepository> { get<DemoController>() }
+        single<ShotRepository> {
+            val demo = get<DemoController>()
+            DemoSwitchingShotRepository(real = get(DataBindings.Real), demo = demo.shots, switch = demo)
+        }
+        single<PiSessionRepository> {
+            val demo = get<DemoController>()
+            DemoSwitchingPiSessionRepository(real = get(DataBindings.Real), demo = demo.pi, switch = demo)
+        }
+        single<ShotHistoryRepository> {
+            DemoSwitchingShotHistoryRepository(
+                real = get(DataBindings.Real),
+                demo = get<DemoShotHistoryRepository>(DataBindings.DemoHistory),
+                switch = get<DemoController>(),
+            )
+        }
+    }

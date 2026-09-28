@@ -2,6 +2,9 @@
 package dev.openflight.companion.feature.settings
 
 import dev.openflight.companion.core.data.CalloutTrigger
+import dev.openflight.companion.core.data.LandingEffect
+import dev.openflight.companion.core.data.RangeThemeSetting
+import dev.openflight.companion.core.data.ShotTrailStyle
 import dev.openflight.companion.core.insights.CalloutField
 import dev.openflight.companion.core.insights.UnitSystem
 
@@ -77,6 +80,48 @@ sealed interface SettingsEvent {
 
     /** The voice picker's "Preview" button: speaks [CalloutSettingsUiState.previewText]. */
     data object PreviewCallout : SettingsEvent
+
+    /** Plan F8a2a: the range theme picker; persisted for the driving range. */
+    data class SetRangeTheme(
+        val theme: RangeThemeSetting,
+    ) : SettingsEvent
+
+    /** Plan F8a2t: the shot trail picker; persisted for the driving range. */
+    data class SetShotTrail(
+        val style: ShotTrailStyle,
+    ) : SettingsEvent
+
+    /** Plan F8a2t: "Keep last shots": none or three faded earlier trails. */
+    data class SetShotTrailKeepLast(
+        val count: Int,
+    ) : SettingsEvent
+
+    /** Plan F8a2t: what marks a landing. */
+    data class SetLandingEffect(
+        val effect: LandingEffect,
+    ) : SettingsEvent
+
+    /** Plan F8f (plan F5b's toggle): "Show total distance", the estimated total and roll-out. */
+    data class SetShowTotalDistance(
+        val show: Boolean,
+    ) : SettingsEvent
+
+    /** Plan F14: the Demo mode switch; takes effect at once, no relaunch. */
+    data class SetDemoMode(
+        val enabled: Boolean,
+    ) : SettingsEvent
+
+    /** Plan F14: seconds between automatic demo shots, one of the offered options (0 is off). */
+    data class SetDemoAutoFire(
+        val seconds: Int,
+    ) : SettingsEvent
+
+    /** Plan F14: "Clear demo data" asks for confirmation first. */
+    data object RequestClearDemoData : SettingsEvent
+
+    data object ConfirmClearDemoData : SettingsEvent
+
+    data object CancelClearDemoData : SettingsEvent
 }
 
 /** One-shot signals from [SettingsViewModel]. */

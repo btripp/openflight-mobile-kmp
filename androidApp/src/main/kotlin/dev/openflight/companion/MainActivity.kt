@@ -9,6 +9,9 @@ import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import dev.openflight.companion.core.data.RangeShowSetting
+import dev.openflight.companion.core.data.RangeThemeSetting
+import dev.openflight.companion.core.data.ShotTrailStyle
 import dev.openflight.companion.core.data.TransportType
 import kotlinx.coroutines.runBlocking
 import org.koin.mp.KoinPlatform
@@ -57,6 +60,20 @@ class MainActivity : ComponentActivity() {
             previewHistoryStuck = getBooleanExtra(EXTRA_PREVIEW_HISTORY_STUCK, false),
             previewPiSession = getBooleanExtra(EXTRA_PREVIEW_PI_SESSION, false),
             previewPiSessionStuck = getBooleanExtra(EXTRA_PREVIEW_PI_SESSION_STUCK, false),
+            // Plan F8a2a: screenshots of each theme, with the flight held (iOS's arguments).
+            rangeFreezeProgress =
+                getFloatExtra(EXTRA_RANGE_FREEZE_PROGRESS, Float.NaN)
+                    .takeIf { it.isFinite() }
+                    ?.coerceIn(0f, 1f)
+                    ?.toDouble(),
+            rangeTheme = RangeThemeSetting.fromStorageValue(getStringExtra(EXTRA_RANGE_THEME)),
+            // Plan F8a2t: screenshots of each shot trail style (iOS's --shot-trail).
+            shotTrail = ShotTrailStyle.fromStorageValue(getStringExtra(EXTRA_SHOT_TRAIL)),
+            // Plan F8f: the range's "Show" choice (iOS's --range-show).
+            rangeShow = RangeShowSetting.fromStorageValue(getStringExtra(EXTRA_RANGE_SHOW)),
+            previewProfiles = getBooleanExtra(EXTRA_PREVIEW_PROFILES, false),
+            // Plan F14: `--es demo_mode on` (iOS's --demo-mode).
+            demoMode = LaunchOptions.demoModeFromValue(getStringExtra(EXTRA_DEMO_MODE)),
         )
 
     private companion object {
@@ -71,6 +88,12 @@ class MainActivity : ComponentActivity() {
         const val EXTRA_PREVIEW_HISTORY_STUCK = "preview_history_stuck"
         const val EXTRA_PREVIEW_PI_SESSION = "preview_pi_session"
         const val EXTRA_PREVIEW_PI_SESSION_STUCK = "preview_pi_session_stuck"
+        const val EXTRA_RANGE_FREEZE_PROGRESS = "range_freeze_progress"
+        const val EXTRA_RANGE_THEME = "range_theme"
+        const val EXTRA_SHOT_TRAIL = "shot_trail"
+        const val EXTRA_RANGE_SHOW = "range_show"
+        const val EXTRA_PREVIEW_PROFILES = "preview_profiles"
+        const val EXTRA_DEMO_MODE = "demo_mode"
 
         var launchOptionsApplied = false
     }

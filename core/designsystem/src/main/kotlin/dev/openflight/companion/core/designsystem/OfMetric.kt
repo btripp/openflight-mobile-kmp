@@ -30,6 +30,8 @@ import androidx.compose.ui.unit.dp
  *
  * @param subtext an optional dim line under the value, for example the carry range
  *   "231-255 yds" or "spin-adjusted" (`ShotDisplay.tsx`'s `metric-card__subtext`).
+ * @param compact a shorter tile (less padding, a smaller value) for metrics laid over a scene
+ *   that needs the room, for example the driving range's tee view.
  */
 @Composable
 fun OfMetricPrimary(
@@ -38,16 +40,17 @@ fun OfMetricPrimary(
     unit: String,
     modifier: Modifier = Modifier,
     subtext: String? = null,
+    compact: Boolean = false,
 ) {
     Column(
         modifier =
             modifier
                 .background(OfColorTokens.BgElevated, MaterialTheme.shapes.medium)
-                .padding(horizontal = OfSpacing.Md, vertical = OfSpacing.Md)
+                .padding(horizontal = OfSpacing.Md, vertical = if (compact) OfSpacing.Sm else OfSpacing.Md)
                 .semantics(mergeDescendants = true) {
                     contentDescription = metricContentDescription(title, value, unit)
                 },
-        verticalArrangement = Arrangement.spacedBy(OfSpacing.Xs),
+        verticalArrangement = Arrangement.spacedBy(if (compact) 0.dp else OfSpacing.Xs),
     ) {
         Text(
             text = title,
@@ -61,7 +64,7 @@ fun OfMetricPrimary(
         FlowRow(itemVerticalAlignment = Alignment.Bottom) {
             Text(
                 text = value,
-                fontSize = OfMetricValueFontSize,
+                fontSize = if (compact) OfMetricCompactValueFontSize else OfMetricValueFontSize,
                 style = MaterialTheme.typography.headlineLarge,
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,

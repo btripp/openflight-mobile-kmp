@@ -87,23 +87,35 @@ struct DrivingRangeContent: View {
 
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var showsSessions = false
+    /// Plan F8f: the range quick settings (a sheet on an iPhone, a side panel on an iPad).
+    @State private var showsQuickSettings = false
     /// The controls' measured height: one row, or two when the status pill drops under the buttons.
     @State private var controlsHeight: CGFloat = 44
+    /// Plan F8a2p: the overlaid UI's frames and the canvas's, both global, for the scene's obstructions.
+    @State private var obstructionFrames: [String: CGRect] = [:]
+    @State private var canvasFrame: CGRect = .zero
 
     /// The side pane's width on a regular width: Android's 30 %, within readable bounds.
     private static let shotListFraction: CGFloat = 0.3
 
     var body: some View {
         GeometryReader { geometry in
-            if horizontalSizeClass == .regular && !state.browse.isLive {
-                HStack(spacing: 0) {
-                    RangeShotList(browse: state.browse) { send(DrivingRangeEventSelectShot(shotId: $0)) }
-                        .frame(width: min(max(geometry.size.width * Self.shotListFraction, 260), 380))
+            HStack(spacing: 0) {
+                if horizontalSizeClass == .regular && !state.browse.isLive {
+                    RangeShotList(browse: state.browse, numbers: state.camera.numbers) {
+                        send(DrivingRangeEventSelectShot(shotId: $0))
+                    }
+                    .frame(width: min(max(geometry.size.width * Self.shotListFraction, 260), 380))
                     Divider()
-                    stage
                 }
-            } else {
                 stage
+                // Plan F8f: on an iPad the quick settings sit beside the scene (and the shot list).
+                if showsQuickSettingsPanel {
+                    Divider()
+                    RangeQuickSettingsView(state: state, send: send, isPanel: true) { showsQuickSettings = false }
+                        .frame(width: Self.quickSettingsWidth)
+                        .transition(.move(edge: .trailing))
+                }
             }
         }
         .foregroundStyle(Theme.cream)
@@ -111,6 +123,27 @@ struct DrivingRangeContent: View {
         .sheet(isPresented: $showsSessions) {
             RangeSessionSheet(sessions: state.browse.sessions, send: send) { showsSessions = false }
         }
+        // Plan F8f: on an iPhone, a sheet over the scene; swipe down or tap outside to close.
+        .sheet(isPresented: quickSettingsSheet) {
+            RangeQuickSettingsView(state: state, send: send)
+                .presentationDetents([.fraction(0.6), .large])
+                .presentationDragIndicator(.visible)
+                .presentationBackground(Theme.bgCard)
+        }
+    }
+
+    /// The quick settings width beside the scene on an iPad.
+    private static let quickSettingsWidth: CGFloat = 340
+
+    private var showsQuickSettingsPanel: Bool {
+        showsQuickSettings && horizontalSizeClass == .regular
+    }
+
+    private var quickSettingsSheet: Binding<Bool> {
+        Binding(
+            get: { showsQuickSettings && horizontalSizeClass != .regular },
+            set: { if !$0 { showsQuickSettings = false } }
+        )
     }
 
     /// The scene with its overlays: everything but the iPad side pane.
@@ -126,7 +159,7 @@ struct DrivingRangeContent: View {
                 scene
                     .ignoresSafeArea()
 
-                RangeTheme.day.style.shadeGradient
+                state.camera.theme.style.shadeGradient
                     .ignoresSafeArea()
                     .allowsHitTesting(false)
 
@@ -144,8 +177,10 @@ struct DrivingRangeContent: View {
 
                     Group {
                         RangeBrowseChips(state: state, send: send)
+                            .rangeObstruction("chips")
                         if !browse.isLive {
                             RangeBrowseBar(browse: browse, send: send)
+                                .rangeObstruction("browseBar")
                         }
                     }
                     .padding(.horizontal, 14)
@@ -154,6 +189,7 @@ struct DrivingRangeContent: View {
 
                 if state is DrivingRangeUiStateReady && browse.isLive {
                     waitingCard
+                        .rangeObstruction("ready")
                 }
 
                 controls
@@ -161,7 +197,17 @@ struct DrivingRangeContent: View {
                     .padding(.top, 10)
                     .frame(maxHeight: .infinity, alignment: .top)
             }
+            .onPreferenceChange(RangeObstructionKey.self) { frames in
+                obstructionFrames = frames
+            }
         }
+    }
+
+    /// Plan F8a2p: the overlaid UI's frames in the canvas's points (the canvas runs under the safe area).
+    private var obstructions: [CGRect] {
+        obstructionFrames.values
+            .map { $0.offsetBy(dx: -canvasFrame.minX, dy: -canvasFrame.minY) }
+            .sorted { ($0.minY, $0.minX) < ($1.minY, $1.minX) }
     }
 
     @ViewBuilder
@@ -179,6 +225,7 @@ struct DrivingRangeContent: View {
                 flight: state.activeFlight,
                 cameraMode: state.cameraMode,
                 reduceMotion: reduceMotion,
+                theme: state.camera.theme,
                 view: browse.view,
                 rollOut: state.rollOut,
                 overlay: browse.overlayFlights,
@@ -188,8 +235,11 @@ struct DrivingRangeContent: View {
                 onFlightCompleted: { send(DrivingRangeEventFlightCompleted.shared) },
                 onViewChanged: { send(DrivingRangeEventViewChanged(view: $0)) },
                 onResetView: { send(DrivingRangeEventResetView.shared) },
-                onSelectLanding: { send(DrivingRangeEventSelectShot(shotId: $0)) }
+                onSelectLanding: { send(DrivingRangeEventSelectShot(shotId: $0)) },
+                obstructions: obstructions,
+                trail: state.camera.trail
             )
+            .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { canvasFrame = $0 }
         }
     }
 
@@ -201,20 +251,26 @@ struct DrivingRangeContent: View {
         ViewThatFits(in: .horizontal) {
             HStack(spacing: 10) {
                 exitButton
+                    .rangeObstruction("exit")
                 Spacer(minLength: 0)
                 statusPill
                     .fixedSize()
+                    .rangeObstruction("status")
                 trailingButtons
+                    .rangeObstruction("buttons")
             }
             VStack(alignment: .trailing, spacing: 8) {
                 HStack(spacing: 10) {
                     exitButton
+                        .rangeObstruction("exit")
                     Spacer(minLength: 0)
                     trailingButtons
+                        .rangeObstruction("buttons")
                 }
                 statusPill
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
+                    .rangeObstruction("status")
             }
         }
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { controlsHeight = $0 }
@@ -239,8 +295,31 @@ struct DrivingRangeContent: View {
             if DrivingRangeUiStateKt.canReplay(state) {
                 replayButton
             }
+
+            quickSettingsButton
         }
         .fixedSize()
+    }
+
+    /// Plan F8f: the gear that opens (or, on an iPad, closes) the range quick settings.
+    private var quickSettingsButton: some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.2)) { showsQuickSettings.toggle() }
+        } label: {
+            Image(systemName: "gearshape")
+                .font(.subheadline.weight(.bold))
+                .frame(width: 38, height: 38)
+                .background(.black.opacity(0.6), in: Circle())
+                .overlay {
+                    Circle().stroke(.white.opacity(0.2), lineWidth: 1)
+                }
+                .frame(minWidth: 44, minHeight: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Range settings")
+        .accessibilityHint("Show, trail, view and numbers, without leaving the range")
+        .accessibilityIdentifier(RangeTestTags.shared.QUICK_SETTINGS)
     }
 
     private var exitButton: some View {
@@ -354,6 +433,27 @@ struct DrivingRangeContent: View {
         case is RangePhaseFlying: "smallcircle.filled.circle"
         case is RangePhaseLanded: "checkmark.circle.fill"
         default: "exclamationmark.triangle.fill" // RangePhaseUnavailable
+        }
+    }
+}
+
+/// Plan F8a2p: the frames (global) of the UI laid over the range, by name, which the scene keeps its
+/// yardage labels and far markers clear of.
+struct RangeObstructionKey: PreferenceKey {
+    static let defaultValue: [String: CGRect] = [:]
+
+    static func reduce(value: inout [String: CGRect], nextValue: () -> [String: CGRect]) {
+        value.merge(nextValue()) { _, next in next }
+    }
+}
+
+extension View {
+    /// Plan F8a2p: reports this view's frame as a range obstruction named `key` while it's shown.
+    func rangeObstruction(_ key: String) -> some View {
+        background {
+            GeometryReader { geometry in
+                Color.clear.preference(key: RangeObstructionKey.self, value: [key: geometry.frame(in: .global)])
+            }
         }
     }
 }

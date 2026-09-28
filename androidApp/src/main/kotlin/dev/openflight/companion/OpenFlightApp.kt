@@ -2,12 +2,22 @@
 package dev.openflight.companion
 
 import androidx.activity.compose.LocalActivity
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Modifier
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.ProcessLifecycleOwner
 import dev.openflight.companion.core.data.AppLifecycle
+import dev.openflight.companion.core.data.DemoModeRepository
 import dev.openflight.companion.core.data.LifecycleConnectionPolicy
 import dev.openflight.companion.core.designsystem.OfTheme
 import dev.openflight.companion.core.designsystem.OfWindowClass
@@ -30,7 +40,21 @@ import org.koin.compose.koinInject
 fun OpenFlightApp(windowClass: OfWindowClass = rememberOfWindowClass()) {
     OfTheme {
         AppLifecycleSource()
-        AppNavHost(windowClass = windowClass)
+        // Plan F14: the Demo badge above every screen while Demo mode is on. It takes the status
+        // bar's inset, so the screens under it don't pad for the status bar again.
+        val demoMode = koinInject<DemoModeRepository>()
+        val demo by demoMode.enabled.collectAsState()
+        Column(modifier = Modifier.fillMaxSize()) {
+            if (demo) DemoBanner()
+            Box(
+                modifier =
+                    Modifier
+                        .weight(1f)
+                        .then(if (demo) Modifier.consumeWindowInsets(WindowInsets.statusBars) else Modifier),
+            ) {
+                AppNavHost(windowClass = windowClass)
+            }
+        }
     }
 }
 

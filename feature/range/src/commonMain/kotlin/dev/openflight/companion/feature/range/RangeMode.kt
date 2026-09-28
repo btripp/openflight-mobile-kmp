@@ -2,7 +2,11 @@
 package dev.openflight.companion.feature.range
 
 import dev.openflight.companion.core.data.HistorySession
+import dev.openflight.companion.core.data.RangeShowSetting
+import dev.openflight.companion.core.data.SettingsRepository
 import dev.openflight.companion.core.flight.FlightTrajectory
+import dev.openflight.companion.core.insights.UnitSystem
+import dev.openflight.companion.core.insights.convertDistanceFromYards
 
 /**
  * What the range shows (plan F8a).
@@ -24,11 +28,13 @@ sealed interface RangeMode {
 
     /**
      * Stored shots drawn at once: session [sessionId]'s, or every session's when it is `null`
-     * ("all"); only [club]'s (a wire value, e.g. `"7-iron"`) when set.
+     * ("all"); only [club]'s (a wire value, e.g. `"7-iron"`) when set; only the newest [limit] of
+     * them when set (plan F8f's "Last N").
      */
     data class Overlay(
         val sessionId: String?,
         val club: String?,
+        val limit: Int? = null,
     ) : RangeMode
 }
 
@@ -109,9 +115,11 @@ data class RangeRollOut(
     val rollYards: Double,
     val totalYards: Double,
     val carryEstimated: Boolean,
+    /** Plan F8f: the units [totalLabel] is written in (the numbers stay yards). */
+    val units: UnitSystem = SettingsRepository.DEFAULT_UNITS,
 ) {
-    /** The total dot's label: "est. 285". */
-    val totalLabel: String get() = "est. ${totalYards.toInt()}"
+    /** The total dot's label: "est. 285" (in [units]). */
+    val totalLabel: String get() = "est. ${convertDistanceFromYards(totalYards, units).toInt()}"
 }
 
 /**
@@ -125,6 +133,9 @@ data class RangeRollOut(
  * @property overlayTruncated more shots matched than [OVERLAY_CAP]; only the newest are drawn.
  * @property overlayClubs the clubs the overlay can be filtered to, driver first.
  * @property newLiveShot a live shot arrived while replaying or overlaying.
+ * @property show plan F8f: the quick settings "Show" choice this mode came from, or `null` for a
+ *   replay or an overlay picked from History.
+ * @property profiles plan F8f: whose shots the range shows (the device's "Viewing profile").
  */
 data class RangeBrowseState(
     val mode: RangeMode = RangeMode.Live,
@@ -139,8 +150,16 @@ data class RangeBrowseState(
     val overlayTruncated: Boolean = false,
     val overlayClubs: List<String> = emptyList(),
     val newLiveShot: Boolean = false,
+    val show: RangeShowSetting? = RangeShowSetting.LIVE,
+    val profiles: RangeProfileState = RangeProfileState(),
 ) {
     val isLive: Boolean get() = mode == RangeMode.Live
+
+    /**
+     * Plan F8f: the overlay of the current session ("Last N", "This session"): new live shots fly
+     * over it and join it, instead of raising [newLiveShot].
+     */
+    val followsLiveShots: Boolean get() = mode is RangeMode.Overlay && show?.followsCurrentSession == true
 
     /** The follow camera is suspended while the user has zoomed, panned or orbited (plan F8a). */
     val userTransformed: Boolean get() = !view.isIdentity

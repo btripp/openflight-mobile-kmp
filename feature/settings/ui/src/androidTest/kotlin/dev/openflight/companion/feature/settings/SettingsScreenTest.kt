@@ -5,6 +5,7 @@ import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
@@ -16,6 +17,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import dev.openflight.companion.core.data.RangeThemeSetting
 import dev.openflight.companion.core.data.TransportType
 import dev.openflight.companion.core.designsystem.OfTheme
 import dev.openflight.companion.core.insights.UnitSystem
@@ -215,6 +217,7 @@ class SettingsScreenTest {
                 SettingsTestTags.GROUP_PRACTICE,
                 SettingsTestTags.UNITS,
                 SettingsTestTags.CALLOUTS,
+                SettingsTestTags.RANGE_THEME,
                 SettingsTestTags.GROUP_DATA,
                 SettingsTestTags.CLOUD_UPLOAD,
             ).map(top)
@@ -248,6 +251,31 @@ class SettingsScreenTest {
 
         composeRule.onAllNodes(hasTestTag(SettingsTestTags.OPEN_CALIBRATION)).assertCountEquals(0)
         composeRule.onAllNodes(hasTestTag(SettingsTestTags.OPEN_CAMERA)).assertCountEquals(0)
+    }
+
+    // Plan F8a2a: the range theme picker in the Practice group.
+
+    @Test
+    fun givenDay_whenNightIsPicked_thenTheRangeThemeIsSaved() {
+        show(previewSettingsState())
+
+        composeRule.onNodeWithTag(SettingsTestTags.RANGE_THEME).performScrollTo()
+        composeRule.onNodeWithText("Day").assertIsSelected()
+        composeRule.onNodeWithText("Night").performClick()
+
+        assertEquals(listOf<SettingsEvent>(SettingsEvent.SetRangeTheme(RangeThemeSetting.NIGHT)), events)
+    }
+
+    @Test
+    fun givenLinks_whenShown_thenLinksIsSelectedAndEveryThemeIsOffered() {
+        show(previewSettingsState().copy(rangeTheme = RangeThemeUiState(selected = RangeThemeSetting.LINKS)))
+
+        composeRule.onNodeWithTag(SettingsTestTags.RANGE_THEME).performScrollTo()
+        for (label in listOf("Day", "Dusk", "Night", "Links")) composeRule.onNodeWithText(label).assertIsDisplayed()
+        composeRule.onNodeWithText("Links").assertIsSelected()
+        // Picking the theme already shown sends nothing.
+        composeRule.onNodeWithText("Links").performClick()
+        assertEquals(emptyList<SettingsEvent>(), events)
     }
 
     private companion object {

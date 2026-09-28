@@ -3,6 +3,8 @@ package dev.openflight.companion.feature.dashboard
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import dev.openflight.companion.core.data.DemoModeOff
+import dev.openflight.companion.core.data.DemoModeRepository
 import dev.openflight.companion.core.data.PiSessionRepository
 import dev.openflight.companion.core.data.SettingsRepository
 import dev.openflight.companion.core.data.ShotRepository
@@ -25,7 +27,6 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -45,6 +46,8 @@ class DashboardViewModel(
     private val settings: SettingsRepository,
     private val piSession: PiSessionRepository,
     private val clubConfirmation: ClubConfirmation = ClubConfirmation(),
+    // Plan F14: "Try without a Pi", the Demo badge on the card and "Hit a shot".
+    private val demoMode: DemoModeRepository = DemoModeOff,
 ) : ViewModel() {
     /** The host field's text while the user edits it; `null` shows the saved host. */
     private val hostDraft = MutableStateFlow<String?>(null)
@@ -57,7 +60,7 @@ class DashboardViewModel(
     private val profilePicker = ProfilePicker(piSession, viewModelScope)
 
     private val savedSettings =
-        combine(settings.transport, settings.host, settings.selectedClub, ::SavedSettings)
+        combine(settings.transport, settings.host, settings.selectedClub, demoMode.enabled, ::SavedSettings)
 
     /** The Socket.IO link as the card needs it: up, or refused for a denied Local Network. */
     private val piLink =
@@ -97,6 +100,7 @@ class DashboardViewModel(
                 showClubConfirmation = confirmation == ClubConfirmation.Phase.SHOWING,
                 problem = ConnectionProblem.of(state, link.link),
                 profile = profile,
+                demo = saved.demo,
             )
         }
 
@@ -176,8 +180,8 @@ class DashboardViewModel(
      * permissions on the default value before the saved one is known.
      */
     val selectedTransport: StateFlow<TransportType?> =
-        settings.transport
-            .map<TransportType, TransportType?> { it }
+        // Plan F14: Demo mode needs no Bluetooth or local-network permission, so none is asked for.
+        combine(settings.transport, demoMode.enabled) { transport, demo -> transport.takeUnless { demo } }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS), initialValue = null)
 
     fun onEvent(event: DashboardEvent) {
@@ -222,6 +226,18 @@ class DashboardViewModel(
 
             is ProfilePickerEvent -> {
                 profilePicker.onEvent(event)
+            }
+
+            DashboardEvent.TryDemo -> {
+                viewModelScope.launch { demoMode.setEnabled(true) }
+            }
+
+            DashboardEvent.ExitDemo -> {
+                viewModelScope.launch { demoMode.setEnabled(false) }
+            }
+
+            DashboardEvent.HitDemoShot -> {
+                viewModelScope.launch { demoMode.hitShot() }
             }
         }
     }
@@ -279,6 +295,7 @@ class DashboardViewModel(
         val transport: TransportType,
         val host: String,
         val club: GolfClub,
+        val demo: Boolean,
     )
 
     private data class PiLinkFlags(

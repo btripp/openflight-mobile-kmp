@@ -60,7 +60,9 @@ import kotlin.math.roundToInt
  * today.
  *
  * Plan F1d: the cards are grouped into Device (connection, calibrate, camera, radar, simulators,
- * shutdown), Practice (units, audio call-outs) and Data (debug logging, cloud upload). The Device
+ * shutdown), Practice (units, audio call-outs, plan F8a2a's range theme and plan F8a2t's shot trail,
+ * whose live [shotTrailPreview] the app supplies) and Data (debug
+ * logging, cloud upload). The Device
  * group's "Calibrate radar" and "Camera" rows push those screens; each row only shows when its
  * [onOpenCalibration] / [onOpenCamera] is given.
  */
@@ -76,6 +78,7 @@ fun SettingsScreen(
     windowClass: OfWindowClass = rememberOfWindowClass(),
     onOpenCalibration: (() -> Unit)? = null,
     onOpenCamera: (() -> Unit)? = null,
+    shotTrailPreview: ShotTrailPreview? = null,
 ) {
     OfScaffold(
         modifier = modifier,
@@ -95,6 +98,8 @@ fun SettingsScreen(
             ) {
                 GroupHeader("Device", SettingsTestTags.GROUP_DEVICE)
                 ConnectionCard(uiState)
+                // Plan F14: try the app without a Pi.
+                DemoModeCard(uiState.demo, onEvent)
                 if (onOpenCalibration != null || onOpenCamera != null) {
                     DeviceToolsCard(onOpenCalibration, onOpenCamera)
                 }
@@ -104,8 +109,10 @@ fun SettingsScreen(
                 RadarCard(uiState.radar, onEvent)
                 ShutdownCard(uiState.shutdown, onEvent)
                 GroupHeader("Practice", SettingsTestTags.GROUP_PRACTICE)
-                UnitsCard(uiState.units, onEvent)
+                UnitsCard(uiState.units, uiState.showTotalDistance, onEvent)
                 AudioCalloutsCard(uiState.callouts, onEvent, windowClass)
+                RangeThemeCard(uiState.rangeTheme, onEvent)
+                ShotTrailCard(uiState.shotTrail, uiState.rangeTheme.selected, onEvent, windowClass, shotTrailPreview)
                 GroupHeader("Data", SettingsTestTags.GROUP_DATA)
                 // Hidden until the Pi reports its debug mode: never offer "Start" before that is known.
                 if (uiState.debug.loaded) DebugCard(uiState.debug, onEvent)
@@ -173,6 +180,7 @@ internal fun SectionTitle(text: String) {
 @Composable
 private fun UnitsCard(
     units: UnitSystem,
+    showTotalDistance: Boolean,
     onEvent: (SettingsEvent) -> Unit,
 ) {
     OfCard(modifier = Modifier.fillMaxWidth(), contentSpacing = OfSpacing.Md) {
@@ -187,6 +195,39 @@ private fun UnitsCard(
             },
             modifier = Modifier.fillMaxWidth().testTag(SettingsTestTags.UNITS),
         )
+        // Plan F8f (plan F5b's toggle): the same key as the range's quick settings "Numbers".
+        OfSwitchRow(
+            label = "Show total distance",
+            checked = showTotalDistance,
+            onCheckedChange = { onEvent(SettingsEvent.SetShowTotalDistance(it)) },
+            detail = "The estimated total and roll (est.) next to carry on the range",
+            modifier = Modifier.testTag(SettingsTestTags.SHOW_TOTAL_DISTANCE),
+        )
+    }
+}
+
+/** Plan F8a2a: how the driving range looks (Day, Dusk, Night, Links). */
+@Composable
+private fun RangeThemeCard(
+    theme: RangeThemeUiState,
+    onEvent: (SettingsEvent) -> Unit,
+) {
+    OfCard(modifier = Modifier.fillMaxWidth(), contentSpacing = OfSpacing.Md) {
+        SectionTitle("RANGE THEME")
+        val selected =
+            theme.options
+                .firstOrNull { it.theme == theme.selected }
+                ?.label
+                .orEmpty()
+        OfSegmentedPicker(
+            options = theme.options.map { it.label },
+            selected = selected,
+            onSelect = { label ->
+                val picked = theme.options.first { it.label == label }.theme
+                if (picked != theme.selected) onEvent(SettingsEvent.SetRangeTheme(picked))
+            },
+            modifier = Modifier.fillMaxWidth().testTag(SettingsTestTags.RANGE_THEME),
+        )
     }
 }
 
@@ -195,8 +236,15 @@ private fun UnitsCard(
 private fun ConnectionCard(uiState: SettingsUiState) {
     OfCard(modifier = Modifier.fillMaxWidth().testTag(SettingsTestTags.CONNECTION), contentSpacing = OfSpacing.Md) {
         SectionTitle("CONNECTION")
-        InfoRow("Transport", if (uiState.transport == TransportType.WIFI) "Wi-Fi" else "Bluetooth")
-        if (uiState.transport == TransportType.WIFI) InfoRow("Host", uiState.host)
+        // Plan F14: Demo mode's pretend Pi is on Wi-Fi, whatever transport the real Pi uses.
+        val transport =
+            when {
+                uiState.demo.enabled -> DEMO_TRANSPORT
+                uiState.transport == TransportType.WIFI -> "Wi-Fi"
+                else -> "Bluetooth"
+            }
+        InfoRow("Transport", transport)
+        if (uiState.transport == TransportType.WIFI && !uiState.demo.enabled) InfoRow("Host", uiState.host)
         InfoRow("Shot stream", uiState.connectionState.description)
         Row(verticalAlignment = Alignment.CenterVertically) {
             OfText(
@@ -239,6 +287,9 @@ internal fun InfoRow(
         )
     }
 }
+
+/** Plan F14: the connection card's transport while Demo mode is on. */
+private const val DEMO_TRANSPORT = "Demo Pi (Wi-Fi)"
 
 private fun PiLinkState.tone(): StatusTone =
     when (this) {

@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 package dev.openflight.companion.feature.range
 
+import dev.openflight.companion.core.data.DEFAULT_SHOT_TRAIL_KEEP_LAST
+import dev.openflight.companion.core.data.LandingEffect
 import dev.openflight.companion.core.data.RangeCameraMode
 import dev.openflight.companion.core.data.SettingsRepository
+import dev.openflight.companion.core.data.ShotTrailStyle
 import dev.openflight.companion.core.flight.FlightTrajectory
 import dev.openflight.companion.core.model.GolfClub
 import dev.openflight.companion.core.model.ShotEvent
@@ -50,6 +53,10 @@ data class ActiveFlight(
     val playbackId: Long,
     /** Replay speed (plan F8a1): the animation takes [playbackSeconds] / [speed]. 1 for live shots. */
     val speed: Double = 1.0,
+    /** Plan F8a2t: the flight's (resolved) launch spin, for the spin-ribbon trail; `null` if unknown. */
+    val spinRpm: Double? = null,
+    /** Plan F8a2t: the shot's club as a club palette index, for the club-colour trail. */
+    val clubColorIndex: Int = 0,
 )
 
 /**
@@ -73,10 +80,30 @@ data class RangeClubState(
  * @property mode the camera to render with: the user's choice, or [RangeCameraMode.FIXED] while
  *   reduced motion is on. Renderers get the pose for it from [RangeCameraRig].
  * @property locked reduced motion is on, so the camera is fixed and the toggle is disabled.
+ * @property theme plan F8a2a: the look the renderers paint the scene with, the persisted
+ *   [SettingsRepository.rangeTheme].
+ * @property trail plan F8a2t: how the shot's trail is drawn.
+ * @property numbers plan F8f: the units and whether the estimated total shows.
  */
 data class RangeCameraState(
     val mode: RangeCameraMode = SettingsRepository.DEFAULT_RANGE_CAMERA_MODE,
     val locked: Boolean = false,
+    val theme: RangeTheme = RangeTheme.DAY,
+    val trail: RangeTrailState = RangeTrailState(),
+    val numbers: RangeNumbers = RangeNumbers(),
+)
+
+/**
+ * The shot trail (plan F8a2t): the persisted [SettingsRepository.shotTrail],
+ * [SettingsRepository.shotTrailKeepLast] and [SettingsRepository.landingEffect], plus the earlier
+ * live flights to keep faded on the range, newest first: at most [keepLast] of them, and only in
+ * [RangeMode.Live] (replay and the overlay draw none).
+ */
+data class RangeTrailState(
+    val style: ShotTrailStyle = ShotTrailStyle.DEFAULT,
+    val keepLast: Int = DEFAULT_SHOT_TRAIL_KEEP_LAST,
+    val landingEffect: LandingEffect = LandingEffect.DEFAULT,
+    val priorFlights: List<ActiveFlight> = emptyList(),
 )
 
 /** What the range renders. */
@@ -176,14 +203,60 @@ val DrivingRangeUiState.usesEstimatedFlight: Boolean
 val DrivingRangeUiState.compactMetrics: Boolean
     get() = phase == RangePhase.Flying || phase == RangePhase.Landed
 
-/** The compact strip's one line: "Club 103.2 mph · Launch 12.6° · Spin 2,380 rpm" ("—" when missing). */
+/**
+ * Plan F8a2p: how the overlay lays out the detail metrics (the club selector and the seven detail
+ * values), the same on both platforms.
+ *
+ * - [STRIP]: [compactMetrics], one line while the ball flies and through the landing dwell.
+ * - [ROW]: one row of small cells, in landscape (the range's pre-F8a2p landscape layout).
+ * - [DENSE_GRID]: [columns] small cells a row, two rows, over a portrait scene. The pre-F8a2p
+ *   two-column grid took four rows (about a quarter of a phone) while waiting for a shot, leaving
+ *   the tee view a thin strip; this is half that.
+ * - [GRID]: the roomy two-column grid, in the docked side panel (plan F1b/F1c), where it covers no
+ *   scene.
+ */
+enum class RangeDetailLayout(
+    val columns: Int,
+) {
+    STRIP(0),
+    ROW(DETAIL_CELLS),
+    DENSE_GRID(DENSE_COLUMNS),
+    GRID(2),
+}
+
+/** The eight detail cells: the club selector and seven metrics. */
+private const val DETAIL_CELLS = 8
+private const val DENSE_COLUMNS = 4
+
+/**
+ * Plan F8a2p: the detail metrics' layout for this state: [RangeDetailLayout.STRIP] while
+ * [compactMetrics] (in every layout), otherwise [RangeDetailLayout.GRID] in the [docked] side
+ * panel, [RangeDetailLayout.ROW] in [landscape] and [RangeDetailLayout.DENSE_GRID] over a portrait
+ * scene.
+ */
+fun DrivingRangeUiState.detailLayout(
+    landscape: Boolean,
+    docked: Boolean,
+): RangeDetailLayout =
+    when {
+        compactMetrics -> RangeDetailLayout.STRIP
+        docked -> RangeDetailLayout.GRID
+        landscape -> RangeDetailLayout.ROW
+        else -> RangeDetailLayout.DENSE_GRID
+    }
+
+/**
+ * The compact strip's one line: "Club 103.2 mph · Launch 12.6° · Spin 2,380 rpm" ("—" when
+ * missing), the club speed in the chosen units (plan F8f).
+ */
 val DrivingRangeUiState.compactMetricsSummary: String
     get() {
         val shot = displayedShot
+        val numbers = camera.numbers
         val launch = ShotMetricFormatter.number(shot?.launchAngleVertical, decimals = 1)
         val launchText = if (launch == ShotMetricFormatter.MISSING) launch else "$launch°"
         return listOf(
-            "Club ${withUnit(ShotMetricFormatter.number(shot?.clubSpeedMph, decimals = 1), "mph")}",
+            "Club ${withUnit(numbers.speed(shot?.clubSpeedMph), numbers.speedUnit)}",
             "Launch $launchText",
             "Spin ${withUnit(ShotMetricFormatter.number(shot?.spinRpm, decimals = 0), "rpm")}",
         ).joinToString(separator = " · ")
