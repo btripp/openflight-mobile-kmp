@@ -174,6 +174,8 @@ internal class DefaultShotRepository(
     override fun retry() {
         val transport = activeTransport.value
         if (transport == null) start() else transport.retry()
+        // Issue #6: the Socket.IO link retries too, or it waits out a stuck attempt and its backoff.
+        piSession?.retry()
     }
 
     override fun disconnect() {

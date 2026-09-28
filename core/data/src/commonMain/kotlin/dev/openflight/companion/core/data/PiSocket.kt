@@ -24,6 +24,9 @@ internal interface PiSocket {
 
     fun disconnect()
 
+    /** Unless connected, drops the current attempt or backoff and retries at once. */
+    fun reconnectNow() {}
+
     suspend fun emit(
         event: String,
         data: JsonElement? = null,
@@ -63,6 +66,8 @@ internal class SocketIoPiSocket(
     override fun connect() = client.connect()
 
     override fun disconnect() = client.disconnect()
+
+    override fun reconnectNow() = client.reconnectNow()
 
     override suspend fun emit(
         event: String,

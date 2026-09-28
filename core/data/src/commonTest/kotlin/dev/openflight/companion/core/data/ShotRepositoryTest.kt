@@ -173,6 +173,20 @@ class ShotRepositoryTest {
             assertThat(h.ble.retryCount).isEqualTo(1)
         }
 
+    /** Issue #6: a Retry (also sent when the local-network permission is granted) retries both links. */
+    @Test
+    fun retryOnWifiAlsoRetriesThePiSocketIoLink() =
+        runRepositoryTest(transport = TransportType.WIFI) { h ->
+            h.repository.retry()
+
+            assertThat(
+                h.wifiTransports
+                    .single()
+                    .second.retryCount,
+            ).isEqualTo(1)
+            assertThat(h.sockets.single().reconnectNowCount).isEqualTo(1)
+        }
+
     @Test
     fun retryWhileStoppedStarts() =
         runRepositoryTest { h ->
