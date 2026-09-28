@@ -18,6 +18,10 @@ object RangeTestTags {
     const val CARRY = "range.carry"
     const val CLUB_SELECTOR = "range.clubSelector"
     const val CLUB_ERROR = "range.clubError"
+
+    /** Issue #48: the Pi's low- or critical-battery pill in the overlay. */
+    const val BATTERY_WARNING = "range.batteryWarning"
+
     const val ESTIMATED = "range.estimated"
     const val READY_CARD = "range.readyCard"
     const val STATUS = "range.status"

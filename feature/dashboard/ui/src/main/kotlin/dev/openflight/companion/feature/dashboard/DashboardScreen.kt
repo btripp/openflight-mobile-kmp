@@ -120,6 +120,12 @@ fun DashboardScreen(
                     ProcessingNotice(it)
                 }
             }
+            // Issue #48: the Pi's battery, in the same full-width banner slot: it matters on either layout.
+            uiState.batteryWarning?.let {
+                Box(modifier = Modifier.padding(horizontal = OfSpacing.Xl, vertical = OfSpacing.Sm)) {
+                    BatteryWarningNotice(it)
+                }
+            }
             // hasSelection is always false: there's no selection here, only whether the window is
             // wide enough for two panes. On COMPACT/MEDIUM that's a single LIST pane holding
             // everything stacked, same as before F1b; DETAIL is only ever composed on EXPANDED.

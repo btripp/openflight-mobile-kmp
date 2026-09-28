@@ -63,6 +63,9 @@ val appModules: List<Module> =
         // dataModule: it replaces dataModule's default ShotRepository, PiSessionRepository and
         // ShotHistoryRepository bindings).
         demoModule(),
+        // Issue #48: the Pi low-battery call-out, app-scoped (PiBatteryAlertCoordinator.kt's
+        // Koin.piBatteryAlerts()), appended (§4a A7).
+        batteryAlertModule(),
     )
 
 /**

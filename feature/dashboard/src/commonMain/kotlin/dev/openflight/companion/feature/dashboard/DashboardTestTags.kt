@@ -19,6 +19,9 @@ object DashboardTestTags {
     const val LOCAL_NETWORK_DENIED = "dashboard.localNetworkDenied"
     const val OPEN_SETTINGS = "dashboard.openSettings"
     const val PROCESSING = "dashboard.processing"
+
+    /** Issue #48: the Pi's low- or critical-battery notice. */
+    const val BATTERY_WARNING = "dashboard.batteryWarning"
     const val CONNECTION_PROBLEM = "dashboard.connectionProblem"
     const val PROFILE_BUTTON = "dashboard.profile"
     const val PROFILE_SHEET = "dashboard.profile.sheet"

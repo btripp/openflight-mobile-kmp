@@ -29,6 +29,8 @@ import dev.openflight.companion.core.designsystem.OfTextRole
 import dev.openflight.companion.core.designsystem.StatusTone
 import dev.openflight.companion.core.model.ConnectionProblem
 import dev.openflight.companion.core.model.GolfClub
+import dev.openflight.companion.core.model.pi.PiBatteryLevel
+import dev.openflight.companion.core.model.pi.PiBatteryWarning
 
 // Plan R8d's additions to the dashboard's connection card.
 
@@ -67,6 +69,20 @@ internal fun ProcessingNotice(processing: ProcessingIndicator) {
         tone = if (processing.failed) StatusTone.Negative else StatusTone.InProgress,
         busy = !processing.failed,
         modifier = Modifier.testTag(DashboardTestTags.PROCESSING),
+    )
+}
+
+/**
+ * Issue #48: the Pi's battery is low or critical and nothing is charging it. A warning icon and
+ * words (amber for low, red for critical), announced politely like the other notices.
+ */
+@Composable
+internal fun BatteryWarningNotice(warning: PiBatteryWarning) {
+    OfNotice(
+        title = warning.title,
+        detail = warning.detail,
+        tone = if (warning.level == PiBatteryLevel.CRITICAL) StatusTone.Negative else StatusTone.InProgress,
+        modifier = Modifier.testTag(DashboardTestTags.BATTERY_WARNING),
     )
 }
 

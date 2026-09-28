@@ -66,6 +66,7 @@ struct DashboardContent: View {
             VStack(spacing: 20) {
                 header
                 processingNotice
+                batteryNotice
                 connectionCard
                 liveMetrics
             }
@@ -80,6 +81,7 @@ struct DashboardContent: View {
                 VStack(spacing: 20) {
                     header
                     processingNotice
+                    batteryNotice
                     liveMetrics
                 }
                 .padding(20)
@@ -108,6 +110,20 @@ struct DashboardContent: View {
                 tone: processing.failed ? .problem : .busy
             )
             .accessibilityIdentifier(DashboardTestTags.shared.PROCESSING)
+        }
+    }
+
+    @ViewBuilder
+    private var batteryNotice: some View {
+        if let warning = state.batteryWarning {
+            // Issue #48: the Pi's battery is low or critical and nothing is charging it. Under the
+            // processing notice, above the connection card, so it's seen on either layout.
+            NoticeRow(
+                title: warning.title,
+                detail: warning.detail,
+                tone: warning.level == .critical ? .problem : .warning
+            )
+            .accessibilityIdentifier(DashboardTestTags.shared.BATTERY_WARNING)
         }
     }
 

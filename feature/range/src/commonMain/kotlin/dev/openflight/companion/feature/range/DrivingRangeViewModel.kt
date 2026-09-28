@@ -25,6 +25,7 @@ import dev.openflight.companion.core.model.ConnectionState
 import dev.openflight.companion.core.model.GolfClub
 import dev.openflight.companion.core.model.ShotEvent
 import dev.openflight.companion.core.model.TargetBearing
+import dev.openflight.companion.core.model.pi.PiBatteryWarning
 import dev.openflight.companion.core.model.pi.PiFeatureAvailability
 import dev.openflight.companion.core.model.pi.ShotDetail
 import kotlinx.coroutines.CancellationException
@@ -165,17 +166,29 @@ class DrivingRangeViewModel(
     /** Plan F8d: why the last simulate request failed. */
     private val simulateError = MutableStateFlow<String?>(null)
 
-    /** Session's and Games' rule: only a `--mock` Pi over a connected Socket.IO link simulates. */
-    private val simulate =
-        combine(piSession.mockMode, piSession.linkState, simulateError) { mock, link, error ->
-            SimulateState(available = mock == true && PiFeatureAvailability.of(link).isAvailable, error = error)
+    /**
+     * What the overlay shows about the Pi. Simulate follows Session's and Games' rule: only a `--mock`
+     * Pi over a connected Socket.IO link simulates. The battery warning is issue #48.
+     */
+    private val piState =
+        combine(piSession.mockMode, piSession.linkState, simulateError, piSession.powerStatus) {
+            mock,
+            link,
+            error,
+            power,
+            ->
+            PiState(
+                canSimulate = mock == true && PiFeatureAvailability.of(link).isAvailable,
+                simulateError = error,
+                batteryWarning = PiBatteryWarning.of(power),
+            )
         }
 
     val uiState: StateFlow<DrivingRangeUiState> =
-        combine(flight, clubState, camera, browse, simulate) { flight, club, camera, browse, simulate ->
+        combine(flight, clubState, camera, browse, piState) { flight, club, camera, browse, pi ->
             val shot = flight.displayedShot
             if (shot == null) {
-                DrivingRangeUiState.Ready(club, camera, browse, simulate.available, simulate.error)
+                DrivingRangeUiState.Ready(club, camera, browse, pi.canSimulate, pi.simulateError, pi.batteryWarning)
             } else {
                 DrivingRangeUiState.Showing(
                     shot,
@@ -185,8 +198,9 @@ class DrivingRangeViewModel(
                     camera,
                     browse,
                     flight.rollOut?.shownWith(camera.numbers),
-                    simulate.available,
-                    simulate.error,
+                    pi.canSimulate,
+                    pi.simulateError,
+                    pi.batteryWarning,
                 )
             }
         }.stateIn(
@@ -962,9 +976,10 @@ class DrivingRangeViewModel(
         val error: String? = null,
     )
 
-    private data class SimulateState(
-        val available: Boolean,
-        val error: String?,
+    private data class PiState(
+        val canSimulate: Boolean,
+        val simulateError: String?,
+        val batteryWarning: PiBatteryWarning?,
     )
 
     companion object {

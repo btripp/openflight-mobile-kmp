@@ -3,11 +3,11 @@ import Shared
 import SwiftUI
 
 /// The range's metrics (reference `RangeMetricsOverlay.swift`): ball speed and carry on top; at the
-/// bottom the club error, the estimated-flight badge and the detail metrics with the "NEXT CLUB"
-/// selector, laid out by the shared `detailLayout` (plan F8a2p, as on Android): one row in
-/// landscape, two compact rows of four over a portrait scene, the roomy two-column grid docked to
-/// the side, and one strip while a ball flies and through the landing dwell (the shared
-/// `compactMetrics`, plan R7b) so the landing area stays visible.
+/// bottom the Pi battery warning (issue #48), the club error, the estimated-flight badge and the
+/// detail metrics with the "NEXT CLUB" selector, laid out by the shared `detailLayout` (plan
+/// F8a2p, as on Android): one row in landscape, two compact rows of four over a portrait scene,
+/// the roomy two-column grid docked to the side, and one strip while a ball flies and through the
+/// landing dwell (the shared `compactMetrics`, plan R7b) so the landing area stays visible.
 ///
 /// Plan F8a2p: over the scene the ball speed and carry cards are compact too, so the tee view keeps
 /// most of the screen, and every card reports its frame as a range obstruction.
@@ -88,6 +88,22 @@ struct RangeMetricsOverlay: View {
 
     private var secondaryMetrics: some View {
         VStack(spacing: 8) {
+            if let warning = state.batteryWarning {
+                // Issue #48: one compact pill with the other bottom pills, never over the flight.
+                // The detail is for VoiceOver; the Dashboard's notice spells it out on screen.
+                Label(warning.title, systemImage: "battery.25percent")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(warning.level == .critical ? Theme.danger : Theme.warning)
+                    .lineLimit(1)
+                    .padding(.horizontal, 11)
+                    .padding(.vertical, 6)
+                    .background(.black.opacity(0.64), in: Capsule())
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("\(warning.title). \(warning.detail)")
+                    .accessibilityIdentifier(RangeTestTags.shared.BATTERY_WARNING)
+                    .rangeObstruction("battery")
+            }
+
             if let clubError = club.error {
                 Label(clubError, systemImage: "exclamationmark.triangle.fill")
                     .font(.caption.weight(.semibold))
