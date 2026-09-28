@@ -45,8 +45,8 @@ data class ConnectionProblem(
         const val BLUETOOTH_NOT_FOUND_TITLE: String = "No OpenFlight Pi found over Bluetooth"
         const val BLUETOOTH_NOT_FOUND_DETAIL: String =
             "Still scanning. Bluetooth needs the Pi's phone-connectivity update (started with --ble); " +
-                "standard OpenFlight software works over Wi-Fi only. Pairing in the phone's Bluetooth " +
-                "settings isn't needed. Switch to Wi-Fi to connect now."
+                "standard OpenFlight software works over the network only (Wi-Fi or Ethernet). Pairing in " +
+                "the phone's Bluetooth settings isn't needed. Switch to Network to connect now."
 
         /** The problem for a Bluetooth scan that has found nothing for a while. */
         fun bluetoothNotFound(): ConnectionProblem =

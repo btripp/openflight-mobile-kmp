@@ -237,11 +237,12 @@ private fun RangeThemeCard(
 private fun ConnectionCard(uiState: SettingsUiState) {
     OfCard(modifier = Modifier.fillMaxWidth().testTag(SettingsTestTags.CONNECTION), contentSpacing = OfSpacing.Md) {
         SectionTitle("CONNECTION")
-        // Plan F14: Demo mode's pretend Pi is on Wi-Fi, whatever transport the real Pi uses.
+        // Plan F14: Demo mode's pretend Pi is on the network, whatever transport the real Pi uses.
+        // Issue #17: the Wi-Fi transport is labelled "Network" (Wi-Fi or Ethernet).
         val transport =
             when {
                 uiState.demo.enabled -> DEMO_TRANSPORT
-                uiState.transport == TransportType.WIFI -> "Wi-Fi"
+                uiState.transport == TransportType.WIFI -> NETWORK_TRANSPORT
                 else -> "Bluetooth"
             }
         InfoRow("Transport", transport)
@@ -309,7 +310,10 @@ internal fun InfoRow(
 }
 
 /** Plan F14: the connection card's transport while Demo mode is on. */
-private const val DEMO_TRANSPORT = "Demo Pi (Wi-Fi)"
+private const val DEMO_TRANSPORT = "Demo Pi (Network)"
+
+/** The connection card's label for [TransportType.WIFI], like the Dashboard's transport picker. */
+private const val NETWORK_TRANSPORT = "Network"
 
 private fun PiLinkState.tone(): StatusTone =
     when (this) {

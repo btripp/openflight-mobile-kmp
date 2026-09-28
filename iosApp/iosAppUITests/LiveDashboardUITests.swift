@@ -22,8 +22,8 @@ final class LiveDashboardUITests: XCTestCase {
         // The real repository (no --ui-testing): the app connects on its own.
         app.launch()
 
-        // Wi-Fi transport.
-        let wifi = app.segmentedControls["dashboard.transport"].buttons["Wi-Fi"]
+        // Network (Wi-Fi) transport.
+        let wifi = app.segmentedControls["dashboard.transport"].buttons["Network"]
         XCTAssertTrue(wifi.waitForExistence(timeout: 10))
         wifi.tap()
 

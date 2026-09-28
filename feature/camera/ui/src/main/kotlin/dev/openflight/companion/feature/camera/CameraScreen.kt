@@ -188,7 +188,7 @@ internal fun phaseCopy(uiState: CameraUiState): Pair<String, String> =
     when (uiState.phase) {
         CameraPhase.OFFLINE -> {
             "Camera Offline" to
-                "The camera needs the Pi's live Wi-Fi session (${uiState.availability.disabledReason.orEmpty()})."
+                "The camera needs the Pi's live network session (${uiState.availability.disabledReason.orEmpty()})."
         }
 
         CameraPhase.NOT_ENABLED -> {

@@ -213,8 +213,8 @@ struct SettingsContent: View {
 
     private var connectionSection: some View {
         Section {
-            // Plan F14: Demo mode's pretend Pi is on Wi-Fi, whatever transport the real Pi uses.
-            row("Transport", state.demo.enabled ? "Demo Pi (Wi-Fi)" : state.transport.label_)
+            // Plan F14: Demo mode's pretend Pi is on the network, whatever transport the real Pi uses.
+            row("Transport", state.demo.enabled ? "Demo Pi (Network)" : state.transport.label_)
             if !state.demo.enabled { row("Host", state.host) }
             row("Shot stream", state.connectionState.description_)
             LabeledContent("Live session") {

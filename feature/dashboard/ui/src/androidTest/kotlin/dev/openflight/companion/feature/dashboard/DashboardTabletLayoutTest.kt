@@ -53,12 +53,12 @@ class DashboardTabletLayoutTest {
         // The connection card (its transport picker) is in the right column only, not repeated.
         composeRule
             .onAllNodes(
-                hasText("Wi-Fi") and hasAnyAncestor(hasTestTag(DashboardTestTags.CONNECTION_COLUMN)),
+                hasText("Network") and hasAnyAncestor(hasTestTag(DashboardTestTags.CONNECTION_COLUMN)),
                 useUnmergedTree = true,
             ).assertCountEquals(1)
         composeRule
             .onAllNodes(
-                hasText("Wi-Fi") and hasAnyAncestor(hasTestTag(DashboardTestTags.METRICS_COLUMN)),
+                hasText("Network") and hasAnyAncestor(hasTestTag(DashboardTestTags.METRICS_COLUMN)),
                 useUnmergedTree = true,
             ).assertCountEquals(0)
     }

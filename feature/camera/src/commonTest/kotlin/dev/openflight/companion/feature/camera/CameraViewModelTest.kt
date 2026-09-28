@@ -62,7 +62,7 @@ class CameraViewModelTest {
             availability: PiFeatureAvailability = on,
         ) = CameraViewModel.buildState(availability, settings, outcome, emptyList(), CameraReplayState.Idle).phase
 
-        assertThat(phase(null, availability = PiFeatureAvailability.Unavailable("Requires Wi-Fi")))
+        assertThat(phase(null, availability = PiFeatureAvailability.Unavailable("Requires Network")))
             .isEqualTo(CameraPhase.OFFLINE)
         assertThat(phase(null)).isEqualTo(CameraPhase.LOADING)
         assertThat(phase(null, CameraCaptureSettings(available = false))).isEqualTo(CameraPhase.NOT_ENABLED)

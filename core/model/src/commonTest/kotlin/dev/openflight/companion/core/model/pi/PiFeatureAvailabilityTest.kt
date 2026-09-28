@@ -22,7 +22,17 @@ class PiFeatureAvailabilityTest {
         val availability = PiFeatureAvailability.of(PiLinkState.WifiOnly)
 
         assertThat(availability.isAvailable).isFalse()
-        assertThat(availability.disabledReason).isEqualTo("Requires Wi-Fi")
+        assertThat(availability.disabledReason).isEqualTo("Requires Network")
+    }
+
+    // Issue #17: the transport option is "Network" (Wi-Fi or Ethernet), so the reasons name it.
+    @Test
+    fun bluetoothReasonsNameTheNetworkTransport() {
+        assertThat(PiFeatureAvailability.WIFI_ONLY_ON_BLUETOOTH)
+            .isEqualTo("Network only: Bluetooth can't delete or edit on the Pi")
+        assertThat(PiFeatureAvailability.DELETE_AND_CLEAR_NEED_WIFI)
+            .isEqualTo("Delete and Clear need Network. Bluetooth is read-only.")
+        assertThat(PiLinkState.WifiOnly.description).isEqualTo("Available on Network only")
     }
 
     @Test
@@ -34,7 +44,7 @@ class PiFeatureAvailabilityTest {
         }
     }
 
-    // Plan R8e: BLE is read-and-select; destructive actions say "Wi-Fi only" instead of hiding.
+    // Plan R8e: BLE is read-and-select; destructive actions say "Network only" instead of hiding.
 
     private val wifiOnly = PiFeatureAvailability.Unavailable(PiFeatureAvailability.WIFI_ONLY_ON_BLUETOOTH)
 

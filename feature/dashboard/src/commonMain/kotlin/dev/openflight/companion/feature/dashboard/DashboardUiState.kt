@@ -174,7 +174,7 @@ data class ConnectionPanelState(
         const val TRY_DEMO_NOTE = "No Pi yet? Explore every screen with a pretend Pi and made-up shots."
 
         /** Plan F14: under the card's title in Demo mode. */
-        const val DEMO_NOTE = "Demo mode: a pretend Pi over Wi-Fi. Shots are made up, not measured."
+        const val DEMO_NOTE = "Demo mode: a pretend Pi over the network. Shots are made up, not measured."
 
         const val EXIT_DEMO_LABEL = "Exit demo"
         const val HIT_SHOT_LABEL = "Hit a shot"
@@ -185,10 +185,12 @@ data class ConnectionPanelState(
         /** Plan F14: the tag on every demo shot. */
         const val DEMO_TAG = "Demo"
 
-        /** Plan R8d: the Pi's own access point, then a typical home-router address. */
+        /**
+         * Plan R8d: a typical home-router address. No Pi access-point hint (issue #17): upstream
+         * OpenFlight doesn't use access-point mode; the Pi joins the network over Wi-Fi or Ethernet.
+         */
         val HOST_HINTS: List<HostHint> =
             listOf(
-                HostHint(host = "192.168.4.1:8080", label = "Pi access point"),
                 HostHint(host = "192.168.1.100:8080", label = "Home network"),
             )
     }
@@ -212,10 +214,13 @@ enum class ConnectionHelpLink(
     ),
 }
 
-/** The transport picker's label, matching the reference's `ShotTransport.label`. */
+/**
+ * The transport picker's label. [TransportType.WIFI] is "Network" (issue #17): the Pi is reached
+ * over any IP link, Wi-Fi or Ethernet.
+ */
 val TransportType.label: String
     get() =
         when (this) {
             TransportType.BLUETOOTH -> "Bluetooth"
-            TransportType.WIFI -> "Wi-Fi"
+            TransportType.WIFI -> "Network"
         }

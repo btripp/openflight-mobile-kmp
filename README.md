@@ -3,8 +3,8 @@
 <img src="iosApp/iosApp/Assets.xcassets/AppIcon.appiconset/app-icon-1024.png" width="96" alt="OpenFlight Companion icon" align="left" hspace="12" />
 
 An Android + iOS companion app for [OpenFlight](https://openflight.dev), the DIY golf launch
-monitor. It talks to the Pi over Wi-Fi (the Pi's own Socket.IO API, plus Server-Sent Events on
-backends that have them) or Bluetooth LE (schema v1 and v2). See
+monitor. It talks to the Pi over the network, Wi-Fi or Ethernet (the Pi's own Socket.IO API, plus
+Server-Sent Events on backends that have them), or Bluetooth LE (schema v1 and v2). See
 [Backend compatibility](#backend-compatibility) for which backend offers what. Each platform has a
 **native UI**, Jetpack Compose on Android and SwiftUI on iOS, over the same shared Kotlin
 Multiplatform ViewModels, repositories, transports and ball-flight geometry
@@ -39,8 +39,8 @@ or a sidebar (iPad), with list-detail layouts for Sessions, history and Bag.
 The app has four tabs on both platforms: **Practice · Sessions · Bag · Settings**.
 
 ### Practice (live)
-- **Live shots over Wi-Fi or Bluetooth LE.** On Wi-Fi the app keeps one Socket.IO connection to
-  the Pi (the API the Pi's own web UI uses) and, on backends that serve it, the SSE shot stream
+- **Live shots over the network or Bluetooth LE.** On **Network** (the Pi on Wi-Fi or Ethernet)
+  the app keeps one Socket.IO connection to the Pi (the API the Pi's own web UI uses) and, on backends that serve it, the SSE shot stream
   (`/api/shots/stream?schema=2`); on a Pi without that stream, such as stock upstream, the
   Socket.IO `shot`/`shot_update` events feed the live shots instead. Both reconnect on their own
   with capped exponential backoff
@@ -61,9 +61,9 @@ The app has four tabs on both platforms: **Practice · Sessions · Bag · Settin
   picker is select-only.
 - **Connection problems** each get their own message and action: an unreachable Pi, an address
   the endpoint policy refuses, and denied local-network access on iOS or Android 17 (with a
-  button to open Settings). Tap-to-fill hosts cover the Pi's access point and a home network.
+  button to open Settings). Besides the default `raspberrypi.local:8080`, a tap-to-fill host covers a typical home network.
 - **Simulate shot** appears only when the Pi runs `--mock`.
-- The overflow menu opens **speed training** (swing-speed mode with implement selection, Wi-Fi).
+- The overflow menu opens **speed training** (swing-speed mode with implement selection, Network).
 
 ### Driving range
 - A ball-flight view drawn from **shared Kotlin geometry** on both platforms: Compose `Canvas`
@@ -85,7 +85,7 @@ The app has four tabs on both platforms: **Practice · Sessions · Bag · Settin
 - A **dispersion map**: one dot per shot, a scatter ellipse per club and distance arcs, with a
   selected-shot card.
 - **CSV export** through the Android share sheet or the iOS `ShareLink`.
-- **Delete and Clear are server-confirmed** on Wi-Fi: a row shows a pending state until the Pi
+- **Delete and Clear are server-confirmed** on Network: a row shows a pending state until the Pi
   confirms, and fails after 10 s, on `delete_shot_error` or when the link drops.
 - **History**: every connection to the Pi starts a session stored on the phone (Room; survives
   relaunches), listed newest first and filterable by profile. Each stored session has the same
@@ -111,7 +111,7 @@ The app has four tabs on both platforms: **Practice · Sessions · Bag · Settin
   reaches a Pi you switched to since confirming.
 - **Phone-assisted radar tilt calibration**: sample the phone's gravity sensor at 60 Hz, wait
   for a stable 2-second average, and send it to calibrate the TI IWR6843's mount tilt.
-- **Camera** (Wi-Fi): the Pi's capture settings, a preview still polled only while visible, and
+- **Camera** (Network): the Pi's capture settings, a preview still polled only while visible, and
   each shot's replay video.
 - **Audio call-outs**: the phone reads out each shot (or games only) with the fields and order
   you choose (carry, total, ball speed, club speed, smash, launch, spin, …), a voice picker and a
@@ -126,14 +126,14 @@ The app has four tabs on both platforms: **Practice · Sessions · Bag · Settin
 - **Accessibility**: metric tiles and rows announce as one phrase for TalkBack/VoiceOver, the
   connection chip announces changes on its own, touch targets are at least 48 dp / 44 pt, no
   status relies on colour alone, and reduced motion is respected.
-- **Bluetooth carries less than Wi-Fi**: what BLE can't carry is disabled with an explanation,
+- **Bluetooth carries less than Network**: what BLE can't carry is disabled with an explanation,
   not hidden (see [Known limitations](#known-limitations)).
 
 ## Status and roadmap
 
 Done and on `main`:
 
-- [x] Live shots over Wi-Fi (Socket.IO + SSE) and Bluetooth LE schema v1/v2
+- [x] Live shots over the network (Socket.IO + SSE) and Bluetooth LE schema v1/v2
 - [x] Live shots and club changes on a stock upstream Pi (Socket.IO only, no SSE or `/api/club`)
 - [x] Practice: latest shot, confidence, processing indicator, connection problems, club sync
 - [x] Profiles: select, add, rename, remove
@@ -178,7 +178,7 @@ runs:
 |---|---|---|
 | Socket.IO session: snapshot, profiles, Session screen, server-confirmed delete/clear, stats, stored history, device cards, power, camera, training, shutdown | Yes | Yes |
 | Live shots on the Practice latest-shot card and the range | Yes, over Socket.IO: there's no SSE stream (`/api/shots/stream` answers 404), so the app feeds the live feed from the Pi's `shot`/`shot_update` and shows Connected while the Socket.IO link is up. It probes SSE once per connection, not on a retry loop | Yes, over the SSE stream with schema v2 (`?schema=2`); Socket.IO only enriches it |
-| Change the club from the phone over Wi-Fi | Yes, over Socket.IO `set_club` (there's no `/api/club`); the phone shows the club once the Pi's `club_changed` confirms it | Yes, `POST /api/club` |
+| Change the club from the phone over Network | Yes, over Socket.IO `set_club` (there's no `/api/club`); the phone shows the club once the Pi's `club_changed` confirms it | Yes, `POST /api/club` |
 | Phone calibration (`/api/calibration/iwr6843/orientation`) | No | Yes |
 | Bluetooth LE | None | Schema v1 and v2 |
 | `MockServerIT` (pinned in CI) | `7ca4b40`: all 26 pass (asserting the Socket.IO fallbacks) | `07d5313`: all 26 pass |
@@ -222,15 +222,14 @@ Schema v2 adds `shot_number`, the profile, and **provisional and final** shots t
 commands `get_club`/`set_club`, calibration, `get_profiles`, `set_active_profile` and
 `get_power_status`. BLE has no authentication, so it is **read-and-select only**: the Pi
 refuses `delete_shot` and `clear_session` over BLE, and the app disables Delete and Clear there
-with a "Wi-Fi only" explanation. Deletes and clears made elsewhere still reach a v2 phone
+with a "Network only" explanation. Deletes and clears made elsewhere still reach a v2 phone
 through `shot_deleted` and `session_cleared`. The frame format is specified in the backend's
 `docs/ios-ble.md`.
 
 ### Supported setups
 
 - **Phone as the only interface to a headless Pi.** No screen on the Pi: the app does
-  everything, over Wi-Fi (the Pi's LAN address, or `192.168.4.1:8080` when the Pi is its own
-  access point) or Bluetooth.
+  everything, over Network (the Pi's LAN address, on Wi-Fi or Ethernet) or Bluetooth.
 - **Phone plus the Pi's kiosk.** Both are clients of the same server, and every server event is
   a broadcast. The club, active profile, debug mode and radar settings are global to the Pi, so
   a change on either shows on both, and a shot deleted or a session cleared on one disappears
@@ -532,7 +531,7 @@ Adapted from the reference iOS app's own troubleshooting guide
   `Powered: yes`. Keep the app in the foreground during the initial scan; this app is
   foreground-only BLE by design (see Known limitations). Restart the app after changing the
   Pi's Bluetooth configuration.
-- **Wi-Fi doesn't connect.**
+- **Network doesn't connect.**
   1. From another machine on the same network, run
      `curl "http://<host>:8080/socket.io/?EIO=4&transport=polling"` and confirm it answers
      with a `0{"sid":...}` handshake. On the fork branch, `curl -N http://<host>:8080/api/shots/stream`
@@ -549,7 +548,7 @@ Adapted from the reference iOS app's own troubleshooting guide
   exercises the "Motion unavailable" UI state correctly.
 - **A Raspberry Pi kernel regresses BLE.** Kernel `6.18.34+rpt-rpi-2712` is confirmed to break
   BLE advertising/GATT on the Pi. Check `uname -r` on the Pi before assuming an app defect;
-  boot a different kernel (e.g. 6.12.x) or use Wi-Fi until it's fixed.
+  boot a different kernel (e.g. 6.12.x) or use Network until it's fixed.
 - **The mock server shows phantom clients for 15–35 seconds after a disconnect.** This is the
   reference server's `ShotStreamBroker`, which only drops a subscriber after a failed
   heartbeat write, not immediately on socket close. It is not a leak in this app.
@@ -567,10 +566,10 @@ Adapted from the reference iOS app's own troubleshooting guide
 - **Estimated distances are estimates.** Total, roll and conditions-adjusted carry are
   computed on the phone from the Pi's carry and are always labelled "est.". The Pi's carry is
   the anchor.
-- **Bluetooth carries less than Wi-Fi.** BLE schema v2 brings the club, profile selection,
+- **Bluetooth carries less than Network.** BLE schema v2 brings the club, profile selection,
   processing and power status, and provisional/final shots. The Pi's session and its stats,
   delete and clear, profile edits, the camera, training mode, simulator status, the radar/debug
-  panel, cloud upload and Pi shutdown still need the Pi's Socket.IO API, which is Wi-Fi only;
+  panel, cloud upload and Pi shutdown still need the Pi's Socket.IO API, which is Network only;
   a v1 Pi carries only shots and the club. Over BLE the UI disables these with an explanation
   instead of hiding them.
 - **The mock server can show phantom clients for 15–35 seconds after a disconnect.** See
