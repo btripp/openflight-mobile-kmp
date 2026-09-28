@@ -4,6 +4,10 @@
 <dict>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
+	<!-- Only the OS's own HTTPS/TLS, which is exempt, so App Store Connect doesn't ask the
+	     export-compliance question on every upload. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<!-- The Pi serves shots over plain HTTP on the local network. This permits
 	     cleartext only for .local names and private address ranges, rather than
 	     disabling App Transport Security outright. -->

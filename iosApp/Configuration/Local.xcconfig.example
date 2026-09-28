@@ -1,0 +1,12 @@
+// Copy to Local.xcconfig (gitignored) and fill in your own values. Config.xcconfig includes it
+// last, so anything here overrides the shared defaults. Never commit Local.xcconfig.
+
+// Your Apple Developer team ID: developer.apple.com > Account > Membership details.
+TEAM_ID = ABCDE12345
+
+// Uncomment to use your own bundle ID (register it in App Store Connect first).
+// PRODUCT_BUNDLE_IDENTIFIER = com.yourname.openflight
+
+// Uncomment to bump the build number for an upload without editing the shared config.
+// App Store Connect rejects a build number it has already seen.
+// CURRENT_PROJECT_VERSION = 2
