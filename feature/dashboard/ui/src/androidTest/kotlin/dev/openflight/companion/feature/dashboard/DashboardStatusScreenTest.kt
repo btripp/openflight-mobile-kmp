@@ -102,6 +102,30 @@ class DashboardStatusScreenTest {
     }
 
     @Test
+    fun givenABluetoothScanThatFindsNothing_whenShown_thenItSaysWhyAndSuggestsWifi() {
+        show(
+            DashboardUiState.Waiting(
+                ConnectionPanelState(
+                    transport = TransportType.BLUETOOTH,
+                    state = ConnectionState.Scanning,
+                    problem = ConnectionProblem.bluetoothNotFound(),
+                ),
+            ),
+        )
+
+        composeRule.onNodeWithTag(DashboardTestTags.CONNECTION_PROBLEM).performScrollTo().assertIsDisplayed()
+        composeRule
+            .onNodeWithText(
+                ConnectionProblem.BLUETOOTH_NOT_FOUND_TITLE,
+                useUnmergedTree = true,
+            ).assertIsDisplayed()
+        // No extra hint line: the detail already says what to do.
+        composeRule
+            .onNodeWithText(ConnectionProblem.BLUETOOTH_NOT_FOUND_DETAIL, useUnmergedTree = true)
+            .assertIsDisplayed()
+    }
+
+    @Test
     fun givenAPitchingWedgeShot_whenShown_thenTheCardAndHistoryNameTheClub() {
         show(
             DashboardUiState.Live(

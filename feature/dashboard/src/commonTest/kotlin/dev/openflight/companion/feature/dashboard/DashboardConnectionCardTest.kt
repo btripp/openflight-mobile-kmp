@@ -11,6 +11,7 @@ import assertk.assertions.isFalse
 import assertk.assertions.isNull
 import dev.openflight.companion.core.data.TransportType
 import dev.openflight.companion.core.model.ConnectionErrorKind
+import dev.openflight.companion.core.model.ConnectionProblem
 import dev.openflight.companion.core.model.ConnectionState
 import dev.openflight.companion.core.model.GolfClub
 import dev.openflight.companion.core.model.pi.PiLinkState
@@ -19,6 +20,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
@@ -222,6 +224,56 @@ class DashboardConnectionCardTest {
         next.onConnected()
         assertThat(next.phase.value).isEqualTo(ClubConfirmation.Phase.DONE)
     }
+
+    // endregion
+
+    // region bluetooth scan
+
+    @Test
+    fun aBluetoothScanThatFindsNothingSaysWhyAfterFifteenSeconds() =
+        runTest {
+            val bluetooth = FakeSettingsRepository(transport = TransportType.BLUETOOTH, host = "pi.local:8080")
+            val bleShots = FakeShotRepository(bluetooth)
+            DashboardViewModel(bleShots, bluetooth, piSession, confirmation).uiState.testIgnoringRest {
+                bleShots.connectionState.value = ConnectionState.Scanning
+                advanceTimeBy(DashboardViewModel.BLUETOOTH_NOT_FOUND_AFTER_MILLIS - 1)
+                assertThat(expectMostRecentItem().connection.visibleProblem).isNull()
+
+                advanceTimeBy(2)
+                val problem = expectMostRecentItem().connection.visibleProblem
+                assertThat(problem?.kind).isEqualTo(ConnectionProblem.Kind.BLUETOOTH_NOT_FOUND)
+                assertThat(problem?.detail).isEqualTo(ConnectionProblem.BLUETOOTH_NOT_FOUND_DETAIL)
+
+                // Found after all: the notice goes.
+                bleShots.connectionState.value = ConnectionState.Connected
+                awaitUntil { it.connection.visibleProblem == null }
+            }
+        }
+
+    @Test
+    fun aNewScanRestartsTheWait() =
+        runTest {
+            val bluetooth = FakeSettingsRepository(transport = TransportType.BLUETOOTH, host = "pi.local:8080")
+            val bleShots = FakeShotRepository(bluetooth)
+            DashboardViewModel(bleShots, bluetooth, piSession, confirmation).uiState.testIgnoringRest {
+                bleShots.connectionState.value = ConnectionState.Scanning
+                advanceTimeBy(DashboardViewModel.BLUETOOTH_NOT_FOUND_AFTER_MILLIS - 1)
+                bleShots.connectionState.value = ConnectionState.Connecting
+                bleShots.connectionState.value = ConnectionState.Scanning
+                advanceTimeBy(DashboardViewModel.BLUETOOTH_NOT_FOUND_AFTER_MILLIS - 1)
+                assertThat(expectMostRecentItem().connection.visibleProblem).isNull()
+            }
+        }
+
+    @Test
+    fun wifiNeverShowsTheBluetoothNotice() =
+        runTest {
+            viewModel().uiState.testIgnoringRest {
+                shots.connectionState.value = ConnectionState.Scanning
+                advanceTimeBy(DashboardViewModel.BLUETOOTH_NOT_FOUND_AFTER_MILLIS * 2)
+                assertThat(expectMostRecentItem().connection.visibleProblem).isNull()
+            }
+        }
 
     // endregion
 

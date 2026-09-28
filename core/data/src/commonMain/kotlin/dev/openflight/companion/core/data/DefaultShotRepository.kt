@@ -88,7 +88,7 @@ internal fun interface WifiTransportFactory {
  * retry, a host change or the next start) and the Pi's Socket.IO link is connected, the Pi's live
  * `shot`/`shot_update` feed [history] and [latestShot] (stored once, by the [PiSessionRepository.liveShots]
  * collector), [connectionState] shows the link's state instead of the 404, and the club follows the
- * Pi's `session_state`/`club_changed`. A club call that gets 404 from `/api/club` switches to
+ * Pi's `session_state`/`club_changed`. A club call that gets 404/405 from `/api/club` switches to
  * Socket.IO `set_club` for the rest of the connection. With SSE and `/api/club` present (fork
  * backend) nothing changes: SSE feeds [history] and Socket.IO only enriches, so no shot is doubled.
  */
@@ -208,8 +208,9 @@ internal class DefaultShotRepository(
         }
 
     /**
-     * Runs [request] against `/api/club`; when that route is missing (HTTP 404: a stock backend) and
-     * a Pi session exists, remembers that for this connection and runs [fallback] instead.
+     * Runs [request] against `/api/club`; when that route is missing and a Pi session exists,
+     * remembers that for this connection and runs [fallback] instead (a stock backend answers 404
+     * to `GET` but 405 to `POST`: see [OpenFlightHttpError.UnexpectedStatus.isRouteAbsent]).
      */
     private suspend fun clubApiOrFallback(
         pi: PiSessionRepository?,
@@ -219,8 +220,8 @@ internal class DefaultShotRepository(
         try {
             request()
         } catch (missing: OpenFlightHttpError.UnexpectedStatus) {
-            if (pi == null || missing.statusCode != HTTP_NOT_FOUND) throw missing
-            log("No /api/club on this Pi (HTTP 404): using Socket.IO for the club")
+            if (pi == null || !missing.isRouteAbsent) throw missing
+            log("No /api/club on this Pi (HTTP ${missing.statusCode}): using Socket.IO for the club")
             clubApiAbsent.value = true
             fallback(pi)
         }
@@ -248,7 +249,18 @@ internal class DefaultShotRepository(
 
     override suspend fun submitCalibration(measurement: PhoneOrientationMeasurement): CalibrationResult {
         val transport = activeTransport.value ?: throw NoActiveTransportException()
-        return controlMutex.withLock { transport.submitCalibration(measurement) }
+        return controlMutex.withLock {
+            try {
+                transport.submitCalibration(measurement)
+            } catch (missing: OpenFlightHttpError.UnexpectedStatus) {
+                // A stock backend has no calibration route and, unlike the club, no Socket.IO
+                // equivalent: say what's missing instead of "HTTP 405".
+                if (activeTransportType.value == TransportType.WIFI && missing.isRouteAbsent) {
+                    throw CalibrationUnsupportedException()
+                }
+                throw missing
+            }
+        }
     }
 
     override fun deleteShot(eventId: String) {
@@ -587,7 +599,6 @@ internal class DefaultShotRepository(
     )
 
     private companion object {
-        const val HTTP_NOT_FOUND = 404
         const val CLUB_STATUS_OK = "ok"
 
         /** Like the Wi-Fi transport's control-request timeout. */

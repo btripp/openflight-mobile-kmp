@@ -55,7 +55,7 @@ jobs:
             ref: 7ca4b409aa4929f0b5de17ee2699adf1f636bf8a
           - name: phone-connectivity fork
             repository: btripp/openflight
-            ref: 07d5313c95b3be75e9ad24874072353d5cde950f
+            ref: 64649fe19930ba0943f2ec3d9b8837a5e0961937
     steps:
       - uses: actions/checkout@v7
       - name: Check out the backend

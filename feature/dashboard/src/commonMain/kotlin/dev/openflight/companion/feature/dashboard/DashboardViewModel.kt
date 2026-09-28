@@ -20,7 +20,9 @@ import dev.openflight.companion.core.model.ShotEvent
 import dev.openflight.companion.core.model.pi.PiLinkState
 import dev.openflight.companion.core.model.pi.ShotDetail
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -29,6 +31,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.transformLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -74,10 +77,24 @@ class DashboardViewModel(
 
     private val prompts = combine(piLink, clubConfirmation.phase, profilePicker.state, ::Triple)
 
+    /**
+     * The stream's state, plus whether it has sat in [ConnectionState.Scanning] for
+     * [BLUETOOTH_NOT_FOUND_AFTER_MILLIS]: a Pi without Bluetooth support never turns up.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val streamState =
+        shots.connectionState.transformLatest { state ->
+            emit(state to false)
+            if (state == ConnectionState.Scanning) {
+                delay(BLUETOOTH_NOT_FOUND_AFTER_MILLIS)
+                emit(state to true)
+            }
+        }
+
     private val panel =
-        combine(savedSettings, shots.connectionState, hostDraft, clubRequest, prompts) {
+        combine(savedSettings, streamState, hostDraft, clubRequest, prompts) {
             saved,
-            state,
+            (state, scanStalled),
             draft,
             request,
             (link, confirmation, profile),
@@ -98,7 +115,11 @@ class DashboardViewModel(
                                 (state as? ConnectionState.Error)?.kind == ConnectionErrorKind.LOCAL_NETWORK_DENIED
                         ),
                 showClubConfirmation = confirmation == ClubConfirmation.Phase.SHOWING,
-                problem = ConnectionProblem.of(state, link.link),
+                problem =
+                    ConnectionProblem.of(state, link.link)
+                        ?: ConnectionProblem
+                            .bluetoothNotFound()
+                            .takeIf { scanStalled && saved.transport == TransportType.BLUETOOTH },
                 profile = profile,
                 demo = saved.demo,
             )
@@ -311,6 +332,9 @@ class DashboardViewModel(
 
     companion object {
         const val CLUB_CHANGE_FAILED = "Couldn't change the club."
+
+        /** How long a Bluetooth scan runs with nothing found before the card says why. */
+        const val BLUETOOTH_NOT_FOUND_AFTER_MILLIS = 15_000L
         private const val STOP_TIMEOUT_MILLIS = 5_000L
     }
 }
