@@ -11,6 +11,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -25,6 +26,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.path
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -39,6 +41,10 @@ import androidx.compose.ui.unit.dp
  * `setClub` request is in flight, and disables the menu along with [enabled].
  * @param compact a narrow field (a smaller, one-line selection with less padding), for example
  *   the driving range's dense metrics grid.
+ * @param moreOptions an optional second section below [options], behind a divider and a
+ *   [moreOptionsLabel] row that expands it inside the same menu (issue #15: the clubs not in the
+ *   bag, under "All clubs…"). Starts expanded when [selected] is one of them. Empty: no section.
+ * @param moreOptionsLabel the expanding row's text (tagged [OfDropdownMenuTags.MORE]).
  */
 @Composable
 fun OfDropdownMenu(
@@ -50,17 +56,30 @@ fun OfDropdownMenu(
     enabled: Boolean = true,
     isBusy: Boolean = false,
     compact: Boolean = false,
+    moreOptions: List<String> = emptyList(),
+    moreOptionsLabel: String = "More…",
 ) {
     var expanded by remember { mutableStateOf(false) }
+    var showMore by remember { mutableStateOf(false) }
     val interactive = enabled && !isBusy
+    val close = {
+        expanded = false
+        showMore = false
+    }
+    val choose = { option: String ->
+        close()
+        onSelect(option)
+    }
 
     Row(
         modifier =
             modifier
                 .fillMaxWidth()
                 .background(OfColorTokens.BgElevated, RoundedCornerShape(12.dp))
-                .clickable(enabled = interactive) { expanded = true }
-                .padding(horizontal = if (compact) OfSpacing.Sm else OfSpacing.Md, vertical = OfSpacing.Sm),
+                .clickable(enabled = interactive) {
+                    expanded = true
+                    showMore = selected in moreOptions
+                }.padding(horizontal = if (compact) OfSpacing.Sm else OfSpacing.Md, vertical = OfSpacing.Sm),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (label.isNotEmpty() || !compact) {
@@ -86,24 +105,53 @@ fun OfDropdownMenu(
                 strokeWidth = 2.dp,
             )
         }
-        DropdownMenu(expanded = expanded && interactive, onDismissRequest = { expanded = false }) {
-            options.forEach { option ->
+        DropdownMenu(expanded = expanded && interactive, onDismissRequest = close) {
+            options.forEach { option -> OptionItem(option, selected, onClick = { choose(option) }) }
+            if (moreOptions.isNotEmpty()) {
+                HorizontalDivider()
                 DropdownMenuItem(
-                    text = { Text(option) },
-                    onClick = {
-                        expanded = false
-                        onSelect(option)
+                    text = {
+                        Text(
+                            text = moreOptionsLabel,
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
                     },
-                    leadingIcon =
-                        if (option == selected) {
-                            { CheckmarkIndicator() }
-                        } else {
-                            null
-                        },
+                    onClick = { showMore = !showMore },
+                    modifier = Modifier.testTag(OfDropdownMenuTags.MORE),
                 )
+                if (showMore) {
+                    moreOptions.forEach { option ->
+                        OptionItem(option, selected, onClick = { choose(option) })
+                    }
+                }
             }
         }
     }
+}
+
+@Composable
+private fun OptionItem(
+    option: String,
+    selected: String,
+    onClick: () -> Unit,
+) {
+    DropdownMenuItem(
+        text = { Text(option) },
+        onClick = onClick,
+        leadingIcon =
+            if (option == selected) {
+                { CheckmarkIndicator() }
+            } else {
+                null
+            },
+    )
+}
+
+/** Test tags for [OfDropdownMenu]. */
+object OfDropdownMenuTags {
+    /** The row that expands the menu's `moreOptions` section. */
+    const val MORE = "of_dropdown_menu_more"
 }
 
 @Composable
@@ -149,6 +197,23 @@ private fun OfDropdownMenuPreview() {
             selected = "7-Iron",
             options = listOf("Driver", "7-Iron", "Pitching Wedge"),
             onSelect = {},
+            modifier = Modifier.padding(OfSpacing.Md),
+        )
+    }
+}
+
+/** Issue #15: the bag's clubs, then the rest behind an "All clubs…" row that expands them. */
+@Preview
+@Composable
+private fun OfDropdownMenuWithMoreOptionsPreview() {
+    OfTheme {
+        OfDropdownMenu(
+            label = "NEXT CLUB",
+            selected = "4-Iron",
+            options = listOf("Driver", "7-Iron", "Pitching Wedge", "4-Iron"),
+            onSelect = {},
+            moreOptions = listOf("3-Wood", "5-Hybrid", "2-Iron"),
+            moreOptionsLabel = "All clubs…",
             modifier = Modifier.padding(OfSpacing.Md),
         )
     }

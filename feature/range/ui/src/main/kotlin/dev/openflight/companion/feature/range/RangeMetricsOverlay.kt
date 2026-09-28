@@ -31,6 +31,7 @@ import dev.openflight.companion.core.designsystem.OfMetricPrimary
 import dev.openflight.companion.core.designsystem.OfSpacing
 import dev.openflight.companion.core.designsystem.OfText
 import dev.openflight.companion.core.designsystem.OfTextRole
+import dev.openflight.companion.core.model.ClubMenu
 import dev.openflight.companion.core.model.GolfClub
 import dev.openflight.companion.core.model.ShotEvent
 import dev.openflight.companion.core.model.ShotMetricFormatter
@@ -228,11 +229,14 @@ private fun ClubMetric(
         OfDropdownMenu(
             label = "",
             selected = club.selected.displayName,
-            options = GolfClub.entries.map { it.displayName },
+            options = club.menu.yourClubs.map { it.displayName },
             onSelect = { name -> GolfClub.entries.firstOrNull { it.displayName == name }?.let(onSelectClub) },
             enabled = club.selectionEnabled,
             isBusy = club.isChanging,
             compact = dense,
+            // Issue #15: the clubs not in the active bag, behind "All clubs…".
+            moreOptions = club.menu.otherClubs.map { it.displayName },
+            moreOptionsLabel = ClubMenu.ALL_CLUBS_LABEL + "…",
             modifier = Modifier.testTag(RangeTestTags.CLUB_SELECTOR),
         )
     }

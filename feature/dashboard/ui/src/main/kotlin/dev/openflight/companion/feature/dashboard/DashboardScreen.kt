@@ -50,6 +50,7 @@ import dev.openflight.companion.core.designsystem.OfWindowClass
 import dev.openflight.companion.core.designsystem.StatusTone
 import dev.openflight.companion.core.designsystem.rememberOfWindowClass
 import dev.openflight.companion.core.insights.ClubChip
+import dev.openflight.companion.core.model.ClubMenu
 import dev.openflight.companion.core.model.ConnectionState
 import dev.openflight.companion.core.model.GolfClub
 
@@ -328,7 +329,7 @@ private fun ClubSelector(
         OfDropdownMenu(
             label = "",
             selected = panel.club.displayName,
-            options = GolfClub.entries.map { it.displayName },
+            options = panel.clubMenu.yourClubs.map { it.displayName },
             onSelect = { name ->
                 GolfClub.entries.firstOrNull { it.displayName == name }?.let {
                     onEvent(
@@ -338,6 +339,9 @@ private fun ClubSelector(
             },
             enabled = panel.clubMenuEnabled,
             isBusy = panel.isChangingClub,
+            // Issue #15: the clubs not in the active bag, behind "All clubs…".
+            moreOptions = panel.clubMenu.otherClubs.map { it.displayName },
+            moreOptionsLabel = ClubMenu.ALL_CLUBS_LABEL + "…",
             modifier = Modifier.testTag(DashboardTestTags.CLUB_SELECTOR),
         )
         panel.clubError?.let { error ->
