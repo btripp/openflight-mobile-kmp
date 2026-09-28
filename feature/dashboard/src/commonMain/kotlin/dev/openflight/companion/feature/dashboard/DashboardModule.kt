@@ -18,6 +18,8 @@ val dashboardModule: Module =
                 clubConfirmation = get(),
                 // Plan F14.
                 demoMode = get(),
+                // Issue #15.
+                bags = get(),
             )
         }
     }

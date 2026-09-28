@@ -15,6 +15,8 @@ val rangeModule: Module =
                 history = get(),
                 conditions = get(),
                 piSession = get(),
+                // Issue #15.
+                bags = get(),
             )
         }
     }

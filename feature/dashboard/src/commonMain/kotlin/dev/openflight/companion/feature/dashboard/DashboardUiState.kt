@@ -7,6 +7,7 @@ import dev.openflight.companion.core.insights.ClubChip
 import dev.openflight.companion.core.insights.ClubStats
 import dev.openflight.companion.core.insights.ShotEnrichment
 import dev.openflight.companion.core.insights.UnitSystem
+import dev.openflight.companion.core.model.ClubMenu
 import dev.openflight.companion.core.model.ConnectionProblem
 import dev.openflight.companion.core.model.ConnectionState
 import dev.openflight.companion.core.model.GolfClub
@@ -81,6 +82,8 @@ sealed interface DashboardEffect {
  * menu (ContentView.swift `connectionCard` and `clubSelector`).
  *
  * @property hostText the host field's text: the user's unsubmitted edit, or else the saved host.
+ * @property clubMenu issue #15: what the club menu lists, the active bag's clubs first (always
+ *   including [club]) and the rest under "All clubs"; all 20 flat without a bag.
  * @property isChangingClub a `set_club` request is in flight.
  * @property clubError the last club request's failure, shown under the menu until dismissed or retried.
  * @property piLinkConnected the Pi's Socket.IO link is up (a Pi without the SSE stream still
@@ -106,6 +109,7 @@ data class ConnectionPanelState(
     val problem: ConnectionProblem? = null,
     val profile: ProfilePickerState = ProfilePickerState(),
     val demo: Boolean = false,
+    val clubMenu: ClubMenu = ClubMenu.ALL,
 ) {
     /**
      * The problem the card spells out. A Local Network denial has its own block with the way out
