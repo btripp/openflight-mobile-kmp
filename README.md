@@ -1,0 +1,1 @@
+Screenshots referenced from PR and issue comments. Not part of the app; never merge.
