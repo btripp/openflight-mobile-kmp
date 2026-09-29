@@ -4,7 +4,6 @@ package dev.openflight.companion.feature.settings
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -16,7 +15,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.style.TextAlign
 import dev.openflight.companion.core.data.CalloutTrigger
 import dev.openflight.companion.core.data.TransportType
 import dev.openflight.companion.core.designsystem.OfCard
@@ -246,8 +244,15 @@ private fun ConnectionCard(uiState: SettingsUiState) {
                 else -> "Bluetooth"
             }
         InfoRow("Transport", transport)
-        if (uiState.transport == TransportType.WIFI && !uiState.demo.enabled) InfoRow("Host", uiState.host)
-        InfoRow("Shot stream", uiState.connectionState.description)
+        if (uiState.transport == TransportType.WIFI && !uiState.demo.enabled) {
+            InfoRow("Host", uiState.host, labelTag = SettingsUiTags.HOST_LABEL, valueTag = SettingsUiTags.HOST_VALUE)
+        }
+        InfoRow(
+            "Shot stream",
+            uiState.connectionState.description,
+            labelTag = SettingsUiTags.SHOT_STREAM_LABEL,
+            valueTag = SettingsUiTags.SHOT_STREAM_VALUE,
+        )
         LiveSessionRow(description = uiState.linkDescription, tone = uiState.linkState.tone())
         // Plan R8f: say what's wrong in words, not only with the pill's colour.
         uiState.connectionProblem?.let { problem ->
@@ -291,20 +296,40 @@ private fun LiveSessionRow(
     }
 }
 
+/**
+ * A label and its value, e.g. "Host" and `raspberrypi.local:8080`. Issue #54: in a `Row` the
+ * value only had the width the label left over, so at 200% text a long value (a DNS error quoting
+ * the host) broke mid-word inside the host name. In a [FlowRow] the value sits beside its label
+ * when it fits on that line; otherwise it moves under the label and wraps across the full width,
+ * at spaces only, like [LiveSessionRow].
+ */
 @Composable
 internal fun InfoRow(
     label: String,
     value: String,
     modifier: Modifier = Modifier,
+    labelTag: String? = null,
+    valueTag: String? = null,
 ) {
-    Row(modifier = modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        // The label keeps its width; a long value wraps within the rest of the row.
-        OfText(text = label, role = OfTextRole.BodySmall, color = OfColorTokens.CreamDim)
+    FlowRow(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalArrangement = Arrangement.spacedBy(OfSpacing.Xs),
+        itemVerticalAlignment = Alignment.CenterVertically,
+    ) {
+        OfText(
+            text = label,
+            role = OfTextRole.BodySmall,
+            color = OfColorTokens.CreamDim,
+            modifier =
+                Modifier
+                    .padding(end = OfSpacing.Md)
+                    .then(labelTag?.let { Modifier.testTag(it) } ?: Modifier),
+        )
         OfText(
             text = value,
             role = OfTextRole.TitleSmall,
-            textAlign = TextAlign.End,
-            modifier = Modifier.weight(1f).padding(start = OfSpacing.Md),
+            modifier = valueTag?.let { Modifier.testTag(it) } ?: Modifier,
         )
     }
 }
