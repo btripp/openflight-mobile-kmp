@@ -2,10 +2,8 @@
 package dev.openflight.companion.core.ble
 
 import dev.openflight.companion.core.ble.OpenFlightBleProfile.CONTROL_CHARACTERISTIC_UUID
-import dev.openflight.companion.core.ble.OpenFlightBleProfile.CONTROL_V2_CHARACTERISTIC_UUID
 import dev.openflight.companion.core.ble.OpenFlightBleProfile.SERVICE_UUID
 import dev.openflight.companion.core.ble.OpenFlightBleProfile.SHOT_CHARACTERISTIC_UUID
-import dev.openflight.companion.core.ble.OpenFlightBleProfile.SHOT_V2_CHARACTERISTIC_UUID
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
@@ -51,7 +49,10 @@ internal class FakeBleCentral(
     }
 }
 
-/** Scriptable [BlePeripheralLink] that replays notification byte arrays pushed by the test. */
+/**
+ * Scriptable [BlePeripheralLink] that replays notification byte arrays pushed by the test. By
+ * default it has the schema 2 pair; it answers nothing by itself (see [ScriptedPi]).
+ */
 internal class FakePeripheralLink(
     private val characteristics: Set<String>? = setOf(SHOT_CHARACTERISTIC_UUID, CONTROL_CHARACTERISTIC_UUID),
 ) : BlePeripheralLink {
@@ -83,8 +84,6 @@ internal class FakePeripheralLink(
 
     val shotNotifications = MutableSharedFlow<ByteArray>(extraBufferCapacity = 512)
     val controlNotifications = MutableSharedFlow<ByteArray>(extraBufferCapacity = 512)
-    val shotV2Notifications = MutableSharedFlow<ByteArray>(extraBufferCapacity = 512)
-    val controlV2Notifications = MutableSharedFlow<ByteArray>(extraBufferCapacity = 512)
 
     var releaseCount = 0
         private set
@@ -118,13 +117,7 @@ internal class FakePeripheralLink(
             check(characteristics?.contains(characteristicUuid) == true) { "observed an absent characteristic" }
             subscribeGate?.await()
             if (characteristicUuid == CONTROL_CHARACTERISTIC_UUID) controlSubscribeError?.let { throw it }
-            val source =
-                when (characteristicUuid) {
-                    SHOT_CHARACTERISTIC_UUID -> shotNotifications
-                    SHOT_V2_CHARACTERISTIC_UUID -> shotV2Notifications
-                    CONTROL_V2_CHARACTERISTIC_UUID -> controlV2Notifications
-                    else -> controlNotifications
-                }
+            val source = if (characteristicUuid == SHOT_CHARACTERISTIC_UUID) shotNotifications else controlNotifications
             try {
                 emitAll(
                     source.onSubscription {
@@ -143,7 +136,7 @@ internal class FakePeripheralLink(
         characteristicUuid: String,
         data: ByteArray,
     ) {
-        check(characteristicUuid == CONTROL_CHARACTERISTIC_UUID || characteristicUuid == CONTROL_V2_CHARACTERISTIC_UUID)
+        check(characteristicUuid == CONTROL_CHARACTERISTIC_UUID)
         writePermits?.receive()
         writeError?.let { throw it }
         writes += data
@@ -162,13 +155,5 @@ internal class FakePeripheralLink(
 
     fun notifyControl(frames: List<ByteArray>) {
         frames.forEach { check(controlNotifications.tryEmit(it)) }
-    }
-
-    fun notifyShotV2(frames: List<ByteArray>) {
-        frames.forEach { check(shotV2Notifications.tryEmit(it)) }
-    }
-
-    fun notifyControlV2(frames: List<ByteArray>) {
-        frames.forEach { check(controlV2Notifications.tryEmit(it)) }
     }
 }

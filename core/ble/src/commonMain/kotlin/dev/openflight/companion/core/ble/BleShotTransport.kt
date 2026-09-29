@@ -2,12 +2,11 @@
 package dev.openflight.companion.core.ble
 
 import dev.openflight.companion.core.ble.OpenFlightBleProfile.CONTROL_CHARACTERISTIC_UUID
-import dev.openflight.companion.core.ble.OpenFlightBleProfile.CONTROL_V2_CHARACTERISTIC_UUID
 import dev.openflight.companion.core.ble.OpenFlightBleProfile.SERVICE_UUID
 import dev.openflight.companion.core.ble.OpenFlightBleProfile.SHOT_CHARACTERISTIC_UUID
-import dev.openflight.companion.core.ble.OpenFlightBleProfile.SHOT_V2_CHARACTERISTIC_UUID
 import dev.openflight.companion.core.model.CalibrationResult
 import dev.openflight.companion.core.model.ClubSelection
+import dev.openflight.companion.core.model.ConnectionErrorKind
 import dev.openflight.companion.core.model.ConnectionState
 import dev.openflight.companion.core.model.GolfClub
 import dev.openflight.companion.core.model.PhoneOrientationMeasurement
@@ -18,6 +17,7 @@ import dev.openflight.companion.core.protocol.BleFrameReassembler
 import dev.openflight.companion.core.protocol.ControlCodec
 import dev.openflight.companion.core.protocol.ControlDecodeError
 import dev.openflight.companion.core.protocol.ControlResponseEnvelope
+import dev.openflight.companion.core.protocol.HelloResult
 import dev.openflight.companion.core.protocol.SchemaV2Codec
 import dev.openflight.companion.core.protocol.SchemaV2Commands
 import dev.openflight.companion.core.protocol.SchemaV2Event
@@ -67,34 +67,33 @@ private fun lowercaseUuid(): String = Uuid.random().toString().lowercase()
 
 /**
  * Live shots and phone controls over BLE, ported from `ios/OpenFlight/BluetoothManager.swift`
- * (plan §0.1, §0.3, step 5).
+ * (plan §0.1, §0.3, step 5) and speaking **schema 2 only** (plan R8e, backend `docs/ios-ble.md`).
  *
- * Lifecycle: `start()` scans for the OpenFlight service, connects to the first advertiser,
- * subscribes to shot notifications (→ [ConnectionState.Connected]) and, when the Pi has it, to the
- * control characteristic (→ [supportsControls]). A dropped connection fails any pending control
- * request, resets both frame reassemblers (never the shot decoder, so the replay the Pi sends on
- * resubscribe is suppressed), and rescans after one second.
+ * Lifecycle: `start()` scans for the OpenFlight service and connects to the first advertiser.
+ * Discovery requires the service's shot and control characteristics; a Pi without them is an
+ * older build that only spoke version one, which this app no longer supports
+ * ([PI_NEEDS_SCHEMA_2], [ConnectionErrorKind.PI_UPDATE_REQUIRED]). Negotiation then subscribes to
+ * control, writes `hello {"client_schema_max":2}` (the usual 10 s control timeout) and, once the Pi
+ * answers with schema 2, subscribes to shots (→ [ConnectionState.Connected]). A refused `hello`, a
+ * timeout or a failed control subscription is a [ConnectionState.Error] that says why; there is no
+ * version-one fallback. Optional `hello` features (e.g. `shot_catch_up`) are recorded in
+ * [piFeatures] and never required.
+ *
+ * A dropped connection fails any pending control request, resets both frame reassemblers (never the
+ * shot decoder, so the replay the Pi sends on resubscribe is suppressed), and rescans after one
+ * second, which negotiates again.
  *
  * Threading: every mutable field is touched only on [scope]'s dispatcher, which must be
  * single-threaded (the reference is `@MainActor`). The platform factories supply one.
  *
  * Platform notes:
- * - v1 is foreground-only like the reference: no CoreBluetooth state restoration and no
+ * - Foreground-only like the reference: no CoreBluetooth state restoration and no
  *   `bluetooth-central` background mode (Kable's `CentralManager.configure { stateRestoration }`
  *   stays off).
  * - Frames are at most 20 bytes, which fits Android's default 23-byte ATT MTU (20-byte payload),
  *   so no larger MTU is requested.
  * - The transport never requests runtime permissions; it reports
  *   [ConnectionState.Unavailable] with [PERMISSION_REQUIRED] and leaves the prompt to the UI.
- *
- * Schema v2 (plan R8e, backend `docs/ios-ble.md` "Negotiation"): when discovery finds the v2
- * shot/control pair, the transport subscribes to the v2 control characteristic and sends `hello`
- * (with the usual 10 s control timeout) before anything else. On success it subscribes to the v2
- * shot characteristic only (→ [ConnectionState.Connected]); the v1 pair is never subscribed, so
- * the Pi sends this phone no v1 traffic. On `ok:false`, a timeout, a failed subscription or a Pi
- * without the v2 pair, it unsubscribes from v2 control and continues exactly as version one.
- * Over v2, control commands go to the v2 control characteristic in v2 envelopes, v2 events arrive
- * on [schemaEvents], and [SchemaV2Commands] adds the read-and-select commands.
  */
 @Suppress("TooManyFunctions") // One state machine, split by lifecycle phase for readability.
 class BleShotTransport internal constructor(
@@ -134,17 +133,19 @@ class BleShotTransport internal constructor(
     private val control =
         ControlChannel(config.requestIds, config.controlTimeout, config.initialControlSequence)
 
-    /** The v2 control characteristic's own channel: its own sequence, reassembler and pending request. */
-    private val controlV2 =
-        ControlChannel(config.requestIds, config.controlTimeout, config.initialControlSequence, schemaV2 = true)
+    /** The features the Pi listed in its `hello` result; empty until negotiated. */
+    private val mutablePiFeatures = MutableStateFlow<Set<String>>(emptySet())
+    internal val piFeatures: StateFlow<Set<String>> = mutablePiFeatures.asStateFlow()
 
     private var adapterWatcher: Job? = null
     private var sessionJob: Job? = null
     private var reconnectJob: Job? = null
 
-    /** The connected peripheral once discovery found the shot characteristic. */
+    /** The connected peripheral once discovery found the shot and control characteristics. */
     private var link: BlePeripheralLink? = null
-    private var controlCharacteristicPresent = false
+
+    /** `true` from a successful `hello` until the control subscription fails or the link drops. */
+    private var controlReady = false
 
     override fun start() {
         scope.launch { startNow() }
@@ -162,28 +163,28 @@ class BleShotTransport internal constructor(
     }
 
     override suspend fun setClub(club: GolfClub): ClubSelection {
-        val response = sendControl { requestId -> ControlCodec.encodeSetClub(club, requestId) }
+        val response = sendControl { requestId -> SchemaV2Codec.encodeSetClub(club, requestId) }
         return decodeResult { ControlCodec.decodeClubResult(response) }
             .also { selection -> mutableActiveClub.value = selection.club }
     }
 
     override suspend fun currentClub(): ClubSelection {
-        val response = sendControl { requestId -> ControlCodec.encodeGetClub(requestId) }
+        val response = sendControl { requestId -> SchemaV2Codec.encodeGetClub(requestId) }
         return decodeResult { ControlCodec.decodeClubResult(response) }
             .also { selection -> mutableActiveClub.value = selection.club }
     }
 
     override suspend fun submitCalibration(measurement: PhoneOrientationMeasurement): CalibrationResult {
-        val response = sendControl { requestId -> ControlCodec.encodeCalibration(measurement, requestId) }
+        val response = sendControl { requestId -> SchemaV2Codec.encodeCalibration(measurement, requestId) }
         return decodeResult { ControlCodec.decodeCalibrationResult(response) }
     }
 
     override suspend fun requestProfiles() {
-        sendSchemaV2 { requestId -> SchemaV2Codec.encodeGetProfiles(requestId) }
+        sendControl { requestId -> SchemaV2Codec.encodeGetProfiles(requestId) }
     }
 
     override suspend fun requestPowerStatus(): PowerStatus {
-        val response = sendSchemaV2 { requestId -> SchemaV2Codec.encodeGetPowerStatus(requestId) }
+        val response = sendControl { requestId -> SchemaV2Codec.encodeGetPowerStatus(requestId) }
         val status =
             decodeResult {
                 SchemaV2Codec.decodePowerStatus(response.result ?: throw ControlDecodeError.MissingResult)
@@ -193,7 +194,7 @@ class BleShotTransport internal constructor(
     }
 
     override suspend fun setActiveProfile(profileId: String) {
-        sendSchemaV2 { requestId -> SchemaV2Codec.encodeSetActiveProfile(profileId, requestId) }
+        sendControl { requestId -> SchemaV2Codec.encodeSetActiveProfile(profileId, requestId) }
     }
 
     // region Lifecycle
@@ -268,17 +269,16 @@ class BleShotTransport internal constructor(
 
     private fun clearConnection() {
         control.fail(BleControlException.Disconnected())
-        controlV2.fail(BleControlException.Disconnected())
         link = null
-        controlCharacteristicPresent = false
+        controlReady = false
         mutableSupportsControls.value = false
         mutableSchemaV2Active.value = false
+        mutablePiFeatures.value = emptySet()
         mutableActiveClub.value = null
         shotReassembler.reset()
         // The control reassembler is reset by fail() when a request was pending; reset it
         // unconditionally too so a half-received event can't leak into the next connection.
         control.resetFrames()
-        controlV2.resetFrames()
         // The shot decoder is deliberately NOT reset (plan §0.3): its last event id suppresses
         // the replay the Pi sends when the next connection subscribes.
     }
@@ -335,7 +335,7 @@ class BleShotTransport internal constructor(
             false
         }
 
-    /** The reference's `didDiscoverServices`/`didDiscoverCharacteristicsFor`/`setNotifyValue`. */
+    /** The reference's `didDiscoverServices`/`didDiscoverCharacteristicsFor`, then negotiation. */
     private fun discoverAndObserve(
         peripheral: BlePeripheralLink,
         connectionScope: CoroutineScope,
@@ -346,111 +346,117 @@ class BleShotTransport internal constructor(
             mutableState.value = ConnectionState.Error(SERVICE_NOT_FOUND)
             return
         }
-        if (SHOT_CHARACTERISTIC_UUID !in characteristics) {
-            mutableState.value = ConnectionState.Error(SHOTS_NOT_FOUND)
+        // Checked before observing: Kable's observe() on an absent characteristic fails the flow
+        // with NoSuchElementException. A Pi without the pair predates schema 2.
+        if (SHOT_CHARACTERISTIC_UUID !in characteristics || CONTROL_CHARACTERISTIC_UUID !in characteristics) {
+            mutableState.value = ConnectionState.Error(PI_NEEDS_SCHEMA_2, ConnectionErrorKind.PI_UPDATE_REQUIRED)
             return
         }
         link = peripheral
-        // Plan R8e: discovering the v2 pair is itself the capability signal (backend "Negotiation").
-        if (SHOT_V2_CHARACTERISTIC_UUID in characteristics && CONTROL_V2_CHARACTERISTIC_UUID in characteristics) {
-            connectionScope.launch { negotiateSchemaV2(peripheral, connectionScope, characteristics) }
-        } else {
-            observeVersionOne(peripheral, connectionScope, characteristics)
-        }
-    }
-
-    /** The version-one subscriptions, unchanged from the reference. */
-    private fun observeVersionOne(
-        peripheral: BlePeripheralLink,
-        connectionScope: CoroutineScope,
-        characteristics: Set<String>,
-    ) {
-        // Checked before observing: Kable's observe() on an absent characteristic fails the flow
-        // with NoSuchElementException, and an older Pi has no control characteristic at all.
-        controlCharacteristicPresent = CONTROL_CHARACTERISTIC_UUID in characteristics
-        connectionScope.launch { observeShots(peripheral, SHOT_CHARACTERISTIC_UUID) }
-        if (controlCharacteristicPresent) connectionScope.launch { observeControl(peripheral) }
+        connectionScope.launch { negotiate(peripheral, connectionScope) }
     }
 
     /**
-     * Subscribes to the v2 control characteristic and sends `hello`. Schema 2 → subscribe to the v2
-     * shot characteristic only; anything else → drop the v2 subscription and fall back to v1.
+     * Subscribes to control and sends `hello`. Schema 2 → subscribe to shots; anything else → an
+     * error state (and the control subscription is dropped, so the Pi sends this phone nothing).
      */
-    private suspend fun negotiateSchemaV2(
+    private suspend fun negotiate(
         peripheral: BlePeripheralLink,
         connectionScope: CoroutineScope,
-        characteristics: Set<String>,
     ) {
         val subscribed = CompletableDeferred<Unit>()
-        val controlJob = connectionScope.launch { observeControlV2(peripheral, subscribed) }
-        if (helloNegotiatesV2(peripheral, subscribed)) {
-            controlCharacteristicPresent = true
-            mutableSchemaV2Active.value = true
-            mutableSupportsControls.value = true
-            connectionScope.launch { observeShots(peripheral, SHOT_V2_CHARACTERISTIC_UUID) }
-        } else {
-            // Unsubscribing tells the Pi to stop v2 traffic to this phone (per-characteristic gating).
-            controlJob.cancel()
-            controlV2.resetFrames()
-            observeVersionOne(peripheral, connectionScope, characteristics)
+        val controlJob = connectionScope.launch { observeControl(peripheral, subscribed) }
+        when (val outcome = hello(peripheral, subscribed)) {
+            is Negotiation.Negotiated -> {
+                mutablePiFeatures.value = outcome.result.features.toSet()
+                controlReady = true
+                mutableSchemaV2Active.value = true
+                mutableSupportsControls.value = true
+                connectionScope.launch { observeShots(peripheral) }
+            }
+
+            is Negotiation.Failed -> {
+                controlJob.cancel()
+                control.resetFrames()
+                mutableState.value = outcome.error
+            }
         }
     }
 
-    /** `true` only when the Pi answered `hello` with schema 2 in time. */
-    @Suppress("TooGenericExceptionCaught") // Any failure means "treat this Pi as version one".
-    private suspend fun helloNegotiatesV2(
+    private sealed interface Negotiation {
+        class Negotiated(
+            val result: HelloResult,
+        ) : Negotiation
+
+        class Failed(
+            val error: ConnectionState.Error,
+        ) : Negotiation
+    }
+
+    /** Waits for control notifications, then sends `hello`; the outcome decides the connection. */
+    private suspend fun hello(
         peripheral: BlePeripheralLink,
         subscribed: CompletableDeferred<Unit>,
-    ): Boolean =
+    ): Negotiation = awaitControlSubscription(subscribed)?.let(Negotiation::Failed) ?: sendHello(peripheral)
+
+    /** `null` once control notifications are enabled, or the error to show. */
+    @Suppress("TooGenericExceptionCaught") // Platform stacks fail CCCD writes with assorted exceptions.
+    private suspend fun awaitControlSubscription(subscribed: CompletableDeferred<Unit>): ConnectionState.Error? =
         try {
             withTimeout(controlTimeout) { subscribed.await() }
-            val response =
-                controlV2.send({ requestId -> SchemaV2Codec.encodeHello(requestId) }) { frame ->
-                    peripheral.writeWithResponse(SERVICE_UUID, CONTROL_V2_CHARACTERISTIC_UUID, frame)
-                }
-            SchemaV2Codec.decodeHelloResult(response).schemaVersion >= SchemaV2Codec.SCHEMA_VERSION
+            null
         } catch (_: TimeoutCancellationException) {
-            // The subscription never completed (ControlChannel's own timeout is BleControlException).
-            false
+            ConnectionState.Error(HANDSHAKE_TIMED_OUT)
         } catch (cancellation: CancellationException) {
             throw cancellation
         } catch (_: Exception) {
-            // ok:false (an older Pi: "Unsupported phone command: hello"), a hello timeout, a failed
-            // write or subscription, or an unreadable result.
-            false
+            ConnectionState.Error(CONTROL_SUBSCRIBE_FAILED)
         }
 
-    private suspend fun observeShots(
-        peripheral: BlePeripheralLink,
-        characteristicUuid: String,
-    ) {
+    @Suppress("TooGenericExceptionCaught") // Any other failure is an unreadable hello result.
+    private suspend fun sendHello(peripheral: BlePeripheralLink): Negotiation =
+        try {
+            val response =
+                control.send({ requestId -> SchemaV2Codec.encodeHello(requestId) }) { frame ->
+                    peripheral.writeWithResponse(SERVICE_UUID, CONTROL_CHARACTERISTIC_UUID, frame)
+                }
+            val result = SchemaV2Codec.decodeHelloResult(response)
+            if (result.schemaVersion >= SchemaV2Codec.SCHEMA_VERSION) {
+                Negotiation.Negotiated(result)
+            } else {
+                Negotiation.Failed(refused())
+            }
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (_: BleControlException.Rejected) {
+            // ok:false: the Pi refuses client_schema_max 2 (or doesn't know hello at all).
+            Negotiation.Failed(refused())
+        } catch (_: BleControlException.TimedOut) {
+            Negotiation.Failed(ConnectionState.Error(HANDSHAKE_TIMED_OUT))
+        } catch (error: Exception) {
+            // A failed write, a dropped subscription, or an unreadable result.
+            Negotiation.Failed(ConnectionState.Error(error.message ?: HANDSHAKE_FAILED))
+        }
+
+    private fun refused(): ConnectionState.Error =
+        ConnectionState.Error(HANDSHAKE_REFUSED, ConnectionErrorKind.PI_UPDATE_REQUIRED)
+
+    private suspend fun observeShots(peripheral: BlePeripheralLink) {
         peripheral
-            .observe(SERVICE_UUID, characteristicUuid) { mutableState.value = ConnectionState.Connected }
+            .observe(SERVICE_UUID, SHOT_CHARACTERISTIC_UUID) { mutableState.value = ConnectionState.Connected }
             .catch { error -> mutableState.value = ConnectionState.Error(error.message ?: SUBSCRIBE_FAILED) }
             .collect { frame -> receiveShotFrame(frame) }
     }
 
-    private suspend fun observeControlV2(
+    private suspend fun observeControl(
         peripheral: BlePeripheralLink,
         subscribed: CompletableDeferred<Unit>,
     ) {
         peripheral
-            .observe(SERVICE_UUID, CONTROL_V2_CHARACTERISTIC_UUID) { subscribed.complete(Unit) }
+            .observe(SERVICE_UUID, CONTROL_CHARACTERISTIC_UUID) { subscribed.complete(Unit) }
             .catch { error ->
                 subscribed.completeExceptionally(error)
-                if (mutableSchemaV2Active.value) {
-                    controlCharacteristicPresent = false
-                    mutableSupportsControls.value = false
-                }
-                controlV2.fail(BleControlException.Failed(error))
-            }.collect { frame -> receiveV2ControlFrame(frame) }
-    }
-
-    private suspend fun observeControl(peripheral: BlePeripheralLink) {
-        peripheral
-            .observe(SERVICE_UUID, CONTROL_CHARACTERISTIC_UUID) { mutableSupportsControls.value = true }
-            .catch { error ->
-                controlCharacteristicPresent = false
+                controlReady = false
                 mutableSupportsControls.value = false
                 control.fail(BleControlException.Failed(error))
             }.collect { frame -> receiveControlFrame(frame) }
@@ -485,14 +491,9 @@ class BleShotTransport internal constructor(
         mutableState.value = ConnectionState.Error(error.message ?: DECODE_FAILED)
     }
 
-    /** The reference's `receiveControl(_:)`. */
+    /** The reference's `receiveControl(_:)`: responses, `club_changed` and the other v2 events. */
     internal fun receiveControlFrame(frame: ByteArray) {
         route(control.receive(frame))
-    }
-
-    /** The v2 control characteristic: responses, `club_changed` and the other v2 events. */
-    internal fun receiveV2ControlFrame(frame: ByteArray) {
-        route(controlV2.receive(frame))
     }
 
     private fun route(inbound: ControlInbound) {
@@ -506,43 +507,18 @@ class BleShotTransport internal constructor(
 
     // endregion
 
-    /**
-     * Sends a version-one command ([encode] builds its v1 envelope). Over schema v2 it goes to the
-     * v2 control characteristic, re-enveloped as v2.
-     */
+    /** Sends one schema 2 command ([encode] builds its envelope) and awaits the response. */
     private suspend fun sendControl(encode: (requestId: String) -> ByteArray): ControlResponseEnvelope =
         withContext(confined) {
-            if (mutableSchemaV2Active.value) {
-                sendOn(
-                    controlV2,
-                    CONTROL_V2_CHARACTERISTIC_UUID,
-                ) { requestId -> SchemaV2Codec.toV2Command(encode(requestId)) }
-            } else {
-                sendOn(control, CONTROL_CHARACTERISTIC_UUID, encode)
+            val peripheral = link
+            if (mutableState.value != ConnectionState.Connected || peripheral == null) {
+                throw BleControlException.Unavailable()
+            }
+            if (!controlReady) throw BleControlException.Unsupported()
+            control.send(encode) { frame ->
+                peripheral.writeWithResponse(SERVICE_UUID, CONTROL_CHARACTERISTIC_UUID, frame)
             }
         }
-
-    /** A v2-only command ([encode] builds its v2 envelope). */
-    private suspend fun sendSchemaV2(encode: (requestId: String) -> ByteArray): ControlResponseEnvelope =
-        withContext(confined) {
-            if (!mutableSchemaV2Active.value && mutableState.value == ConnectionState.Connected) {
-                throw BleControlException.Unsupported()
-            }
-            sendOn(controlV2, CONTROL_V2_CHARACTERISTIC_UUID, encode)
-        }
-
-    private suspend fun sendOn(
-        channel: ControlChannel,
-        characteristicUuid: String,
-        encode: (requestId: String) -> ByteArray,
-    ): ControlResponseEnvelope {
-        val peripheral = link
-        if (mutableState.value != ConnectionState.Connected || peripheral == null) {
-            throw BleControlException.Unavailable()
-        }
-        if (!controlCharacteristicPresent) throw BleControlException.Unsupported()
-        return channel.send(encode) { frame -> peripheral.writeWithResponse(SERVICE_UUID, characteristicUuid, frame) }
-    }
 
     private inline fun <T> decodeResult(decode: () -> T): T =
         try {
@@ -559,7 +535,25 @@ class BleShotTransport internal constructor(
         private const val SCAN_FAILED = "Could not scan for OpenFlight"
         private const val CONNECT_FAILED = "Could not connect to OpenFlight"
         private const val SERVICE_NOT_FOUND = "OpenFlight BLE service was not found"
-        private const val SHOTS_NOT_FOUND = "OpenFlight shot notifications were not found"
+
+        /** The service lacks the schema 2 shot/control pair: a Pi that only spoke version one. */
+        const val PI_NEEDS_SCHEMA_2 =
+            "This Pi's Bluetooth is too old for this app: it needs the Pi's schema 2 phone update. " +
+                "Update OpenFlight on the Pi, or switch to Network."
+
+        /** `hello` answered `ok:false` (or with a schema below 2). */
+        const val HANDSHAKE_REFUSED =
+            "The Pi refused the Bluetooth schema 2 handshake: it needs the schema 2 phone update. " +
+                "Update OpenFlight on the Pi, or switch to Network."
+
+        /** Neither the control subscription nor `hello` completed within the control timeout. */
+        const val HANDSHAKE_TIMED_OUT = "The Pi didn't answer the Bluetooth handshake. Retry, or switch to Network."
+
+        /** Notifications couldn't be enabled on the control characteristic. */
+        const val CONTROL_SUBSCRIBE_FAILED =
+            "Couldn't turn on the Pi's Bluetooth control channel. Retry, or switch to Network."
+
+        private const val HANDSHAKE_FAILED = "The Bluetooth handshake with the Pi failed."
         private const val SUBSCRIBE_FAILED = "Could not subscribe to OpenFlight shots"
         private const val DECODE_FAILED = "Could not read the shot from OpenFlight"
         private const val SHOT_BUFFER = 64

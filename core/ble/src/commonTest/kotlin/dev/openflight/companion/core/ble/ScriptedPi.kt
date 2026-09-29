@@ -2,9 +2,7 @@
 package dev.openflight.companion.core.ble
 
 import dev.openflight.companion.core.ble.OpenFlightBleProfile.CONTROL_CHARACTERISTIC_UUID
-import dev.openflight.companion.core.ble.OpenFlightBleProfile.CONTROL_V2_CHARACTERISTIC_UUID
 import dev.openflight.companion.core.ble.OpenFlightBleProfile.SHOT_CHARACTERISTIC_UUID
-import dev.openflight.companion.core.ble.OpenFlightBleProfile.SHOT_V2_CHARACTERISTIC_UUID
 import dev.openflight.companion.core.protocol.BleFrameReassembler
 import dev.openflight.companion.core.protocol.OpenFlightJson
 import kotlinx.serialization.json.JsonElement
@@ -16,13 +14,14 @@ import kotlinx.serialization.json.jsonPrimitive
 /**
  * A scripted OpenFlight Pi behind [FakePeripheralLink] (plan R8e "Testing without hardware"). It
  * reassembles what the phone writes, answers like the backend's `BleShotPublisher` and dispatch
- * (`src/openflight/ble/publisher.py`, `docs/ios-ble.md`): responses in the characteristic's schema,
- * events before their command's response, one frame sequence per characteristic.
+ * (`src/openflight/ble/publisher.py`, `docs/ios-ble.md`): schema 2 responses, events before their
+ * command's response, one frame sequence per characteristic.
  *
- * [schemaV2] `false` is a Pi without the v2 pair (backend main + R8a, or jfish's fork).
+ * The Pi's service has exactly the schema 2 shot/control pair; [characteristics] overrides that to
+ * model an older Pi (e.g. only the removed version-one pair).
  */
 internal class ScriptedPi(
-    private val schemaV2: Boolean = true,
+    private val characteristics: Set<String>? = SCHEMA_2_PAIR,
 ) {
     enum class HelloAnswer {
         /** `{"schema_version":2,"features":[...],"characteristics":{...}}`. */
@@ -36,6 +35,12 @@ internal class ScriptedPi(
     }
 
     var hello = HelloAnswer.V2
+
+    /** The `hello` result [HelloAnswer.V2] sends. */
+    var helloResult = HELLO_RESULT
+
+    /** `false`: answer only `hello`, and leave every other command to the test. */
+    var answersCommands = true
     var club = "driver"
     var profiles = listOf("p1" to "Zoë ⛳", "p2" to "Sam")
     var activeProfileId = "p1"
@@ -51,17 +56,6 @@ internal class ScriptedPi(
 
     /** A fresh single-use peripheral for the next connection. */
     fun link(): FakePeripheralLink {
-        val characteristics =
-            if (schemaV2) {
-                setOf(
-                    SHOT_CHARACTERISTIC_UUID,
-                    CONTROL_CHARACTERISTIC_UUID,
-                    SHOT_V2_CHARACTERISTIC_UUID,
-                    CONTROL_V2_CHARACTERISTIC_UUID,
-                )
-            } else {
-                setOf(SHOT_CHARACTERISTIC_UUID, CONTROL_CHARACTERISTIC_UUID)
-            }
         reassemblers.clear()
         return FakePeripheralLink(characteristics).also { link ->
             link.onWrite = { uuid, frame -> receive(link, uuid, frame) }
@@ -70,11 +64,11 @@ internal class ScriptedPi(
 
     fun commandTypes(): List<String> = commands.map { (_, command) -> command.getValue("type").jsonPrimitive.content }
 
-    /** Notifies a v2 event object (sorted keys like `encode_message_v2`) on the v2 control characteristic. */
+    /** Notifies a v2 event object (sorted keys like `encode_message_v2`) on the control characteristic. */
     fun notifyEvent(
         link: FakePeripheralLink,
         json: String,
-    ) = notify(link, CONTROL_V2_CHARACTERISTIC_UUID, json)
+    ) = notify(link, CONTROL_CHARACTERISTIC_UUID, json)
 
     fun notify(
         link: FakePeripheralLink,
@@ -84,9 +78,7 @@ internal class ScriptedPi(
         val frames = makeBleFrames(json.encodeToByteArray(), nextSequence(characteristicUuid))
         when (characteristicUuid) {
             CONTROL_CHARACTERISTIC_UUID -> link.notifyControl(frames)
-            CONTROL_V2_CHARACTERISTIC_UUID -> link.notifyControlV2(frames)
-            SHOT_CHARACTERISTIC_UUID -> link.notifyShot(frames)
-            else -> link.notifyShotV2(frames)
+            else -> link.notifyShot(frames)
         }
     }
 
@@ -115,22 +107,19 @@ internal class ScriptedPi(
     ) {
         val requestId = command.getValue("request_id").jsonPrimitive.content
         val payload = command["payload"]?.jsonObject ?: JsonObject(emptyMap())
-        val schema = if (uuid == CONTROL_V2_CHARACTERISTIC_UUID) 2 else 1
 
         fun ok(result: String) =
-            respond(link, uuid, """{"ok":true,"request_id":"$requestId","result":$result,"schema_version":$schema}""")
+            respond(link, uuid, """{"ok":true,"request_id":"$requestId","result":$result,"schema_version":2}""")
 
         fun error(message: String) =
-            respond(
-                link,
-                uuid,
-                """{"error":"$message","ok":false,"request_id":"$requestId","schema_version":$schema}""",
-            )
+            respond(link, uuid, """{"error":"$message","ok":false,"request_id":"$requestId","schema_version":2}""")
 
-        when (val type = command.getValue("type").jsonPrimitive.content) {
+        val type = command.getValue("type").jsonPrimitive.content
+        if (type != "hello" && !answersCommands) return
+        when (type) {
             "hello" -> {
                 when (hello) {
-                    HelloAnswer.V2 -> ok(HELLO_RESULT)
+                    HelloAnswer.V2 -> ok(helloResult)
                     HelloAnswer.UNSUPPORTED -> error("Unsupported phone command: hello")
                     HelloAnswer.SILENT -> Unit
                 }
@@ -142,7 +131,7 @@ internal class ScriptedPi(
 
             "set_club" -> {
                 club = payload.string("club")
-                notify(link, uuid, """{"club":"$club","schema_version":$schema,"type":"club_changed"}""")
+                notify(link, uuid, """{"club":"$club","schema_version":2,"type":"club_changed"}""")
                 ok("""{"club":"$club","status":"applied"}""")
             }
 
@@ -184,6 +173,12 @@ internal class ScriptedPi(
     private fun JsonObject.string(key: String): String = (getValue(key) as JsonPrimitive).content
 
     companion object {
+        val SCHEMA_2_PAIR = setOf(SHOT_CHARACTERISTIC_UUID, CONTROL_CHARACTERISTIC_UUID)
+
+        /** The version-one pair the Pi no longer serves (`2b28f67e-…` shot, `7e3b5d6c-…` control). */
+        val REMOVED_V1_PAIR = setOf("2b28f67e-9011-41d2-98ed-562b47d7a5e4", "7e3b5d6c-7f10-4d4a-9c39-25e2b77f4a11")
+
+        /** The backend's `v2_response_hello` golden result. */
         const val HELLO_RESULT =
             """{"characteristics":{"control":"7BA96E63-12C2-4CE0-BB84-3513C7FD1474",""" +
                 """"shot":"ED365FE6-3ABF-4FC3-8E44-D9525A22DABD"},"features":["provisional_shots",""" +

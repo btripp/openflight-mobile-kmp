@@ -36,7 +36,7 @@ internal sealed interface ControlInbound {
         val message: String,
     ) : ControlInbound
 
-    /** A schema v2 event other than `club_changed` (v2 control characteristic only). */
+    /** A schema v2 event other than `club_changed`. */
     data class Event(
         val event: SchemaV2Event,
     ) : ControlInbound
@@ -50,17 +50,16 @@ internal sealed interface ControlInbound {
  * Not thread-safe: [BleShotTransport] confines every call to one single-threaded dispatcher, the
  * same way the reference is `@MainActor`.
  *
- * One instance per control characteristic (plan R8e): [schemaV2] is the v2 control
- * characteristic's channel, which answers with `schema_version: 2` and also notifies v2 events.
+ * Schema 2 only (plan R8e): responses and events carry `schema_version: 2`, and the control
+ * characteristic also notifies the v2 events.
  */
 @Suppress("TooManyFunctions") // send/receive plus one helper per inbound message kind.
 internal class ControlChannel(
     private val requestIds: () -> String,
     private val timeout: kotlin.time.Duration,
     initialSequence: Int = 0,
-    private val schemaV2: Boolean = false,
 ) {
-    private val schemas = if (schemaV2) ControlCodec.V1_AND_V2_SCHEMAS else ControlCodec.V1_SCHEMAS
+    private val schemas = ControlCodec.V2_SCHEMAS
 
     private class PendingRequest(
         val requestId: String,
@@ -116,7 +115,7 @@ internal class ControlChannel(
             }
 
             // v2 events carry a type and never a request_id; responses are the other way round.
-            schemaV2 && type != null -> {
+            type != null -> {
                 decodeEvent(json)
             }
 
@@ -193,7 +192,7 @@ internal class ControlChannel(
             // SerializationException (an unknown club, a missing field) is an IllegalArgumentException.
             ControlInbound.ClubChangedInvalid(error.message ?: INVALID_CLUB_EVENT)
         } catch (error: ControlDecodeError) {
-            // schema_version != 1: the reference throws invalidResponse here.
+            // schema_version != 2: the reference throws invalidResponse here.
             ControlInbound.ClubChangedInvalid(error.message ?: INVALID_CLUB_EVENT)
         }
 
@@ -220,7 +219,12 @@ internal class ControlChannel(
             else -> {
                 finish()
                 request.response.complete(
-                    ControlResponseEnvelope(requestId = requestId, ok = true, result = json["result"]),
+                    ControlResponseEnvelope(
+                        schemaVersion = schemaVersion,
+                        requestId = requestId,
+                        ok = true,
+                        result = json["result"],
+                    ),
                 )
             }
         }

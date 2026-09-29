@@ -66,4 +66,10 @@ enum class ConnectionErrorKind {
      * and `core:data` shows the Socket.IO link's state in its place.
      */
     STREAM_UNAVAILABLE,
+
+    /**
+     * Plan R8e: the Pi's Bluetooth predates schema 2 (no schema 2 shot/control pair, or it refused
+     * the `hello` handshake). Retry can't fix it: update the Pi, or switch to Network.
+     */
+    PI_UPDATE_REQUIRED,
 }

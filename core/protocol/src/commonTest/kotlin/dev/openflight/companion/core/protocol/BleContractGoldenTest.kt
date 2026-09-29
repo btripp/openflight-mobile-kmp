@@ -55,19 +55,6 @@ class BleContractGoldenTest {
     }
 
     @Test
-    fun theV1ShotGoldenDecodesLikeTheSharedFixture() {
-        val shot = ShotEventDecoder().decode(serverPayload("v1_shot"))
-
-        assertThat(shot).isNotNull().all {
-            prop("schemaVersion") { it.schemaVersion }.isEqualTo(1)
-            prop("eventId") { it.eventId }.isEqualTo("B0D91F0A-7950-4D7E-9DD5-AF9777C190E1")
-            prop("ballSpeedMph") { it.ballSpeedMph }.isEqualTo(151.4)
-            prop("final") { it.final }.isNull()
-            prop("isProvisional") { it.isProvisional }.isFalse()
-        }
-    }
-
-    @Test
     fun theV2ProvisionalAndFinalShotsShareAnEventIdAndBothPassTheDecoder() {
         val decoder = ShotEventDecoder()
 
@@ -107,11 +94,9 @@ class BleContractGoldenTest {
     }
 
     @Test
-    fun clubChangedGoldensDecodeOnTheirCharacteristic() {
-        assertThat(ControlCodec.decodeClubChangedEvent(serverPayload("v1_club_changed"))).isEqualTo(GolfClub.IRON_7)
-        assertThat(
-            ControlCodec.decodeClubChangedEvent(serverPayload("v2_event_club_changed"), ControlCodec.V1_AND_V2_SCHEMAS),
-        ).isEqualTo(GolfClub.IRON_7)
+    fun theClubChangedGoldenDecodesOnTheSchema2Link() {
+        assertThat(ControlCodec.decodeClubChangedEvent(serverPayload("v2_event_club_changed"), ControlCodec.V2_SCHEMAS))
+            .isEqualTo(GolfClub.IRON_7)
     }
 
     @Test
@@ -144,27 +129,22 @@ class BleContractGoldenTest {
 
     @Test
     fun responseGoldensDecode() {
-        val getClub = ControlCodec.decodeResponse(serverPayload("v1_response_get_club"))
-        assertThat(ControlCodec.decodeClubResult(getClub).club).isEqualTo(GolfClub.IRON_7)
-
-        for (name in listOf("v1_response_hello", "v2_response_hello")) {
-            val hello = SchemaV2Codec.decodeHelloResult(ControlCodec.decodeResponse(serverPayload(name)))
-            assertThat(hello.schemaVersion, name).isEqualTo(2)
-            assertThat(hello.features, name).containsExactly(
-                "provisional_shots",
-                "shot_processing",
-                "profiles",
-                "power_status",
-                "shot_deleted",
-                "club",
-            )
-            assertThat(hello.characteristics["shot"], name).isEqualTo("ED365FE6-3ABF-4FC3-8E44-D9525A22DABD")
-            assertThat(hello.characteristics["control"], name).isEqualTo("7BA96E63-12C2-4CE0-BB84-3513C7FD1474")
-        }
-
-        val oldPi = ControlCodec.decodeResponse(serverPayload("v1_response_unknown_command"))
-        assertThat(oldPi.ok).isFalse()
-        assertThat(oldPi.error).isEqualTo("Unsupported phone command: hello")
+        val helloResponse = ControlCodec.decodeResponse(serverPayload("v2_response_hello"))
+        assertThat(helloResponse.schemaVersion).isEqualTo(2)
+        val hello = SchemaV2Codec.decodeHelloResult(helloResponse)
+        assertThat(hello.schemaVersion).isEqualTo(2)
+        assertThat(hello.features).containsExactly(
+            "provisional_shots",
+            "shot_processing",
+            "profiles",
+            "power_status",
+            "shot_deleted",
+            "club",
+        )
+        // Optional features a later Pi adds are detected, never required.
+        assertThat(hello.supports(SchemaV2Codec.FEATURE_SHOT_CATCH_UP)).isFalse()
+        assertThat(hello.characteristics["shot"]).isEqualTo("ED365FE6-3ABF-4FC3-8E44-D9525A22DABD")
+        assertThat(hello.characteristics["control"]).isEqualTo("7BA96E63-12C2-4CE0-BB84-3513C7FD1474")
 
         val refused = ControlCodec.decodeResponse(serverPayload("v2_response_error"))
         assertThat(refused.schemaVersion).isEqualTo(2)
@@ -183,17 +163,6 @@ class BleContractGoldenTest {
     // endregion
 
     // region client -> server
-
-    @Test
-    fun theV1HelloEncoderMatchesTheClientGoldenByteForByte() {
-        val golden = BleGolden.named("client_v1_hello")
-
-        val payload = ControlCodec.encodeHello(golden.requestId)
-
-        assertThat(payload.toHex()).isEqualTo(golden.payload.toHex())
-        assertThat(BleFrameEncoder.frames(payload, golden.sequence).map { it.toHex() })
-            .isEqualTo(golden.frames.map { it.toHex() })
-    }
 
     @Test
     fun theV2CommandEncoderMatchesTheGetProfilesGoldenByteForByte() {
@@ -215,8 +184,7 @@ class BleContractGoldenTest {
     fun theV2SetClubEncoderSendsTheGoldenMessage() {
         val golden = BleGolden.named("client_v2_set_club")
 
-        val payload =
-            SchemaV2Codec.toV2Command(ControlCodec.encodeSetClub(GolfClub.IRON_7, golden.requestId))
+        val payload = SchemaV2Codec.encodeSetClub(GolfClub.IRON_7, golden.requestId)
 
         assertThat(reassemble(golden.frames)?.toHex()).isEqualTo(golden.payload.toHex())
         assertThat(OpenFlightJson.parseToJsonElement(payload.decodeToString())).isEqualTo(golden.message)
@@ -260,7 +228,7 @@ class BleContractGoldenTest {
     }
 
     private companion object {
-        const val SERVER_GOLDEN_COUNT = 17
+        const val SERVER_GOLDEN_COUNT = 12
     }
 }
 

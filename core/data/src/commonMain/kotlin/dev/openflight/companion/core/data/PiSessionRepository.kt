@@ -46,7 +46,7 @@ import kotlinx.coroutines.flow.emptyFlow
  * them, so the last roster, power reading and club stay on screen until the reconnect's snapshots
  * replace them.
  *
- * Plan R8e: over Bluetooth with a schema v2 Pi ([bluetoothSchemaV2]), [profiles], [club],
+ * Plan R8e: over Bluetooth (schema 2 only, [bluetoothSchemaV2] once negotiated), [profiles], [club],
  * [shotProcessing] and [powerStatus] follow the BLE link's events, [detailFor] knows each v2 shot,
  * and [setActiveProfile] goes over Bluetooth. [linkState] stays [PiLinkState.WifiOnly] and every
  * other command still needs Wi-Fi: BLE is read-and-select only (no delete, clear or profile edits).
@@ -57,7 +57,10 @@ import kotlinx.coroutines.flow.emptyFlow
 interface PiSessionRepository {
     val linkState: StateFlow<PiLinkState>
 
-    /** Plan R8e: `true` while the transport is Bluetooth and the Pi negotiated schema v2. */
+    /**
+     * Plan R8e: `true` while the transport is Bluetooth and the schema 2 link is negotiated (BLE
+     * is schema 2 only, so this is "the Bluetooth link is up").
+     */
     val bluetoothSchemaV2: StateFlow<Boolean>
 
     /**

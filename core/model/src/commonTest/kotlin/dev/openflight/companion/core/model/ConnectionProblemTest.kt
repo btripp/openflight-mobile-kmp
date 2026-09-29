@@ -61,6 +61,17 @@ class ConnectionProblemTest {
     }
 
     @Test
+    fun aPiWithoutBluetoothSchema2NeedsAnUpdateNotARetry() {
+        val error = ConnectionState.Error("Update OpenFlight on the Pi", ConnectionErrorKind.PI_UPDATE_REQUIRED)
+
+        val problem = ConnectionProblem.of(error, PiLinkState.WifiOnly)
+
+        assertThat(problem?.kind).isEqualTo(ConnectionProblem.Kind.PI_UPDATE_REQUIRED)
+        assertThat(problem?.title).isEqualTo(ConnectionProblem.PI_UPDATE_REQUIRED_TITLE)
+        assertThat(problem?.detail).isEqualTo("Update OpenFlight on the Pi")
+    }
+
+    @Test
     fun nothingIsWrongWhileConnectingOrConnected() {
         assertThat(ConnectionProblem.of(ConnectionState.Connecting, PiLinkState.Connecting)).isNull()
         assertThat(ConnectionProblem.of(ConnectionState.Connected, PiLinkState.WifiOnly)).isNull()

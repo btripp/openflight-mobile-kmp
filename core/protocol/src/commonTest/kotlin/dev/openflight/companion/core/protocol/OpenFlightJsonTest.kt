@@ -28,7 +28,7 @@ class OpenFlightJsonTest {
         val response =
             ControlCodec.decodeResponse(
                 """
-                {"schema_version":1,"request_id":"req-1","ok":true,"unexpected_new_field":"x",
+                {"schema_version":2,"request_id":"req-1","ok":true,"unexpected_new_field":"x",
                  "result":{"status":"ok","club":"driver","unexpected_result_field":123}}
                 """.trimIndent().encodeToByteArray(),
             )

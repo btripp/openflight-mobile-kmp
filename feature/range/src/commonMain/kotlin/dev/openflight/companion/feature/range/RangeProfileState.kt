@@ -12,8 +12,8 @@ import dev.openflight.companion.core.model.pi.ProfilesState
  * device picks its own [viewing] instead of switching the Pi's active profile.
  *
  * @property viewing the device's choice, the persisted `SettingsRepository.viewingProfile`.
- * @property profiles the Pi's roster; empty when none is known (Bluetooth v1, no Pi, before the
- *   roster arrives), when the control hides and every shot shows.
+ * @property profiles the Pi's roster; empty when none is known (no Pi, before the roster arrives
+ *   over Network or Bluetooth), when the control hides and every shot shows.
  * @property activeProfileId the Pi's active profile.
  */
 data class RangeProfileState(
