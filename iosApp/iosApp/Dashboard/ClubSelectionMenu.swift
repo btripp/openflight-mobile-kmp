@@ -8,6 +8,9 @@ import SwiftUI
 ///
 /// Issue #15: `menu` (the shared `ClubMenu`) lists the active bag's clubs first, then the rest in a
 /// native "All clubs" submenu. Without a bag it's all 20 clubs and no submenu.
+///
+/// Issue #56: `.menuOrder(.fixed)` keeps that order top-down wherever the menu opens. By default
+/// iOS reverses a menu that opens upward (the range's, near the bottom of the screen).
 struct ClubSelectionMenu<MenuLabel: View>: View {
     let menu: ClubMenu
     let selectedClub: GolfClub
@@ -22,10 +25,12 @@ struct ClubSelectionMenu<MenuLabel: View>: View {
                 Menu(ClubMenu.companion.ALL_CLUBS_LABEL) {
                     clubButtons(menu.otherClubs)
                 }
+                .menuOrder(.fixed)
             }
         } label: {
             label()
         }
+        .menuOrder(.fixed)
         .disabled(!isEnabled)
     }
 
