@@ -14,7 +14,7 @@ android {
 
     defaultConfig {
         applicationId = "dev.openflight.companion"
-        versionCode = 3
+        versionCode = 4
         versionName = "0.1.0"
     }
     signingConfigs {
