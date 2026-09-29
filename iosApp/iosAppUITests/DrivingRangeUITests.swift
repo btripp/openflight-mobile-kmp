@@ -67,6 +67,50 @@ final class DrivingRangeUITests: XCTestCase {
         waitForExpectations(timeout: 5)
     }
 
+    /// Issue #56: the range's club menu sits near the bottom and opens upward, where iOS reverses
+    /// a menu's order by default. It must still read top-down in bag order (Driver first), with
+    /// "All clubs" after the bag, like the dashboard's.
+    func testClubMenuListsTheBagTopDownThenAllClubs() {
+        let app = AppNav.launch(["--ui-testing", "--preview-shot"])
+        AppNav.open(.bag, in: app)
+        XCTAssertTrue(app.descendants(matching: .any)["bag.club.driver"].waitForExistence(timeout: 10))
+        AppNav.open(.practice, in: app)
+
+        let rangeButton = app.buttons["dashboard.range"]
+        XCTAssertTrue(rangeButton.waitForExistence(timeout: 10))
+        rangeButton.tap()
+
+        let clubMenu = app.buttons["range.clubSelector"]
+        XCTAssertTrue(clubMenu.waitForExistence(timeout: 5))
+        clubMenu.tap()
+
+        let driver = Self.menuItem(app, "Driver")
+        let pitchingWedge = Self.menuItem(app, "Pitching Wedge")
+        let allClubs = Self.menuItem(app, "All clubs")
+        XCTAssertTrue(pitchingWedge.waitForExistence(timeout: 5))
+        XCTAssertTrue(driver.exists)
+        XCTAssertTrue(allClubs.exists)
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "range-club-menu"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+        XCTAssertLessThan(
+            driver.frame.minY, pitchingWedge.frame.minY,
+            "Driver (\(driver.frame.minY)) should be above Pitching Wedge (\(pitchingWedge.frame.minY))"
+        )
+        XCTAssertLessThan(
+            pitchingWedge.frame.minY, allClubs.frame.minY,
+            "All clubs (\(allClubs.frame.minY)) should follow the bag (\(pitchingWedge.frame.minY))"
+        )
+    }
+
+    /// A club in the open menu (not the menu's own label, which may show the same name).
+    static func menuItem(_ app: XCUIApplication, _ club: String) -> XCUIElement {
+        app.buttons
+            .matching(NSPredicate(format: "label == %@ AND identifier != %@", club, "range.clubSelector"))
+            .firstMatch
+    }
+
     func testRangeModeWithoutAShotShowsTheReadyCard() {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-testing", "--range-mode"]
