@@ -129,6 +129,9 @@ CI doesn't run device UI tests (`connectedDebugAndroidTest`) or the Xcode test t
 those locally when a change affects UI. A green local run of invariants 1–3 and 9 should mean a
 green CI run. If they disagree, treat that as a bug to investigate, not noise.
 
+Releases: user-facing changes go under `## [Unreleased]` in `CHANGELOG.md`; a release (build
+number bump) moves it into a version section, which becomes the release notes (README "Releasing").
+
 ## Gate commits on exit code
 Never commit on the strength of a log that "looks clean" — grep/eyeballing build output for
 error strings is not a substitute for the process's actual exit status, and a piped command

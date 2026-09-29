@@ -131,6 +131,8 @@ The app has four tabs on both platforms: **Practice · Sessions · Bag · Settin
 
 ## Status and roadmap
 
+What changed in each release is in [`CHANGELOG.md`](CHANGELOG.md).
+
 Done and on `main`:
 
 - [x] Live shots over the network (Socket.IO + SSE) and Bluetooth LE schema 2
@@ -337,6 +339,13 @@ match a scan of the Release binary; re-scan with `nm -u` after adding a dependen
 compliance. Keep every credential out of the repo: `.gitignore` covers `Local.xcconfig`,
 `*.p12`, `*.p8` (App Store Connect API keys), `*.cer`, provisioning profiles and
 `ExportOptions.plist`.
+
+### Releasing
+
+Every user-facing change adds a line under `## [Unreleased]` in [`CHANGELOG.md`](CHANGELOG.md).
+When you bump the build numbers for a release, move `[Unreleased]` into a new version section
+(with the tag date, the iOS build and the Android `versionCode`) and add its compare link. Use
+that section as the GitHub release notes and as the TestFlight "What to Test" text.
 
 ### Android release APK
 
