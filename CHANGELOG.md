@@ -32,6 +32,7 @@ tag, to test Bluetooth against a schema-2-only Pi; the next tagged release is `v
 - Android: a status pill whose text wraps (Settings' long "Live session" reconnect reason, most
   visibly at 200% text) is now a rounded rectangle, so its lines no longer crowd the pill's
   curved edges (#65). One-line pills keep their fully rounded ends.
+- iOS: at the accessibility text sizes, header rows (Practice's "Launch Monitor" with Range, the latest shot's "View on range", the profile's "Change", Bag's "Conditions" with its pill) put their buttons under the title, so no word breaks mid-word and the pill no longer cuts to "M…" (#81).
 
 ### Removed
 

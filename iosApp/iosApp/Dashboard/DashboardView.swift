@@ -161,8 +161,9 @@ struct DashboardContent: View {
 
     // MARK: Header
 
+    // Issue #81: at an accessibility text size the buttons go under the title.
     private var header: some View {
-        HStack {
+        AdaptiveHeaderRow {
             VStack(alignment: .leading, spacing: 4) {
                 Text("OPENFLIGHT")
                     .font(.ofEyebrow)
@@ -171,7 +172,7 @@ struct DashboardContent: View {
                 Text("Launch Monitor")
                     .font(.ofDisplay(.largeTitle))
             }
-            Spacer()
+        } actions: {
             NavigationLink(value: AppRoute.range) {
                 Label("Range", systemImage: "mountain.2.fill")
                     .font(.of(.subheadline, weight: .bold))
