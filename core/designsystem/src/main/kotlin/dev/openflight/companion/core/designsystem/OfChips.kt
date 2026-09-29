@@ -17,18 +17,36 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.Stable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Outline
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 
 private val ChipShape = RoundedCornerShape(999.dp)
+
+/**
+ * Issue #65: once an [OfPill]'s text wraps, fully rounded ends would curve into its first and last
+ * lines, so a wrapped pill becomes a rounded rectangle. Its 12 dp corners sit inside the 6 dp
+ * vertical padding plus half a line, so every line keeps the full [OfSpacing.Md] side padding.
+ */
+private val WrappedPillShape = RoundedCornerShape(OfSpacing.Md)
 private const val DISABLED_ALPHA = 0.45f
 
 /**
@@ -130,8 +148,29 @@ fun OfConfidenceDots(
 }
 
 /**
+ * [OfPill]'s outline: fully rounded while its text is one line, a rounded rectangle once it wraps.
+ * The flags are set from the texts' layouts and only read while drawing (background and border
+ * observe the read), so the right shape shows on the first frame, without another composition.
+ */
+@Stable
+private class PillShape : Shape {
+    var labelWrapped by mutableStateOf(false)
+    var detailWrapped by mutableStateOf(false)
+    private val wrapped: Boolean get() = labelWrapped || detailWrapped
+
+    override fun createOutline(
+        size: Size,
+        layoutDirection: LayoutDirection,
+        density: Density,
+    ): Outline = (if (wrapped) WrappedPillShape else ChipShape).createOutline(size, layoutDirection, density)
+}
+
+/**
  * A status pill with a colored dot, for example a simulator connector (`SimStatus.tsx`) or the
- * session's source badge. [detail] is a second, dimmer line.
+ * session's source badge. [detail] is a second, dimmer line. A one-line pill has fully rounded
+ * ends; if [label] or [detail] wraps (a long reconnect reason, large text), the pill becomes a
+ * rounded rectangle so the text doesn't crowd its curved edges (issue #65). The dot stays either
+ * way, so the status never relies on colour alone.
  */
 @Composable
 fun OfPill(
@@ -147,11 +186,13 @@ fun OfPill(
             StatusTone.Negative -> OfColorTokens.Danger
             StatusTone.Neutral -> OfColorTokens.Neutral
         }
+    val shape = remember { PillShape() }
+    if (detail == null) SideEffect { shape.detailWrapped = false }
     Row(
         modifier =
             modifier
-                .background(color.copy(alpha = 0.12f), ChipShape)
-                .border(BorderStroke(1.dp, color.copy(alpha = 0.4f)), ChipShape)
+                .background(color.copy(alpha = 0.12f), shape)
+                .border(BorderStroke(1.dp, color.copy(alpha = 0.4f)), shape)
                 .semantics(mergeDescendants = true) {}
                 .padding(horizontal = OfSpacing.Md, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -159,8 +200,20 @@ fun OfPill(
     ) {
         Box(modifier = Modifier.size(8.dp).background(color, CircleShape))
         Column {
-            Text(text = label, style = MaterialTheme.typography.labelLarge, color = OfColorTokens.Cream)
-            detail?.let { Text(text = it, style = MaterialTheme.typography.bodySmall, color = OfColorTokens.CreamDim) }
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelLarge,
+                color = OfColorTokens.Cream,
+                onTextLayout = { shape.labelWrapped = it.lineCount > 1 },
+            )
+            detail?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = OfColorTokens.CreamDim,
+                    onTextLayout = { layout -> shape.detailWrapped = layout.lineCount > 1 },
+                )
+            }
         }
     }
 }
@@ -177,6 +230,23 @@ private fun OfChipsPreview() {
             }
             OfConfidenceDots(filledDots = 2, label = "medium")
             OfPill(label = "GSPro", tone = StatusTone.Positive, detail = "192.168.1.20:921")
+        }
+    }
+}
+
+/** Issue #65: a long status wraps at 200% text; the pill turns into a rounded rectangle. */
+@Preview(widthDp = 380, fontScale = 2f)
+@Composable
+private fun OfPillWrappedPreview() {
+    OfTheme {
+        Column(modifier = Modifier.padding(OfSpacing.Md), verticalArrangement = Arrangement.spacedBy(OfSpacing.Sm)) {
+            OfPill(label = "Connected", tone = StatusTone.Positive)
+            OfPill(
+                label =
+                    "Reconnecting: Unable to resolve host \"raspberrypi.local\": " +
+                        "No address associated with hostname",
+                tone = StatusTone.InProgress,
+            )
         }
     }
 }
