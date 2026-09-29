@@ -32,12 +32,13 @@ internal fun previewSettingsState(
     trigger: TriggerStatus? = PREVIEW_TRIGGER,
     connectionState: ConnectionState? = null,
     callouts: CalloutSettingsUiState = PREVIEW_CALLOUTS,
+    host: String = "10.0.2.2:8098",
 ): SettingsUiState {
     val available = PiFeatureAvailability.of(link)
     val connected = available.isAvailable
     return SettingsUiState(
         transport = transport,
-        host = "10.0.2.2:8098",
+        host = host,
         connectionState = connectionState ?: if (connected) ConnectionState.Connected else ConnectionState.Idle,
         linkState = link,
         linkDescription = link.description,
@@ -208,6 +209,29 @@ private fun SettingsLongLiveSessionPreview() {
     OfTheme {
         SettingsScreen(
             uiState = previewSettingsState(link = PREVIEW_LONG_LINK_STATUS),
+            onEvent = {},
+            onBack = {},
+        )
+    }
+}
+
+/**
+ * Issue #54: a long shot-stream error moves under "Shot stream" and wraps at spaces, never inside
+ * the host name; the default host moves under "Host" on a narrow phone.
+ */
+@Preview(heightDp = 900)
+@Preview(heightDp = 900, fontScale = 2f)
+@Preview(widthDp = 360, heightDp = 900, fontScale = 2f)
+@Composable
+private fun SettingsLongShotStreamPreview() {
+    OfTheme {
+        SettingsScreen(
+            uiState =
+                previewSettingsState(
+                    link = PREVIEW_LONG_LINK_STATUS,
+                    connectionState = ConnectionState.Error(PREVIEW_LONG_LINK_STATUS.reason),
+                    host = "raspberrypi.local:8080",
+                ),
             onEvent = {},
             onBack = {},
         )
