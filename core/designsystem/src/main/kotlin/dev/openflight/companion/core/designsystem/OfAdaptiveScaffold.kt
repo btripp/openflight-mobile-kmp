@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ShortNavigationBarDefaults
 import androidx.compose.material3.Text
@@ -18,12 +19,16 @@ import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteItem
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffoldLayout
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteType
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.dp
 
 /**
  * One top-level destination in an [OfAdaptiveScaffold]'s bottom bar or rail.
@@ -134,14 +139,7 @@ fun OfAdaptiveScaffold(
                             onClick = item.onClick,
                             // Tinted by the item (LocalContentColor), so the selected entry stands out.
                             icon = { Icon(imageVector = item.icon, contentDescription = null) },
-                            label = {
-                                // R8f leftover (plan F1b): at a 200 % system font scale, a label like
-                                // "Settings" no longer fit the bar/rail's fixed-width cell on one
-                                // line, and without a break opportunity Compose wrapped it mid-word
-                                // ("Setti"/"ngs"). One line with an ellipsis instead: TalkBack still
-                                // reads the full word, since it reads the text, not its layout.
-                                Text(item.label, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis)
-                            },
+                            label = { OfNavigationLabel(item.label) },
                             navigationSuiteType = suiteType,
                             modifier = Modifier.testTag(item.testTag),
                         )
@@ -155,6 +153,44 @@ fun OfAdaptiveScaffold(
     }
 }
 
+/**
+ * The largest font scale a bar/rail label follows. Plan F1b capped labels to one line, but at a 200 %
+ * system font scale the bold, letter-spaced label style still grew to fill its whole equal-width slot,
+ * so neighbours touched and read as one word ("PracticeSessions", issue #55). Like other apps' tab
+ * bars, the labels stop growing here: at 130 % the longest current label ("Practice"/"Settings",
+ * about 72 dp) still fits a 360 dp phone's four 90 dp slots with its padding. The icons carry the
+ * rest, and every other text on screen keeps the full system scale.
+ */
+internal const val OF_NAVIGATION_LABEL_MAX_FONT_SCALE = 1.3f
+
+/** Keeps neighbouring labels apart even when a label fills its slot (8 dp between two of them). */
+private val NavigationLabelHorizontalPadding = 4.dp
+
+/**
+ * One line, capped at [OF_NAVIGATION_LABEL_MAX_FONT_SCALE], padded inside its slot and ellipsized
+ * if it still doesn't fit (a longer translation, or five tabs on a narrow phone). Only the drawing
+ * is capped or cut: the item merges this text into its semantics, so TalkBack reads the full label.
+ */
+@Composable
+private fun OfNavigationLabel(text: String) {
+    val density = LocalDensity.current
+    val labelDensity =
+        if (density.fontScale > OF_NAVIGATION_LABEL_MAX_FONT_SCALE) {
+            Density(density.density, OF_NAVIGATION_LABEL_MAX_FONT_SCALE)
+        } else {
+            density
+        }
+    CompositionLocalProvider(LocalDensity provides labelDensity) {
+        Text(
+            text = text,
+            modifier = Modifier.padding(horizontal = NavigationLabelHorizontalPadding),
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
 @Composable
 private fun PreviewShell(windowClass: OfWindowClass) {
     OfTheme {
@@ -162,16 +198,9 @@ private fun PreviewShell(windowClass: OfWindowClass) {
             windowClass = windowClass,
             items =
                 listOf(
-                    OfNavigationItem("Home", OfIcons.Home, selected = true, onClick = {}, testTag = "home"),
-                    OfNavigationItem("Session", OfIcons.Session, selected = false, onClick = {}, testTag = "session"),
-                    OfNavigationItem(
-                        "Training",
-                        OfIcons.Training,
-                        selected = false,
-                        onClick = {},
-                        testTag = "training",
-                    ),
-                    OfNavigationItem("Camera", OfIcons.Camera, selected = false, onClick = {}, testTag = "camera"),
+                    OfNavigationItem("Practice", OfIcons.Gauge, selected = true, onClick = {}, testTag = "practice"),
+                    OfNavigationItem("Sessions", OfIcons.Session, selected = false, onClick = {}, testTag = "sessions"),
+                    OfNavigationItem("Bag", OfIcons.Bag, selected = false, onClick = {}, testTag = "bag"),
                     OfNavigationItem(
                         "Settings",
                         OfIcons.Settings,
@@ -197,3 +226,12 @@ private fun OfAdaptiveScaffoldCompactPreview() = PreviewShell(OfWindowClass.COMP
 @Preview(widthDp = 1280, heightDp = 800)
 @Composable
 private fun OfAdaptiveScaffoldExpandedPreview() = PreviewShell(OfWindowClass.EXPANDED)
+
+/** Issue #55: at 200 % text the labels stop growing at 130 % and keep a gap between them. */
+@Preview(widthDp = 360, heightDp = 800, fontScale = 2f)
+@Composable
+private fun OfAdaptiveScaffoldCompactLargeTextPreview() = PreviewShell(OfWindowClass.COMPACT)
+
+@Preview(widthDp = 1280, heightDp = 800, fontScale = 2f)
+@Composable
+private fun OfAdaptiveScaffoldExpandedLargeTextPreview() = PreviewShell(OfWindowClass.EXPANDED)
