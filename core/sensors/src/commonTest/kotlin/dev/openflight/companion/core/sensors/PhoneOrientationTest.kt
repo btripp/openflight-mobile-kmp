@@ -11,8 +11,8 @@ import assertk.assertions.isTrue
 import dev.openflight.companion.core.model.GolfClub
 import dev.openflight.companion.core.model.GravitySample
 import dev.openflight.companion.core.model.PhoneOrientationMeasurement
-import dev.openflight.companion.core.protocol.ControlCodec
 import dev.openflight.companion.core.protocol.OpenFlightJson
+import dev.openflight.companion.core.protocol.SchemaV2Codec
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.double
 import kotlinx.serialization.json.int
@@ -29,9 +29,10 @@ import kotlin.time.Instant
  * Test names drop the Swift `test` prefix.
  *
  * Seven Swift cases exercise transport encoders that live outside this module. The ones that
- * `core:protocol` already implements are ported here against [ControlCodec]/[OpenFlightJson]. The
- * Wi-Fi URL/method/header assertions need S4's `core:network` client and are listed where they
- * would go.
+ * `core:protocol` already implements are ported here against [SchemaV2Codec]/[OpenFlightJson]. The
+ * reference wraps the Bluetooth commands in a version-one envelope; BLE is schema 2 only now
+ * (plan R8e), so those assert `schema_version` 2. The Wi-Fi URL/method/header assertions need S4's
+ * `core:network` client and are listed where they would go.
  */
 class PhoneOrientationTest {
     private fun radians(degrees: Double) = degrees * PI / 180
@@ -186,10 +187,10 @@ class PhoneOrientationTest {
     fun bluetoothCalibrationCommandWrapsSharedMeasurementPayload() {
         val measurement = portraitMeasurement()
 
-        val command = ControlCodec.encodeCalibration(measurement, requestId = "request-1").toJsonObject()
+        val command = SchemaV2Codec.encodeCalibration(measurement, requestId = "request-1").toJsonObject()
         val payload = command["payload"]!!.jsonObject
 
-        assertThat(command["schema_version"]!!.jsonPrimitive.int).isEqualTo(1)
+        assertThat(command["schema_version"]!!.jsonPrimitive.int).isEqualTo(2)
         assertThat(command["type"]!!.jsonPrimitive.content).isEqualTo("iwr6843_orientation_calibration")
         assertThat(command["request_id"]!!.jsonPrimitive.content).isEqualTo("request-1")
         assertThat(payload["sample_count"]!!.jsonPrimitive.int).isEqualTo(120)
@@ -198,10 +199,10 @@ class PhoneOrientationTest {
 
     @Test
     fun bluetoothClubCommandUsesSharedControlEnvelope() {
-        val command = ControlCodec.encodeSetClub(GolfClub.IRON_7, requestId = "club-request-1").toJsonObject()
+        val command = SchemaV2Codec.encodeSetClub(GolfClub.IRON_7, requestId = "club-request-1").toJsonObject()
         val payload = command["payload"]!!.jsonObject
 
-        assertThat(command["schema_version"]!!.jsonPrimitive.int).isEqualTo(1)
+        assertThat(command["schema_version"]!!.jsonPrimitive.int).isEqualTo(2)
         assertThat(command["type"]!!.jsonPrimitive.content).isEqualTo("set_club")
         assertThat(command["request_id"]!!.jsonPrimitive.content).isEqualTo("club-request-1")
         assertThat(payload["club"]!!.jsonPrimitive.content).isEqualTo("7-iron")
@@ -209,9 +210,9 @@ class PhoneOrientationTest {
 
     @Test
     fun bluetoothCurrentClubCommandUsesSharedControlEnvelope() {
-        val command = ControlCodec.encodeGetClub(requestId = "club-current-1").toJsonObject()
+        val command = SchemaV2Codec.encodeGetClub(requestId = "club-current-1").toJsonObject()
 
-        assertThat(command["schema_version"]!!.jsonPrimitive.int).isEqualTo(1)
+        assertThat(command["schema_version"]!!.jsonPrimitive.int).isEqualTo(2)
         assertThat(command["type"]!!.jsonPrimitive.content).isEqualTo("get_club")
         assertThat(command["request_id"]!!.jsonPrimitive.content).isEqualTo("club-current-1")
         assertThat(command["payload"]!!.jsonObject.size).isEqualTo(0)

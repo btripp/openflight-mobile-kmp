@@ -44,7 +44,7 @@ import kotlin.time.Duration.Companion.milliseconds
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class SchemaV2DataTest {
-    /** A BLE transport that negotiated (or not) schema v2; commands are recorded. */
+    /** A BLE transport whose schema 2 link is (or is not yet) negotiated; commands are recorded. */
     private class FakeV2Transport(
         v2: Boolean = true,
     ) : ShotTransport,
@@ -210,7 +210,7 @@ class SchemaV2DataTest {
         }
 
     @Test
-    fun aV1ConnectOnlySyncsTheClub() =
+    fun aConnectBeforeSchema2IsNegotiatedOnlySyncsTheClub() =
         runV2Test(ble = FakeV2Transport(v2 = false)) { h ->
             h.ble.connect()
 
@@ -277,7 +277,7 @@ class SchemaV2DataTest {
         }
 
     @Test
-    fun overBluetoothV1ProfileSelectionAndEveryEditAreWifiOnly() =
+    fun overBluetoothBeforeSchema2IsNegotiatedProfileSelectionAndEveryEditAreWifiOnly() =
         runV2Test(ble = FakeV2Transport(v2 = false)) { h ->
             assertThat(h.piSession.bluetoothSchemaV2.value).isFalse()
 

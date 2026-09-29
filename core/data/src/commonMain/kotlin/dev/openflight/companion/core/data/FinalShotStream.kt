@@ -17,7 +17,7 @@ import kotlinx.coroutines.flow.flow
 interface FinalShotStream {
     /**
      * Each shot once, when it becomes final: a v2 `final: true` shot (which replaces its
-     * provisional version in the history, same `event_id`), or a v1/BLE-v1 shot (`final == null`),
+     * provisional version in the history, same `event_id`), or a v1 shot from the SSE stream (`final == null`),
      * which is final as it arrives. A provisional shot (`final == false`) is not emitted until its
      * final version arrives. A shot that was already in the history but still provisional when
      * collection started is emitted when it turns final.

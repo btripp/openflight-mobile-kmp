@@ -5,6 +5,7 @@ import app.cash.turbine.test
 import assertk.all
 import assertk.assertFailure
 import assertk.assertThat
+import assertk.assertions.contains
 import assertk.assertions.containsExactly
 import assertk.assertions.containsExactlyInAnyOrder
 import assertk.assertions.doesNotContain
@@ -14,17 +15,18 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
+import assertk.assertions.isNull
 import assertk.assertions.isTrue
 import assertk.assertions.prop
 import dev.openflight.companion.core.ble.OpenFlightBleProfile.CONTROL_CHARACTERISTIC_UUID
-import dev.openflight.companion.core.ble.OpenFlightBleProfile.CONTROL_V2_CHARACTERISTIC_UUID
 import dev.openflight.companion.core.ble.OpenFlightBleProfile.SHOT_CHARACTERISTIC_UUID
-import dev.openflight.companion.core.ble.OpenFlightBleProfile.SHOT_V2_CHARACTERISTIC_UUID
 import dev.openflight.companion.core.model.ConnectionState
 import dev.openflight.companion.core.model.GolfClub
 import dev.openflight.companion.core.model.pi.PowerState
 import dev.openflight.companion.core.model.pi.ShotProcessingState
+import dev.openflight.companion.core.protocol.SchemaV2Codec
 import dev.openflight.companion.core.protocol.SchemaV2Event
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.test.TestScope
@@ -39,9 +41,9 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 /**
- * Plan R8e: schema v2 negotiation and the v2 link, against [ScriptedPi] (a fake Pi behind
- * [BleCentral]) and the backend's golden frames. The version-one fallback must stay exactly the
- * §0.3 behaviour that [BleShotTransportTest] and [BluetoothManagerTest] pin down.
+ * Plan R8e: negotiation details and the schema 2 link (events, profiles, power, reconnects),
+ * against [ScriptedPi] (a fake Pi behind [BleCentral]) and the backend's golden frames. The Pi's
+ * contract itself (schema 2 only, no v1 fallback) is pinned in [BleShotTransportTest].
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class BleSchemaV2Test {
@@ -66,65 +68,22 @@ class BleSchemaV2Test {
         return link
     }
 
-    // region Negotiation and fallback matrix
+    // region Negotiation details (the contract itself is in BleShotTransportTest)
 
     @Test
-    fun aV1OnlyPiConnectsOnTheV1PairWithoutHello() =
+    fun aPiThatStillHasTheV1PairIsDrivenOnlyOverSchema2() =
         runTest {
-            val pi = ScriptedPi(schemaV2 = false)
             val transport = transport()
+            val pi = ScriptedPi(characteristics = ScriptedPi.SCHEMA_2_PAIR + ScriptedPi.REMOVED_V1_PAIR)
             val link = connect(transport, pi.link())
 
             assertThat(transport.state.value).isEqualTo(ConnectionState.Connected)
-            assertThat(transport.supportsControls.value).isTrue()
-            assertThat(transport.schemaV2Active.value).isFalse()
-            assertThat(
-                link.subscriptions,
-            ).containsExactlyInAnyOrder(SHOT_CHARACTERISTIC_UUID, CONTROL_CHARACTERISTIC_UUID)
-            assertThat(link.writes).isEmpty()
+            assertThat(link.subscriptions).containsExactly(CONTROL_CHARACTERISTIC_UUID, SHOT_CHARACTERISTIC_UUID)
+            assertThat(link.writeTargets.toSet()).isEqualTo(setOf(CONTROL_CHARACTERISTIC_UUID))
         }
 
     @Test
-    fun aV2PiNegotiatesWithHelloAndSubscribesOnlyTheV2Pair() =
-        runTest {
-            val pi = ScriptedPi()
-            val transport = transport()
-            val link = connect(transport, pi.link())
-
-            assertThat(transport.state.value).isEqualTo(ConnectionState.Connected)
-            assertThat(transport.schemaV2Active.value).isTrue()
-            assertThat(transport.supportsControls.value).isTrue()
-            // The v2 control is subscribed first (hello), the v2 shot only after it succeeded.
-            assertThat(link.subscriptions).containsExactly(CONTROL_V2_CHARACTERISTIC_UUID, SHOT_V2_CHARACTERISTIC_UUID)
-            assertThat(link.subscriptions).doesNotContain(SHOT_CHARACTERISTIC_UUID)
-            val hello = link.commandsWrittenTo(CONTROL_V2_CHARACTERISTIC_UUID).single().jsonObject
-            assertThat(hello["type"]).isEqualTo(JsonPrimitive("hello"))
-            assertThat(hello["schema_version"]).isEqualTo(JsonPrimitive(2))
-            assertThat(hello["payload"]).isEqualTo(JsonObject(mapOf("client_schema_max" to JsonPrimitive(2))))
-        }
-
-    @Test
-    fun helloRefusedFallsBackToV1AndUnsubscribesTheV2Control() =
-        runTest {
-            val pi = ScriptedPi().apply { hello = ScriptedPi.HelloAnswer.UNSUPPORTED }
-            val transport = transport()
-            val link = connect(transport, pi.link())
-
-            assertThat(transport.state.value).isEqualTo(ConnectionState.Connected)
-            assertThat(transport.schemaV2Active.value).isFalse()
-            assertThat(link.activeSubscriptions)
-                .containsExactlyInAnyOrder(SHOT_CHARACTERISTIC_UUID, CONTROL_CHARACTERISTIC_UUID)
-
-            // Controls now use the v1 characteristic and envelope, exactly as before R8e.
-            val selection = async { transport.setClub(GolfClub.IRON_7) }
-            runCurrent()
-            assertThat(selection.await().club).isEqualTo(GolfClub.IRON_7)
-            val setClub = link.commandsWrittenTo(CONTROL_CHARACTERISTIC_UUID).single().jsonObject
-            assertThat(setClub["schema_version"]).isEqualTo(JsonPrimitive(1))
-        }
-
-    @Test
-    fun helloTimeoutFallsBackToV1AfterTenSeconds() =
+    fun helloTimeoutIsAnErrorAfterTenSeconds() =
         runTest {
             val pi = ScriptedPi().apply { hello = ScriptedPi.HelloAnswer.SILENT }
             val transport = transport()
@@ -137,33 +96,91 @@ class BleSchemaV2Test {
 
             advanceTimeBy(1.milliseconds)
             runCurrent()
-            assertThat(transport.state.value).isEqualTo(ConnectionState.Connected)
+            assertThat(transport.state.value).isEqualTo(ConnectionState.Error(BleShotTransport.HANDSHAKE_TIMED_OUT))
             assertThat(transport.schemaV2Active.value).isFalse()
-            assertThat(link.activeSubscriptions)
-                .containsExactlyInAnyOrder(SHOT_CHARACTERISTIC_UUID, CONTROL_CHARACTERISTIC_UUID)
+            assertThat(link.activeSubscriptions).isEmpty()
         }
 
     @Test
-    fun aV2ControlThatCannotBeSubscribedFallsBackToV1() =
+    fun controlThatNeverSubscribesIsAnErrorAfterTenSeconds() =
         runTest {
-            val pi = ScriptedPi()
-            val link = pi.link().apply { subscribeGate = kotlinx.coroutines.CompletableDeferred() }
+            val link = ScriptedPi().link().apply { subscribeGate = CompletableDeferred() }
             val transport = transport()
             connect(transport, link)
 
-            // Notifications never get enabled: the subscription wait gives up after the timeout.
             advanceTimeBy(10.seconds)
-            link.subscribeGate!!.complete(Unit)
             runCurrent()
 
-            assertThat(transport.schemaV2Active.value).isFalse()
-            assertThat(transport.state.value).isEqualTo(ConnectionState.Connected)
+            assertThat(transport.state.value).isEqualTo(ConnectionState.Error(BleShotTransport.HANDSHAKE_TIMED_OUT))
             assertThat(link.writes).isEmpty()
+        }
+
+    @Test
+    fun controlSubscriptionFailureIsAnError() =
+        runTest {
+            val link = ScriptedPi().link().apply { controlSubscribeError = IllegalStateException("CCCD failed") }
+            val transport = transport()
+            connect(transport, link)
+
+            assertThat(transport.state.value)
+                .isEqualTo(ConnectionState.Error(BleShotTransport.CONTROL_SUBSCRIBE_FAILED))
+            assertThat(transport.supportsControls.value).isFalse()
+            assertThat(link.subscriptions).isEmpty()
+            assertThat(link.writes).isEmpty()
+        }
+
+    @Test
+    fun retryAfterAHandshakeErrorNegotiatesAgain() =
+        runTest {
+            val pi = ScriptedPi().apply { hello = ScriptedPi.HelloAnswer.UNSUPPORTED }
+            val transport = transport()
+            connect(transport, pi.link())
+            assertThat(transport.state.value).isInstanceOf<ConnectionState.Error>()
+
+            pi.hello = ScriptedPi.HelloAnswer.V2
+            central.advertise(pi.link())
+            transport.retry()
+            runCurrent()
+
+            assertThat(transport.state.value).isEqualTo(ConnectionState.Connected)
+            assertThat(pi.commandTypes()).containsExactly("hello", "hello")
+        }
+
+    @Test
+    fun aVersionOneClubChangedIsRejectedOnTheSchema2Link() =
+        runTest {
+            val transport = transport()
+            val link = connect(transport, ScriptedPi().link())
+
+            link.notifyControl(makeBleFrames("""{"club":"pw","schema_version":1,"type":"club_changed"}""", 1))
+            runCurrent()
+
+            assertThat(transport.activeClub.value).isNull()
+            assertThat(transport.state.value).isInstanceOf<ConnectionState.Error>()
+        }
+
+    @Test
+    fun optionalHelloFeaturesAreDetectedButNeverRequired() =
+        runTest {
+            val bare = ScriptedPi().apply { helloResult = """{"features":[],"schema_version":2}""" }
+            val transport = transport()
+            connect(transport, bare.link())
+            assertThat(transport.state.value).isEqualTo(ConnectionState.Connected)
+            assertThat(transport.piFeatures.value).isEmpty()
+
+            val later =
+                ScriptedPi().apply {
+                    helloResult = """{"features":["club","shot_catch_up"],"schema_version":2}"""
+                }
+            val next = transport()
+            connect(next, later.link())
+            assertThat(next.state.value).isEqualTo(ConnectionState.Connected)
+            assertThat(next.piFeatures.value).contains(SchemaV2Codec.FEATURE_SHOT_CATCH_UP)
         }
 
     // endregion
 
-    // region The v2 link
+    // region The schema 2 link
 
     @Test
     fun provisionalThenFinalGoldenShotsBothArriveWithOneEventId() =
@@ -172,10 +189,10 @@ class BleSchemaV2Test {
             val link = connect(transport, ScriptedPi().link())
 
             transport.shots.test {
-                link.notifyShotV2(goldenFrames("v2_shot_provisional"))
+                link.notifyShot(goldenFrames("v2_shot_provisional"))
                 runCurrent()
                 val provisional = awaitItem()
-                link.notifyShotV2(goldenFrames("v2_shot_final"))
+                link.notifyShot(goldenFrames("v2_shot_final"))
                 runCurrent()
                 val final = awaitItem()
 
@@ -185,33 +202,10 @@ class BleSchemaV2Test {
                 assertThat(final.profileName).isEqualTo("Zoë")
 
                 // The Pi replays its latest v2 shot when the shot characteristic is resubscribed.
-                link.notifyShotV2(goldenFrames("v2_shot_final"))
+                link.notifyShot(goldenFrames("v2_shot_final"))
                 runCurrent()
                 expectNoEvents()
             }
-        }
-
-    @Test
-    fun clubCommandsUseTheV2CharacteristicAndEnvelope() =
-        runTest {
-            val pi = ScriptedPi()
-            val transport = transport()
-            val link = connect(transport, pi.link())
-
-            val current = async { transport.currentClub() }
-            runCurrent()
-            assertThat(current.await().club).isEqualTo(GolfClub.DRIVER)
-
-            val selection = async { transport.setClub(GolfClub.WOOD_3) }
-            runCurrent()
-            assertThat(selection.await().club).isEqualTo(GolfClub.WOOD_3)
-            assertThat(transport.activeClub.value).isEqualTo(GolfClub.WOOD_3)
-
-            val written = link.commandsWrittenTo(CONTROL_V2_CHARACTERISTIC_UUID).map { it.jsonObject }
-            assertThat(written.map { it["type"] })
-                .containsExactly(JsonPrimitive("hello"), JsonPrimitive("get_club"), JsonPrimitive("set_club"))
-            assertThat(written.all { it["schema_version"] == JsonPrimitive(2) }).isTrue()
-            assertThat(link.commandsWrittenTo(CONTROL_CHARACTERISTIC_UUID)).isEmpty()
         }
 
     @Test
@@ -285,7 +279,7 @@ class BleSchemaV2Test {
             val link = connect(transport, ScriptedPi().link())
 
             transport.schemaEvents.test {
-                for (name in GOLDEN_EVENTS) link.notifyControlV2(goldenFrames(name))
+                for (name in GOLDEN_EVENTS) link.notifyControl(goldenFrames(name))
                 runCurrent()
 
                 assertThat(awaitItem()).isEqualTo(SchemaV2Event.ShotProcessing(ShotProcessingState.CALCULATING))
@@ -335,16 +329,6 @@ class BleSchemaV2Test {
         }
 
     @Test
-    fun v2OnlyCommandsAreUnsupportedOnAV1Link() =
-        runTest {
-            val transport = transport()
-            connect(transport, ScriptedPi(schemaV2 = false).link())
-
-            assertFailure { transport.requestProfiles() }.isInstanceOf<BleControlException.Unsupported>()
-            assertFailure { transport.setActiveProfile("p1") }.isInstanceOf<BleControlException.Unsupported>()
-        }
-
-    @Test
     fun aDisconnectMidMessageDropsThePartialShotAndRenegotiates() =
         runTest {
             val pi = ScriptedPi()
@@ -353,7 +337,7 @@ class BleSchemaV2Test {
 
             transport.shots.test {
                 // Half of the final shot, then the link drops.
-                first.notifyShotV2(goldenFrames("v2_shot_final").take(HALF_A_SHOT))
+                first.notifyShot(goldenFrames("v2_shot_final").take(HALF_A_SHOT))
                 runCurrent()
                 first.dropConnection()
                 runCurrent()
@@ -368,7 +352,7 @@ class BleSchemaV2Test {
                 assertThat(transport.schemaV2Active.value).isTrue()
 
                 // The Pi replays the whole message on the new subscription (a new sequence).
-                pi.notify(second, SHOT_V2_CHARACTERISTIC_UUID, goldenPayload("v2_shot_final"))
+                pi.notify(second, SHOT_CHARACTERISTIC_UUID, goldenPayload("v2_shot_final"))
                 runCurrent()
                 assertThat(awaitItem().final).isEqualTo(true)
                 expectNoEvents()

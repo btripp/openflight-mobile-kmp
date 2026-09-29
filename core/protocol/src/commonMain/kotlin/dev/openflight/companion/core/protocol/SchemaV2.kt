@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 package dev.openflight.companion.core.protocol
 
+import dev.openflight.companion.core.model.GolfClub
+import dev.openflight.companion.core.model.PhoneOrientationMeasurement
 import dev.openflight.companion.core.model.pi.PowerStatus
 import dev.openflight.companion.core.model.pi.Profile
 import dev.openflight.companion.core.model.pi.ShotProcessingState
@@ -49,13 +51,19 @@ sealed interface SchemaV2Event {
     ) : SchemaV2Event
 }
 
-/** The `hello` result: the negotiated schema, the Pi's features and (for 2) the v2 pair. */
+/**
+ * The `hello` result: the negotiated schema, the Pi's features and its characteristic pair.
+ * Features are detected, never required: `shot_catch_up` (and `last_event_id` catch-up) arrive in a
+ * later Pi build, so a Pi without them is still a complete schema 2 Pi.
+ */
 @Serializable
 data class HelloResult(
     @SerialName("schema_version") val schemaVersion: Int,
     val features: List<String> = emptyList(),
     val characteristics: Map<String, String> = emptyMap(),
-)
+) {
+    fun supports(feature: String): Boolean = feature in features
+}
 
 /**
  * v2 events decode leniently: unknown keys (`schema_version`, `type`) are ignored and an unknown
@@ -99,6 +107,9 @@ object SchemaV2Codec {
     const val TYPE_SET_ACTIVE_PROFILE = "set_active_profile"
     const val TYPE_GET_POWER_STATUS = "get_power_status"
 
+    /** An optional `hello` feature: the Pi can replay shots missed while disconnected (later Pi builds). */
+    const val FEATURE_SHOT_CATCH_UP = "shot_catch_up"
+
     const val EVENT_PROFILES = "profiles"
     const val EVENT_SESSION_CLEARED = "session_cleared"
     const val EVENT_SHOT_DELETED = "shot_deleted"
@@ -138,7 +149,7 @@ object SchemaV2Codec {
         return OpenFlightJson.encodeToString(JsonElement.serializer(), sortKeys(envelope)).encodeToByteArray()
     }
 
-    /** `hello {client_schema_max: 2}` on the v2 control characteristic. */
+    /** `hello {client_schema_max: 2}`, the first write on the BLE control characteristic. */
     fun encodeHello(requestId: String): ByteArray =
         encodeCommand(TYPE_HELLO, requestId, JsonObject(mapOf("client_schema_max" to JsonPrimitive(SCHEMA_VERSION))))
 
@@ -152,17 +163,30 @@ object SchemaV2Codec {
 
     fun encodeGetPowerStatus(requestId: String): ByteArray = encodeCommand(TYPE_GET_POWER_STATUS, requestId)
 
-    /**
-     * Re-encodes a version-one command (`set_club`, `get_club`, calibration) as a v2 envelope: the
-     * same type, request id and payload. The v2 control characteristic also accepts v1 envelopes,
-     * but answering in kind keeps one encoding per characteristic.
-     */
-    fun toV2Command(v1Command: ByteArray): ByteArray {
-        val v1 = OpenFlightJson.parseToJsonElement(v1Command.decodeToString()).jsonObject
-        val type = (v1["type"] as JsonPrimitive).content
-        val requestId = (v1["request_id"] as JsonPrimitive).content
-        return encodeCommand(type, requestId, v1["payload"]?.jsonObject ?: JsonObject(emptyMap()))
-    }
+    /** `get_club`: the Pi's current club. */
+    fun encodeGetClub(requestId: String): ByteArray = encodeCommand(ControlCodec.TYPE_GET_CLUB, requestId)
+
+    /** `set_club {club}`; the Pi notifies `club_changed` before its response. */
+    fun encodeSetClub(
+        club: GolfClub,
+        requestId: String,
+    ): ByteArray =
+        encodeCommand(
+            ControlCodec.TYPE_SET_CLUB,
+            requestId,
+            OpenFlightJson.encodeToJsonElement(GolfClub.serializer(), club).let { JsonObject(mapOf("club" to it)) },
+        )
+
+    /** `iwr6843_orientation_calibration` with the phone's measurement as the payload. */
+    fun encodeCalibration(
+        measurement: PhoneOrientationMeasurement,
+        requestId: String,
+    ): ByteArray =
+        encodeCommand(
+            ControlCodec.TYPE_CALIBRATION,
+            requestId,
+            OpenFlightJson.encodeToJsonElement(PhoneOrientationMeasurement.serializer(), measurement).jsonObject,
+        )
 
     fun decodeHelloResult(response: ControlResponseEnvelope): HelloResult {
         if (!response.ok) throw ControlDecodeError.ServerError(response.error ?: "hello was refused")
@@ -229,7 +253,7 @@ object SchemaV2Codec {
 }
 
 /**
- * The schema v2 commands a transport offers once it negotiated v2 (BLE v2). Read-and-select only:
+ * The schema v2 commands a transport offers once it negotiated v2 (Bluetooth). Read-and-select only:
  * over BLE the Pi refuses deleting, clearing and profile edits (backend "Security and scope").
  */
 interface SchemaV2Commands {

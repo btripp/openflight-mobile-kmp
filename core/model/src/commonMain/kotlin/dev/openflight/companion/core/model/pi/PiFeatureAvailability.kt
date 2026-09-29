@@ -64,7 +64,10 @@ sealed interface PiFeatureAvailability {
         fun forProfileEdits(link: PiLinkState): PiFeatureAvailability =
             if (link == PiLinkState.WifiOnly) Unavailable(WIFI_ONLY_ON_BLUETOOTH) else of(link)
 
-        /** Selecting the active profile: over Socket.IO, or over Bluetooth once the Pi speaks schema v2. */
+        /**
+         * Selecting the active profile: over Socket.IO, or over Bluetooth once the schema 2 link
+         * is negotiated ([bluetoothSchemaV2]; Bluetooth is schema 2 only, so that is "connected").
+         */
         fun forProfileSelection(
             link: PiLinkState,
             bluetoothSchemaV2: Boolean,

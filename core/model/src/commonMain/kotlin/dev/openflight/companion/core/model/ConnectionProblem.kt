@@ -36,6 +36,12 @@ data class ConnectionProblem(
          * scanning silently forever (tester bug, 2026-09).
          */
         BLUETOOTH_NOT_FOUND,
+
+        /**
+         * Plan R8e: the Pi answered over Bluetooth but only speaks the old version one, which this
+         * app dropped. The detail says to update the Pi or switch to Network; Retry can't help.
+         */
+        PI_UPDATE_REQUIRED,
     }
 
     companion object {
@@ -43,6 +49,7 @@ data class ConnectionProblem(
         const val LOCAL_NETWORK_DENIED_TITLE: String = "Local network access is off"
         const val CONNECTION_FAILED_TITLE: String = "Can't reach the Pi"
         const val BLUETOOTH_NOT_FOUND_TITLE: String = "No OpenFlight Pi found over Bluetooth"
+        const val PI_UPDATE_REQUIRED_TITLE: String = "The Pi needs its Bluetooth update"
         const val BLUETOOTH_NOT_FOUND_DETAIL: String =
             "Still scanning. Bluetooth needs the Pi's phone-connectivity update (started with --ble); " +
                 "standard OpenFlight software works over the network only (Wi-Fi or Ethernet). Pairing in " +
@@ -69,6 +76,10 @@ data class ConnectionProblem(
 
                 error?.kind == ConnectionErrorKind.LOCAL_NETWORK_DENIED -> {
                     ConnectionProblem(Kind.LOCAL_NETWORK_DENIED, LOCAL_NETWORK_DENIED_TITLE, error.description)
+                }
+
+                error?.kind == ConnectionErrorKind.PI_UPDATE_REQUIRED -> {
+                    ConnectionProblem(Kind.PI_UPDATE_REQUIRED, PI_UPDATE_REQUIRED_TITLE, error.description)
                 }
 
                 link is PiLinkState.Reconnecting && link.localNetworkDenied -> {

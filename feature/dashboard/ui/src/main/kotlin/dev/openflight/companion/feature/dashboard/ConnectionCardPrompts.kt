@@ -45,7 +45,10 @@ internal fun ConnectionProblemNotice(problem: ConnectionProblem) {
             ConnectionProblem.Kind.ADDRESS_REJECTED -> "Fix the address above, then press Go."
 
             // The detail already says what to do (switch to Wi-Fi or update the Pi).
-            ConnectionProblem.Kind.LOCAL_NETWORK_DENIED, ConnectionProblem.Kind.BLUETOOTH_NOT_FOUND -> null
+            ConnectionProblem.Kind.LOCAL_NETWORK_DENIED,
+            ConnectionProblem.Kind.BLUETOOTH_NOT_FOUND,
+            ConnectionProblem.Kind.PI_UPDATE_REQUIRED,
+            -> null
 
             ConnectionProblem.Kind.CONNECTION_FAILED -> "Check the Pi is on and on this network, then Retry."
         }

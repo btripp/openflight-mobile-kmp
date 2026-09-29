@@ -4,7 +4,7 @@
 
 An Android + iOS companion app for [OpenFlight](https://openflight.dev), the DIY golf launch
 monitor. It talks to the Pi over the network, Wi-Fi or Ethernet (the Pi's own Socket.IO API, plus
-Server-Sent Events on backends that have them), or Bluetooth LE (schema v1 and v2). See
+Server-Sent Events on backends that have them), or Bluetooth LE (schema 2). See
 [Backend compatibility](#backend-compatibility) for which backend offers what. Each platform has a
 **native UI**, Jetpack Compose on Android and SwiftUI on iOS, over the same shared Kotlin
 Multiplatform ViewModels, repositories, transports and ball-flight geometry
@@ -44,8 +44,8 @@ The app has four tabs on both platforms: **Practice · Sessions · Bag · Settin
   (`/api/shots/stream?schema=2`); on a Pi without that stream, such as stock upstream, the
   Socket.IO `shot`/`shot_update` events feed the live shots instead. Both reconnect on their own
   with capped exponential backoff
-  (Socket.IO 0.5 s → 5 s, SSE 1 s → 15 s). Over Bluetooth the app negotiates schema v2 when the
-  Pi offers it and falls back to v1 ([Bluetooth LE](#bluetooth-le-schema-v1-and-v2)).
+  (Socket.IO 0.5 s → 5 s, SSE 1 s → 15 s). Bluetooth needs the Pi's schema 2 build: the app
+  negotiates schema 2 and has no version-one fallback ([Bluetooth LE](#bluetooth-le-schema-2)).
 - **The latest shot**: ball speed and carry (or the carry range), club speed, smash, launch,
   direction, spin, club path and spin axis, with confidence dots and the spin source. A haptic
   and a gold flash mark each new shot, and "View on range" flies it.
@@ -133,7 +133,7 @@ The app has four tabs on both platforms: **Practice · Sessions · Bag · Settin
 
 Done and on `main`:
 
-- [x] Live shots over the network (Socket.IO + SSE) and Bluetooth LE schema v1/v2
+- [x] Live shots over the network (Socket.IO + SSE) and Bluetooth LE schema 2
 - [x] Live shots and club changes on a stock upstream Pi (Socket.IO only, no SSE or `/api/club`)
 - [x] Practice: latest shot, confidence, processing indicator, connection problems, club sync
 - [x] Profiles: select, add, rename, remove
@@ -180,41 +180,52 @@ runs:
 | Live shots on the Practice latest-shot card and the range | Yes, over Socket.IO: there's no SSE stream (`/api/shots/stream` answers 404), so the app feeds the live feed from the Pi's `shot`/`shot_update` and shows Connected while the Socket.IO link is up. It probes SSE once per connection, not on a retry loop | Yes, over the SSE stream with schema v2 (`?schema=2`); Socket.IO only enriches it |
 | Change the club from the phone over Network | Yes, over Socket.IO `set_club` (there's no `/api/club`); the phone shows the club once the Pi's `club_changed` confirms it | Yes, `POST /api/club` |
 | Phone calibration (`/api/calibration/iwr6843/orientation`) | No | Yes |
-| Bluetooth LE | None | Schema v1 and v2 |
+| Bluetooth LE | None | Schema 2 only; the app needs the Pi's schema 2 build. An older build that still offers only the v1 characteristics gets a "needs its Bluetooth update" message: use Network |
 | `MockServerIT` (pinned in CI) | `7ca4b40`: all 26 pass (asserting the Socket.IO fallbacks) | `07d5313`: all 26 pass |
 
 The fork branch is upstream `main` plus the phone transport from
 [`jake-fishtech/openflight@feat/iOS-ble`](https://github.com/jake-fishtech/openflight/tree/feat/iOS-ble)
-(BLE v1, SSE, `/api/club`, phone calibration) and BLE schema v2. It isn't upstream yet. A Pi
-running jake-fishtech's branch itself speaks BLE v1 and SSE v1; its Socket.IO API predates
-profiles, so the profile, power and processing features stay empty there.
+(SSE, `/api/club`, phone calibration) and BLE schema 2, which has replaced that branch's BLE v1.
+It isn't upstream yet. A Pi running jake-fishtech's branch itself speaks only BLE v1, which this
+app no longer supports, so connect to it over **Network** instead (its SSE v1 stream still works).
+Its Socket.IO API predates profiles, so the profile, power and processing features stay empty
+there.
 
 HTTPS (`--tls-cert`/`--tls-key`) is on a separate backend branch, `feat/lan-https`, not in
 either column yet. See [Network security](#network-security).
 
-### Bluetooth LE: schema v1 and v2
+### Bluetooth LE: schema 2
 
-All four characteristics live in one GATT service, `b6f633f2-e6e3-45ae-84b4-968ecca2d9c7`:
+Bluetooth needs the Pi's schema 2 build. Its GATT service, `b6f633f2-e6e3-45ae-84b4-968ecca2d9c7`,
+has exactly two characteristics:
 
 | Characteristic | UUID | Use |
 |---|---|---|
-| v1 shot | `2b28f67e-9011-41d2-98ed-562b47d7a5e4` | notify: shot events |
-| v1 control | `7e3b5d6c-7f10-4d4a-9c39-25e2b77f4a11` | write + notify: `set_club`, `get_club`, calibration, `club_changed` |
-| v2 shot | `ed365fe6-3abf-4fc3-8e44-d9525a22dabd` | notify: v2 shot events |
-| v2 control | `7ba96e63-12c2-4ce0-bb84-3513c7fd1474` | write + notify: v2 commands and events |
+| shot | `ed365fe6-3abf-4fc3-8e44-d9525a22dabd` | notify: schema 2 shot events |
+| control | `7ba96e63-12c2-4ce0-bb84-3513c7fd1474` | write + notify: commands, responses and events |
+
+The version-one characteristics (`2b28f67e-…` shot, `7e3b5d6c-…` control) are gone from the Pi,
+and the app never looks for them.
 
 Negotiation, after discovery:
-1. If the Pi has the v2 pair, the app subscribes to v2 control and sends
-   `hello {client_schema_max: 2}` with the usual 10 s control timeout.
-2. If the Pi answers schema 2, the app subscribes to the v2 shot characteristic only. It never
-   subscribes to the v1 pair, so the Pi sends this phone no v1 traffic.
-3. Anything else (`ok:false` from an older Pi, a timeout, a failed subscription, or no v2 pair)
-   and the app unsubscribes from v2 control and carries on exactly as version one, which is
-   what a jake-fishtech Pi gets.
+1. The app requires both characteristics. Without them it stops with "The Pi needs its
+   Bluetooth update" (the Pi's Bluetooth predates schema 2); a v1-only Pi can still connect over
+   Network.
+2. It subscribes to control and sends `hello {"client_schema_max":2}` with the usual 10 s
+   control timeout. Every response is `schema_version` 2.
+3. Once the Pi answers schema 2, it subscribes to shots, then syncs `get_club`, `get_profiles`
+   and `get_power_status`.
+4. `ok:false` (the Pi refuses anything below schema 2, and an older Pi doesn't know `hello`), a
+   timeout or a failed subscription is an error state that says why. There's no version-one
+   fallback. Retry negotiates again.
+
+The `hello` result lists the Pi's features (`provisional_shots`, `shot_processing`, `profiles`,
+`power_status`, `shot_deleted`, `club`). Later additions such as `shot_catch_up` are detected,
+never required.
 
 Every message is split into 20-byte frames, which fits Android's default ATT MTU. The SSE
-stream negotiates the same way through its query string: `?schema=2`, with a plain v1 stream
-for a Pi that answers `400` (jake-fishtech's ignores the parameter and sends v1).
+stream (Network) negotiates separately and keeps its fallback: `?schema=2`, with a plain v1
+stream for a Pi that answers `400` (jake-fishtech's ignores the parameter and sends v1).
 
 Schema v2 adds `shot_number`, the profile, and **provisional and final** shots that share an
 `event_id` (the app replaces one with the other). It adds the events `club_changed`,
@@ -222,7 +233,7 @@ Schema v2 adds `shot_number`, the profile, and **provisional and final** shots t
 commands `get_club`/`set_club`, calibration, `get_profiles`, `set_active_profile` and
 `get_power_status`. BLE has no authentication, so it is **read-and-select only**: the Pi
 refuses `delete_shot` and `clear_session` over BLE, and the app disables Delete and Clear there
-with a "Network only" explanation. Deletes and clears made elsewhere still reach a v2 phone
+with a "Network only" explanation. Deletes and clears made elsewhere still reach the phone
 through `shot_deleted` and `session_cleared`. The frame format is specified in the backend's
 `docs/ios-ble.md`.
 
@@ -421,8 +432,9 @@ actuals of Ktor, DataStore and Room; a separate JVM module would need a `jvm()` 
   the backend's cross-language fixtures, copied verbatim. The
   [README there](core/protocol/src/commonTest/fixtures/openflight-ble/README.md) has the refresh
   steps; afterwards run `./gradlew :core:protocol:allTests :core:ble:allTests`.
-- **v1 frame goldens** (`GoldenFrameTest`): regenerate with `tools/gen-frame-goldens.py` from
-  the reference encoder; the script's header has the command.
+- **Frame goldens** (`GoldenFrameTest`): framing only (the 20-byte fragmenter, unchanged in
+  schema 2), over the reference's `shot_v1.json` payload. Regenerate with
+  `tools/gen-frame-goldens.py` from the reference encoder; the script's header has the command.
 - Screenshots taken during manual or device checks are build artifacts, not source: don't
   commit them. The only committed screenshots are the README's, in `docs/images/`.
 
@@ -569,8 +581,8 @@ Adapted from the reference iOS app's own troubleshooting guide
 - **Bluetooth carries less than Network.** BLE schema v2 brings the club, profile selection,
   processing and power status, and provisional/final shots. The Pi's session and its stats,
   delete and clear, profile edits, the camera, training mode, simulator status, the radar/debug
-  panel, cloud upload and Pi shutdown still need the Pi's Socket.IO API, which is Network only;
-  a v1 Pi carries only shots and the club. Over BLE the UI disables these with an explanation
+  panel, cloud upload and Pi shutdown still need the Pi's Socket.IO API, which is Network only.
+  Over BLE the UI disables these with an explanation
   instead of hiding them.
 - **The mock server can show phantom clients for 15–35 seconds after a disconnect.** See
   Troubleshooting above; this is `openflight-server`'s behavior, not this app's.

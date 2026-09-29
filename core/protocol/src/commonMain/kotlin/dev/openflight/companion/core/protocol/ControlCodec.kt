@@ -4,53 +4,34 @@ package dev.openflight.companion.core.protocol
 import dev.openflight.companion.core.model.CalibrationResult
 import dev.openflight.companion.core.model.ClubSelection
 import dev.openflight.companion.core.model.GolfClub
-import dev.openflight.companion.core.model.PhoneOrientationMeasurement
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.decodeFromJsonElement
 
-/** Envelope for a control command, ported from `ios/OpenFlight/PhoneControl.swift`. */
-@Serializable
-private data class ControlEnvelope<T>(
-    @SerialName("schema_version") val schemaVersion: Int = 1,
-    val type: String,
-    @SerialName("request_id") val requestId: String,
-    val payload: T,
-)
-
 /**
- * The control-channel response envelope: `{"schema_version":1,"request_id":...,"ok":bool,
- * "result":{...}|"error":"..."}` (plan §0.1).
+ * The control-channel response envelope: `{"schema_version":2,"request_id":...,"ok":bool,
+ * "result":{...}|"error":"..."}` (plan §0.1, R8e). The BLE control characteristic always answers
+ * in schema 2.
  */
 @Serializable
 data class ControlResponseEnvelope(
-    @SerialName("schema_version") val schemaVersion: Int = 1,
+    @SerialName("schema_version") val schemaVersion: Int = SchemaV2Codec.SCHEMA_VERSION,
     @SerialName("request_id") val requestId: String,
     val ok: Boolean,
     val result: JsonElement? = null,
     val error: String? = null,
 )
 
-/** `{"schema_version":1,"type":"club_changed","club":"7-iron"}` (plan §0.1); `2` on the v2 pair and SSE `?schema=2`. */
+/**
+ * `{"schema_version":2,"type":"club_changed","club":"7-iron"}` on BLE and SSE `?schema=2`; `1` on
+ * the SSE v1 stream. A missing `schema_version` reads as `1`, as it always has for SSE.
+ */
 @Serializable
 data class ClubChangedEvent(
     @SerialName("schema_version") val schemaVersion: Int = 1,
     val type: String = ControlCodec.TYPE_CLUB_CHANGED,
     val club: GolfClub,
-)
-
-@Serializable
-private data class ClubPayload(
-    val club: GolfClub,
-)
-
-@Serializable
-private class EmptyPayload
-
-@Serializable
-private data class HelloPayload(
-    @SerialName("client_schema_max") val clientSchemaMax: Int = SchemaV2Codec.SCHEMA_VERSION,
 )
 
 /** Errors from decoding a control-channel response or event. */
@@ -71,82 +52,41 @@ sealed class ControlDecodeError(
 }
 
 /**
- * Encodes `set_club`, `get_club` and `iwr6843_orientation_calibration` control envelopes, and
- * decodes both control responses and the `club_changed` event, ported from
- * `ios/OpenFlight/PhoneControl.swift`. Both BLE (framed) and Wi-Fi transports share this so
- * their wire representations of the control channel cannot drift apart.
+ * Decodes control responses (`get_club`/`set_club`, calibration) and the `club_changed` event,
+ * ported from `ios/OpenFlight/PhoneControl.swift`. The BLE command encoders are
+ * [SchemaV2Codec]'s (schema 2 only); `club_changed` is shared with the SSE stream, which still
+ * accepts version one ([V1_AND_V2_SCHEMAS]).
  */
-@Suppress("TooManyFunctions") // One encoder per command, one decoder per result or event.
 object ControlCodec {
     const val TYPE_SET_CLUB = "set_club"
     const val TYPE_GET_CLUB = "get_club"
     const val TYPE_CALIBRATION = "iwr6843_orientation_calibration"
     const val TYPE_CLUB_CHANGED = "club_changed"
-    const val TYPE_HELLO = "hello"
 
-    /** Version one only: the v1 control characteristic and the default SSE stream. */
-    val V1_SCHEMAS: IntRange = 1..1
+    /** The BLE control characteristic: schema 2 only. */
+    val V2_SCHEMAS: IntRange = SchemaV2Codec.SCHEMA_VERSION..SchemaV2Codec.SCHEMA_VERSION
 
-    /** The v2 control characteristic and SSE `?schema=2` (plan R8e). */
-    val V1_AND_V2_SCHEMAS: IntRange = 1..2
-
-    fun encodeSetClub(
-        club: GolfClub,
-        requestId: String,
-    ): ByteArray {
-        val envelope = ControlEnvelope(type = TYPE_SET_CLUB, requestId = requestId, payload = ClubPayload(club))
-        return OpenFlightJson
-            .encodeToString(ControlEnvelope.serializer(ClubPayload.serializer()), envelope)
-            .encodeToByteArray()
-    }
-
-    fun encodeGetClub(requestId: String): ByteArray {
-        val envelope = ControlEnvelope(type = TYPE_GET_CLUB, requestId = requestId, payload = EmptyPayload())
-        return OpenFlightJson
-            .encodeToString(ControlEnvelope.serializer(EmptyPayload.serializer()), envelope)
-            .encodeToByteArray()
-    }
-
-    fun encodeCalibration(
-        measurement: PhoneOrientationMeasurement,
-        requestId: String,
-    ): ByteArray {
-        val envelope =
-            ControlEnvelope(type = TYPE_CALIBRATION, requestId = requestId, payload = measurement)
-        return OpenFlightJson
-            .encodeToString(ControlEnvelope.serializer(PhoneOrientationMeasurement.serializer()), envelope)
-            .encodeToByteArray()
-    }
-
-    /**
-     * `hello {client_schema_max: 2}` in a **version-one** envelope, for the v1 control
-     * characteristic (backend "Negotiation"). The v2 characteristic gets [SchemaV2Codec.encodeHello].
-     */
-    fun encodeHello(requestId: String): ByteArray {
-        val envelope = ControlEnvelope(type = TYPE_HELLO, requestId = requestId, payload = HelloPayload())
-        return OpenFlightJson
-            .encodeToString(ControlEnvelope.serializer(HelloPayload.serializer()), envelope)
-            .encodeToByteArray()
-    }
+    /** The SSE stream: `?schema=2`, or version one when the Pi answers it with `400` (plan R8e). */
+    val V1_AND_V2_SCHEMAS: IntRange = 1..SchemaV2Codec.SCHEMA_VERSION
 
     fun decodeResponse(payload: ByteArray): ControlResponseEnvelope =
         OpenFlightJson.decodeFromString(ControlResponseEnvelope.serializer(), payload.decodeToString())
 
     fun decodeClubResult(
         response: ControlResponseEnvelope,
-        schemas: IntRange = V1_SCHEMAS,
+        schemas: IntRange = V2_SCHEMAS,
     ): ClubSelection = OpenFlightJson.decodeFromJsonElement(ClubSelection.serializer(), resultOf(response, schemas))
 
     fun decodeCalibrationResult(
         response: ControlResponseEnvelope,
-        schemas: IntRange = V1_SCHEMAS,
+        schemas: IntRange = V2_SCHEMAS,
     ): CalibrationResult =
         OpenFlightJson.decodeFromJsonElement(CalibrationResult.serializer(), resultOf(response, schemas))
 
-    /** Decodes `club_changed`; [schemas] is [V1_SCHEMAS] unless the link negotiated v2. */
+    /** Decodes `club_changed`: [V2_SCHEMAS] on BLE, [V1_AND_V2_SCHEMAS] on the SSE stream. */
     fun decodeClubChangedEvent(
         payload: ByteArray,
-        schemas: IntRange = V1_SCHEMAS,
+        schemas: IntRange,
     ): GolfClub {
         val event = OpenFlightJson.decodeFromString(ClubChangedEvent.serializer(), payload.decodeToString())
         requireSupportedSchema(event.schemaVersion, schemas)

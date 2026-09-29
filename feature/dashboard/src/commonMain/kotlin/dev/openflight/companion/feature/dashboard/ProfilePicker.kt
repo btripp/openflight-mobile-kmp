@@ -23,7 +23,7 @@ import kotlinx.coroutines.withTimeoutOrNull
  *
  * It shows what the Pi last reported rather than the last tap: the Pi answers every mutation with
  * the whole roster, including one it refuses, so that reply is the only truth. Over Bluetooth
- * with a schema v2 Pi only selecting is possible; adding, renaming and removing need Wi-Fi
+ * (schema 2) only selecting is possible; adding, renaming and removing need Wi-Fi
  * ([PiFeatureAvailability.forProfileEdits]).
  *
  * @property activeName the active profile's name, or `null` before the roster arrives.
