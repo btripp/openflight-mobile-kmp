@@ -11,6 +11,7 @@ import assertk.assertions.single
 import dev.openflight.companion.core.database.buildShotHistoryDatabase
 import dev.openflight.companion.core.database.inMemoryShotHistoryDatabaseBuilder
 import dev.openflight.companion.core.model.ConnectionState
+import dev.openflight.companion.core.model.EnrichmentProgress
 import dev.openflight.companion.core.model.ShotEvent
 import dev.openflight.companion.core.model.pi.ShotDetail
 import dev.openflight.companion.core.protocol.SchemaV2Event
@@ -42,6 +43,8 @@ class ShotHistoryWriteThroughTest {
                 socketFactory = { socketHost, _ -> FakePiSocket(socketHost).also { sockets += it } },
                 cameraSource = FakePiCameraSource(),
                 scope = scope,
+                // As the app wires it (DataModule): the BLE link's v2 shots feed detailFor.
+                bluetooth = ble,
             )
         private var sessions = 0
         val history =
@@ -337,6 +340,80 @@ class ShotHistoryWriteThroughTest {
             ).containsExactly(importedId)
         }
 
+    // #66: over BLE the Pi session indexes each v2 shot for detailFor on its own collector, so the
+    // history write can see the provisional's detail while filing the final shot.
+    @Test
+    fun overBluetoothAFinalShotReplacesItsProvisionalStoredValues() =
+        runWriteThroughTest(transport = TransportType.BLUETOOTH) { h ->
+            h.ble.state.value = ConnectionState.Connected
+            h.ble.shots.emit(v2Shot(final = false, ballSpeed = 100.0, carry = 140.0))
+            h.ble.shots.emit(v2Shot(final = true, ballSpeed = 106.1, carry = 152.0))
+
+            // Practice shows the final shot, and so must the stored history.
+            assertThat(
+                h.repository.latestShot.value
+                    ?.estimatedCarryYards,
+            ).isEqualTo(152.0)
+            h.history.awaitWrites()
+            val stored = h.history.shots(h.current()).first()
+            assertThat(stored).single().transform { it.detail.estimatedCarryYards }.isEqualTo(152.0)
+            assertThat(stored).single().transform { it.detail.ballSpeedMph }.isEqualTo(106.1)
+            assertThat(stored).single().transform { it.detail.carryRange }.isEqualTo(listOf(148.0, 156.0))
+            assertThat(stored).single().transform { it.detail.spinRpm }.isEqualTo(6500.0)
+        }
+
+    // #67: a v2 event carries its own profile and shot number; the stored row keeps them even
+    // when the Pi session hasn't indexed the shot yet.
+    @Test
+    fun overBluetoothAFinalOnlyShotIsStoredWithItsProfileAndShotNumber() =
+        runWriteThroughTest(transport = TransportType.BLUETOOTH) { h ->
+            h.ble.state.value = ConnectionState.Connected
+            h.ble.shots.emit(v2Shot(final = true, ballSpeed = 106.1, carry = 152.0))
+
+            h.history.awaitWrites()
+            val stored = h.history.shots(h.current()).first()
+            assertThat(stored).single().transform { it.detail.profileId }.isEqualTo("p1")
+            assertThat(stored).single().transform { it.detail.profileName }.isEqualTo("Zoe")
+            assertThat(stored).single().transform { it.detail.shotNumber }.isEqualTo(7)
+            assertThat(stored).single().transform { it.detail.spinSource }.isEqualTo("measured")
+            assertThat(stored).single().transform { it.detail.launchAngleConfidence }.isEqualTo(0.8)
+            assertThat(h.history.shots(h.current(), "p1").first()).hasSize(1)
+        }
+
+    // The network path is unchanged: an SSE v2 event whose Socket.IO detail is already known
+    // files one row with the event's values plus the enrichment only the detail carries.
+    @Test
+    fun overWifiAnSseShotStillStoresItsSocketIoEnrichment() =
+        runWriteThroughTest { h ->
+            h.wifi.state.value = ConnectionState.Connected
+            h.piConnected().serverFrame(PiFixtures.SHOT_FRAME)
+            h.wifi.shots.emit(
+                ShotEvent(
+                    schemaVersion = 2,
+                    eventId = shotId(1),
+                    timestamp = PiFixtures.SHOT_TIMESTAMP,
+                    club = "driver",
+                    ballSpeedMph = 116.2,
+                    estimatedCarryYards = 179.0,
+                    type = "shot",
+                    final = true,
+                    shotNumber = 1,
+                    profileId = PiFixtures.DEFAULT_PROFILE_ID,
+                    carryRange = listOf(171.0, 188.0),
+                ),
+            )
+            h.history.awaitWrites()
+
+            val stored = h.history.shots(h.current()).first()
+            assertThat(stored).single().transform { it.eventId }.isEqualTo(shotId(1))
+            assertThat(stored).single().transform { it.detail.estimatedCarryYards }.isEqualTo(179.0)
+            assertThat(stored).single().transform { it.detail.profileName }.isEqualTo("Profile 1")
+            assertThat(stored).single().transform { it.detail.angleSource }.isEqualTo("mock")
+            assertThat(stored).single().transform { it.detail.spinQuality }.isEqualTo("high")
+            assertThat(stored).single().transform { it.detail.clubAngleDeg }.isEqualTo(-1.9)
+            assertThat(stored).single().transform { it.detail.spinRpm }.isEqualTo(2593.0)
+        }
+
     private companion object {
         const val HOST = "pi.local:8080"
 
@@ -360,5 +437,29 @@ class ShotHistoryWriteThroughTest {
             number: Int,
             timestamp: String,
         ): ShotEvent = shot(number).copy(timestamp = timestamp)
+
+        /** Shot #7 as the fork's BLE link sends it: provisional first, then final (same event id). */
+        fun v2Shot(
+            final: Boolean,
+            ballSpeed: Double,
+            carry: Double,
+        ) = ShotEvent(
+            schemaVersion = 2,
+            eventId = "05dd37ec-49ed-596b-b1a4-953d54e4f239",
+            timestamp = "2026-09-25T14:03:07.412345",
+            club = "7-iron",
+            ballSpeedMph = ballSpeed,
+            estimatedCarryYards = carry,
+            type = "shot",
+            final = final,
+            shotNumber = 7,
+            profileId = "p1",
+            profileName = "Zoe",
+            carryRange = if (final) listOf(148.0, 156.0) else listOf(130.0, 150.0),
+            spinRpm = if (final) 6500.0 else null,
+            spinSource = if (final) "measured" else null,
+            launchAngleConfidence = if (final) 0.8 else null,
+            enrichment = EnrichmentProgress(if (final) "complete" else "pending"),
+        )
     }
 }

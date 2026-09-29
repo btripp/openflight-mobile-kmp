@@ -24,6 +24,11 @@ tag, to test Bluetooth against a schema-2-only Pi; the next tagged release is `v
 
 ### Fixed
 
+- **Over Bluetooth, History stores each shot's final values** (#66). A shot that arrived
+  provisional and then final could be stored with the provisional's ball speed, carry and carry
+  range, and nothing corrected it, so History, Bag stats and gapping were wrong.
+- **Over Bluetooth, stored shots keep their profile and shot number** (#67), so a profile filter
+  no longer drops them. The stored row now takes its values from the shot event itself.
 - Android: a status pill whose text wraps (Settings' long "Live session" reconnect reason, most
   visibly at 200% text) is now a rounded rectangle, so its lines no longer crowd the pill's
   curved edges (#65). One-line pills keep their fully rounded ends.
