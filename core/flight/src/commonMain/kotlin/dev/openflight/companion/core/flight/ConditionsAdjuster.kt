@@ -11,7 +11,8 @@ import kotlin.math.abs
  * @property carryYards the anchor carry × [carryRatio].
  * @property lateralDriftYards extra sideways movement from the wind (+ right), the lateral
  *   landing difference between the conditions run and the ISA calm run; 0 without wind.
- * @property carryRatio conditions-run carry / ISA-calm-run carry.
+ * @property carryRatio conditions-run carry / ISA-calm-run carry, never below 0: a gale can blow
+ *   the simulated ball back behind the tee, but a carry can't be negative (#71).
  * @property airDensity the conditions' density in kg/m³.
  * @property densityRatio [airDensity] / [AirDensity.ISA_SEA_LEVEL].
  * @property windApplied whether the wind was included (it needs a target bearing).
@@ -83,7 +84,8 @@ class ConditionsAdjuster(
                 ).simulate(calm.copy(windMetersPerSecond = wind))
             }
 
-        val ratio = if (baseline.carryMeters > 0) adjusted.carryMeters / baseline.carryMeters else 1.0
+        val ratio =
+            if (baseline.carryMeters > 0) (adjusted.carryMeters / baseline.carryMeters).coerceAtLeast(0.0) else 1.0
         val landing = adjusted.points.last()
         return AdjustedCarry(
             carryYards = anchorCarryYards * ratio,

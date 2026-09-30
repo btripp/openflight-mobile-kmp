@@ -39,14 +39,28 @@ class ClubDetailViewModelTest {
         Dispatchers.resetMain()
     }
 
-    private fun viewModel(club: GolfClub = GolfClub.IRON_7) =
-        ClubDetailViewModel(
-            club.wireValue,
-            history,
-            FakeConditionsRepository(),
-            FakeSettingsRepository(),
-            computeDispatcher = dispatcher,
-        )
+    private fun viewModel(
+        club: GolfClub = GolfClub.IRON_7,
+        settings: FakeSettingsRepository = FakeSettingsRepository(),
+    ) = ClubDetailViewModel(
+        club.wireValue,
+        history,
+        FakeConditionsRepository(),
+        settings,
+        computeDispatcher = dispatcher,
+    )
+
+    @Test
+    fun theMetricCarrySpreadIsRoundedOnce() =
+        runTest {
+            // A spread of 1.58 yds (1.45 m); rounding the yards first would show "± 2 m".
+            history.put("s1", fiveShots(GolfClub.IRON_7, 160.0))
+
+            viewModel(settings = FakeSettingsRepository(units = UnitSystem.METRIC)).uiState.testIgnoringRest {
+                val state = awaitUntil { it.shotCount == 5 }
+                assertThat(state.summaryLines.first()).isEqualTo("146 m ± 1 m carry")
+            }
+        }
 
     @Test
     fun aClubWithoutShotsIsLoadedButEmpty() =

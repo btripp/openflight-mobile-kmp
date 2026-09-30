@@ -24,6 +24,10 @@ tag, to test Bluetooth against a schema-2-only Pi; the next tagged release is `v
 
 ### Fixed
 
+- Settings › Audio call-outs: unchecking every field now keeps them off, instead of switching
+  Carry and Ball speed back on (#75).
+- Practice no longer drops a new shot or brings back a deleted one when both happen at the same
+  moment (#73).
 - **Over Bluetooth, History stores each shot's final values** (#66). A shot that arrived
   provisional and then final could be stored with the provisional's ball speed, carry and carry
   range, and nothing corrected it, so History, Bag stats and gapping were wrong.
@@ -43,6 +47,10 @@ tag, to test Bluetooth against a schema-2-only Pi; the next tagged release is `v
   values short.
 - iOS: gold buttons ("Hit a shot", "Looks right", Retry, Simulate and others) show dark text on
   gold, as on Android, instead of hard-to-read white, and a disabled one stays readable (#82).
+- A very strong headwind no longer shows a negative carry and total: the carry stops at 0 and
+  no roll is added to it (#71).
+- Bag: the metric carry spread (± N m) no longer rounds twice, so 2.4 m reads "± 2 m" instead
+  of "± 3 m" (#72).
 - Network: a Pi address with a network interface (`[fe80::1%en0]`) is refused in Settings with
   a plain explanation instead of connecting forever. An address the phone can't use at all now
   says so and stops, rather than showing "unreachable" and retrying without end (#70).
