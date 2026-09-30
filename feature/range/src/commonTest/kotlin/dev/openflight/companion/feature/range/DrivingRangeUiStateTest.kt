@@ -23,22 +23,43 @@ class DrivingRangeUiStateTest {
 
     @Test
     fun theDetailMetricsAreAStripInFlightAndADenseGridOverAPortraitSceneWhileWaiting() {
+        // Every landscape, docked and large-text combination.
+        val flags = listOf(false, true)
+        val combinations = flags.flatMap { a -> flags.flatMap { b -> flags.map { c -> Triple(a, b, c) } } }
         for (phase in listOf(RangePhase.Flying, RangePhase.Landed)) {
-            for (landscape in listOf(false, true)) {
-                for (docked in listOf(false, true)) {
-                    assertThat(showing(phase).detailLayout(landscape, docked)).isEqualTo(RangeDetailLayout.STRIP)
-                }
+            for ((landscape, docked, largeText) in combinations) {
+                assertThat(showing(phase).detailLayout(landscape, docked, largeText))
+                    .isEqualTo(RangeDetailLayout.STRIP)
             }
         }
-        for (state in listOf(DrivingRangeUiState.Ready(), showing(RangePhase.Waiting), showing(RangePhase.Preparing))) {
-            assertThat(state.detailLayout(landscape = false, docked = false)).isEqualTo(RangeDetailLayout.DENSE_GRID)
-            assertThat(state.detailLayout(landscape = true, docked = false)).isEqualTo(RangeDetailLayout.ROW)
-            assertThat(state.detailLayout(landscape = true, docked = true)).isEqualTo(RangeDetailLayout.GRID)
+        for (state in waitingStates()) {
+            assertThat(state.detailLayout(landscape = false, docked = false, largeText = false))
+                .isEqualTo(RangeDetailLayout.DENSE_GRID)
+            assertThat(state.detailLayout(landscape = true, docked = false, largeText = false))
+                .isEqualTo(RangeDetailLayout.ROW)
+            assertThat(state.detailLayout(landscape = true, docked = true, largeText = false))
+                .isEqualTo(RangeDetailLayout.GRID)
         }
         // Eight cells (the club selector and seven metrics): two rows of four, half the old four rows of two.
         assertThat(RangeDetailLayout.DENSE_GRID.columns).isEqualTo(4)
         assertThat(RangeDetailLayout.GRID.columns).isEqualTo(2)
     }
+
+    /** Issue #80: at large text sizes the grids take half the columns, so values don't truncate. */
+    @Test
+    fun largeTextHalvesTheDetailColumns() {
+        for (state in waitingStates()) {
+            assertThat(state.detailLayout(landscape = false, docked = false, largeText = true))
+                .isEqualTo(RangeDetailLayout.GRID)
+            assertThat(state.detailLayout(landscape = true, docked = false, largeText = true))
+                .isEqualTo(RangeDetailLayout.DENSE_GRID)
+            assertThat(state.detailLayout(landscape = true, docked = true, largeText = true))
+                .isEqualTo(RangeDetailLayout.GRID)
+        }
+    }
+
+    private fun waitingStates() =
+        listOf(DrivingRangeUiState.Ready(), showing(RangePhase.Waiting), showing(RangePhase.Preparing))
 
     @Test
     fun theStripSummarisesClubSpeedLaunchAndSpin() {

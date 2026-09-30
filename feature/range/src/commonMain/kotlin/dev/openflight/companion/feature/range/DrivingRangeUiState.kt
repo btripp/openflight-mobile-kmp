@@ -223,7 +223,8 @@ val DrivingRangeUiState.compactMetrics: Boolean
  *   two-column grid took four rows (about a quarter of a phone) while waiting for a shot, leaving
  *   the tee view a thin strip; this is half that.
  * - [GRID]: the roomy two-column grid, in the docked side panel (plan F1b/F1c), where it covers no
- *   scene.
+ *   scene, and over a portrait scene at large text sizes (issue #80), where four columns truncate
+ *   every value.
  */
 enum class RangeDetailLayout(
     val columns: Int,
@@ -243,15 +244,21 @@ private const val DENSE_COLUMNS = 4
  * [compactMetrics] (in every layout), otherwise [RangeDetailLayout.GRID] in the [docked] side
  * panel, [RangeDetailLayout.ROW] in [landscape] and [RangeDetailLayout.DENSE_GRID] over a portrait
  * scene.
+ *
+ * Issue #80: with [largeText] (an accessibility Dynamic Type size on iOS, a font scale of 1.5 or
+ * more on Android) the grids take half the columns, so the values fit instead of truncating: two
+ * rows of four in landscape and the two-column grid over a portrait scene.
  */
 fun DrivingRangeUiState.detailLayout(
     landscape: Boolean,
     docked: Boolean,
+    largeText: Boolean,
 ): RangeDetailLayout =
     when {
         compactMetrics -> RangeDetailLayout.STRIP
         docked -> RangeDetailLayout.GRID
-        landscape -> RangeDetailLayout.ROW
+        landscape -> if (largeText) RangeDetailLayout.DENSE_GRID else RangeDetailLayout.ROW
+        largeText -> RangeDetailLayout.GRID
         else -> RangeDetailLayout.DENSE_GRID
     }
 

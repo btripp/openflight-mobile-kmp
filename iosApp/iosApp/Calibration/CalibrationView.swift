@@ -191,9 +191,7 @@ struct CalibrationContent: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 12)
             }
-            .buttonStyle(.borderedProminent)
-            .tint(Theme.success)
-            .foregroundStyle(.black)
+            .buttonStyle(.ofProminent(Theme.success))
             .disabled(!state.applyEnabled)
             .accessibilityIdentifier(CalibrationTestTags.shared.APPLY)
 

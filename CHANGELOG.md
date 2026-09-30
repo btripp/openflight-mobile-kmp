@@ -36,6 +36,13 @@ tag, to test Bluetooth against a schema-2-only Pi; the next tagged release is `v
   Edit, the iPad sidebar toggle or the Range's top controls; screens now start below it, and its
   text stops growing at xxLarge so it stays one compact line at accessibility sizes (#79).
 - iOS: at the accessibility text sizes, header rows (Practice's "Launch Monitor" with Range, the latest shot's "View on range", the profile's "Change", Bag's "Conditions" with its pill) put their buttons under the title, so no word breaks mid-word and the pill no longer cuts to "M…" (#81).
+- **The Range works at the largest text sizes** (#80). On iOS at accessibility sizes the top bar
+  collapses to Exit, a "More" menu (camera, History, Replay) and settings, so nothing runs off
+  the screen; the metrics use two columns with scaling labels, and the angles read as degrees to
+  VoiceOver. On Android at 150% text and above the dock uses two columns instead of cutting
+  values short.
+- iOS: gold buttons ("Hit a shot", "Looks right", Retry, Simulate and others) show dark text on
+  gold, as on Android, instead of hard-to-read white, and a disabled one stays readable (#82).
 
 ### Removed
 

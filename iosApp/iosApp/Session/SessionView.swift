@@ -334,9 +334,7 @@ struct SessionContent: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 4)
             }
-            .buttonStyle(.borderedProminent)
-            .tint(Theme.gold)
-            .foregroundStyle(Theme.bgDeep)
+            .buttonStyle(.goldProminent)
             .disabled(!state.simulateAvailability.isAvailable)
             .accessibilityIdentifier("session.simulate")
             if let reason = state.simulateAvailability.disabledReason {
