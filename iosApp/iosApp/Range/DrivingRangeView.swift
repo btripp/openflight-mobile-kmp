@@ -247,6 +247,12 @@ struct DrivingRangeContent: View {
     /// natural widths. Otherwise (a compact iPhone, large text, all three trailing buttons showing)
     /// the pill drops to its own line under the buttons instead of being squeezed into a column of
     /// letters (F8d-B), and wraps to two lines at most.
+    ///
+    /// Issue #80: when the buttons don't fit, Exit first shows only its icon; if they still don't
+    /// fit (accessibility text sizes), the camera mode, History and Replay collapse into an
+    /// overflow menu too, so Exit and the settings gear stay on screen. Those icon buttons stop
+    /// growing at the largest standard size and offer the Large Content Viewer instead, so this
+    /// last layout always fits.
     private var controls: some View {
         ViewThatFits(in: .horizontal) {
             HStack(spacing: 10) {
@@ -259,21 +265,109 @@ struct DrivingRangeContent: View {
                 trailingButtons
                     .rangeObstruction("buttons")
             }
-            VStack(alignment: .trailing, spacing: 8) {
-                HStack(spacing: 10) {
-                    exitButton
-                        .rangeObstruction("exit")
-                    Spacer(minLength: 0)
-                    trailingButtons
-                        .rangeObstruction("buttons")
-                }
-                statusPill
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .rangeObstruction("status")
-            }
+            stackedControls(iconOnlyExit: false)
+            stackedControls(iconOnlyExit: true)
+            collapsedControls
         }
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { controlsHeight = $0 }
+    }
+
+    /// The buttons in one row with the status pill on its own line under them. Issue #80: at the
+    /// largest standard text size (XXXL) Exit shows only its icon (keeping its name for VoiceOver),
+    /// so Follow, History and Replay still fit beside it.
+    private func stackedControls(iconOnlyExit: Bool) -> some View {
+        VStack(alignment: .trailing, spacing: 8) {
+            HStack(spacing: 10) {
+                Group {
+                    if iconOnlyExit {
+                        exitButton.labelStyle(.iconOnly)
+                    } else {
+                        exitButton
+                    }
+                }
+                .rangeObstruction("exit")
+                Spacer(minLength: 0)
+                trailingButtons
+                    .rangeObstruction("buttons")
+            }
+            statusPill
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+                .rangeObstruction("status")
+        }
+    }
+
+    /// Issue #80: the controls at accessibility text sizes (see `controls`).
+    private var collapsedControls: some View {
+        VStack(alignment: .trailing, spacing: 8) {
+            HStack(spacing: 10) {
+                exitButton
+                    .labelStyle(.iconOnly)
+                    .accessibilityShowsLargeContentViewer()
+                    .rangeObstruction("exit")
+                Spacer(minLength: 0)
+                HStack(spacing: 10) {
+                    moreControlsMenu
+                    quickSettingsButton
+                        .accessibilityShowsLargeContentViewer()
+                }
+                .rangeObstruction("buttons")
+            }
+            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+            statusPill
+                .lineLimit(3)
+                .fixedSize(horizontal: false, vertical: true)
+                .rangeObstruction("status")
+        }
+    }
+
+    /// Issue #80: the camera mode, History and Replay, when they don't fit beside Exit and the gear.
+    private var moreControlsMenu: some View {
+        let locked = state.cameraModeLocked
+        let other = state.cameraMode == RangeCameraMode.follow ? "Fixed" : "Follow"
+        return Menu {
+            Button {
+                send(DrivingRangeEventToggleCameraMode.shared)
+            } label: {
+                Label(
+                    locked ? "Fixed camera, set by reduced motion" : "Switch to \(other) camera",
+                    systemImage: locked ? "video.slash" : "video"
+                )
+            }
+            .disabled(locked)
+            Button {
+                showsSessions = true
+            } label: {
+                Label("History", systemImage: "clock.arrow.circlepath")
+            }
+            if DrivingRangeUiStateKt.canReplay(state) {
+                Button {
+                    send(DrivingRangeEventReplay.shared)
+                } label: {
+                    Label("Replay shot", systemImage: "arrow.counterclockwise")
+                }
+            }
+        } label: {
+            circleIcon("ellipsis")
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("More range controls")
+        .accessibilityHint("Camera mode, History and Replay")
+        .accessibilityShowsLargeContentViewer()
+        .accessibilityIdentifier(RangeTestTags.shared.MORE_CONTROLS)
+    }
+
+    /// An icon in the controls' dark circle, with a 44 pt hit target.
+    private func circleIcon(_ systemName: String) -> some View {
+        Image(systemName: systemName)
+            .font(.subheadline.weight(.bold))
+            .frame(width: 38, height: 38)
+            .background(.black.opacity(0.6), in: Circle())
+            .overlay {
+                Circle().stroke(.white.opacity(0.2), lineWidth: 1)
+            }
+            .frame(minWidth: 44, minHeight: 44)
+            .contentShape(Rectangle())
     }
 
     private var statusPill: some View {

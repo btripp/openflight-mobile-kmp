@@ -19,6 +19,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -66,7 +67,9 @@ internal fun RangeMetricsOverlay(
 ) {
     val shot = uiState.displayedShot
     val numbers = uiState.camera.numbers
-    val layout = uiState.detailLayout(landscape = isLandscape, docked = !expandToFill)
+    // Issue #80: at 150% text and above the grids take half the columns, so values fit whole.
+    val largeText = LocalDensity.current.fontScale >= LARGE_FONT_SCALE
+    val layout = uiState.detailLayout(landscape = isLandscape, docked = !expandToFill, largeText = largeText)
     Column(
         modifier =
             modifier
@@ -344,6 +347,9 @@ internal fun detailMetrics(
     )
 
 private const val CLUB_CELL_WEIGHT = 1.4f
+
+/** Issue #80: the font scale from which the dock takes half the columns (as `SessionStatsCard`). */
+private const val LARGE_FONT_SCALE = 1.5f
 private val DenseCellMinHeight = 40.dp
 private val CellShape = RoundedCornerShape(12.dp)
 private val CellBackground = Color.Black.copy(alpha = 0.55f)
