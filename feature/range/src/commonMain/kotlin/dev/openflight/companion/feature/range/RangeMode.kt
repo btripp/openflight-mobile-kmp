@@ -55,7 +55,7 @@ enum class ReplaySpeed(
  * @property id the stored row's id, as a string ([dev.openflight.companion.core.data.HistoryShot.id]).
  * @property number 1-based position in the session (replay) or the list (overlay).
  * @property club the club's wire value; [clubLabel] is its display name.
- * @property carryYards the server's carry, `null` when missing.
+ * @property carryYards the server's carry (spin-adjusted when the Pi sent one), `null` when missing.
  * @property flyable the shot has the ball speed and carry a flight needs.
  */
 data class RangeShotItem(

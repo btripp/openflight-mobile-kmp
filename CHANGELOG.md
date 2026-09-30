@@ -34,6 +34,17 @@ tag, to test Bluetooth against a schema-2-only Pi; the next tagged release is `v
   Carry and Ball speed back on (#75).
 - Practice no longer drops a new shot or brings back a deleted one when both happen at the same
   moment (#73).
+- A shot deleted or a profile's session cleared on the Pi's own screen now also leaves Practice
+  and the phone's saved history, on a Pi without the phone-connectivity update too (#68).
+- Clearing a session now removes all of that profile's saved shots from it, not only its newest
+  200 (#74).
+- **The range shows a shot's final numbers when the Pi finishes it.** The Pi sends a shot as
+  soon as the OPS243 has it, then its final version once the IWR6843 and camera finish. The
+  range kept the first version (no launch or direction, a lower ball speed) until you picked the
+  shot in the overlay. It now updates the shot on screen, and its estimated total, in place.
+- **The range's CARRY matches the Pi.** The CARRY tile and the overlay's shot list show the
+  Pi's spin-adjusted carry when it sends one, as Practice and the kiosk do, and a live flight
+  lands there. They showed the table carry before (e.g. 166 yd against the kiosk's 144).
 - **Over Bluetooth, History stores each shot's final values** (#66). A shot that arrived
   provisional and then final could be stored with the provisional's ball speed, carry and carry
   range, and nothing corrected it, so History, Bag stats and gapping were wrong.

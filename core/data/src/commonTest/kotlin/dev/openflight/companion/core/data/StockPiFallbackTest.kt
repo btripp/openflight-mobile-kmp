@@ -207,6 +207,47 @@ class StockPiFallbackTest {
             assertThat(h.repository.liveShotSource.value).isEqualTo(LiveShotSource.NONE)
         }
 
+    // #68: a stock Pi has no shot_deleted stream: a kiosk delete arrives only as session_state.
+    @Test
+    fun stockPiKioskDeleteLeavesHistoryAndStoredHistory() =
+        runStockPiTest { h ->
+            h.sseMissing()
+            val socket = h.piConnected()
+            socket.serverFrame(PiFixtures.CONNECT_SESSION_STATE_FRAME)
+            socket.serverFrame(PiFixtures.SHOT_FRAME)
+            socket.serverFrame(PiFixtures.SECOND_SHOT_FRAME)
+
+            // The kiosk deletes shot #1: every client gets the session without it.
+            socket.serverFrame(PiFixtures.sessionStateFrame(PiFixtures.SECOND_SHOT_FRAME))
+
+            assertThat(
+                h.repository.history.value
+                    .map { it.timestamp },
+            ).containsExactly(PiFixtures.SECOND_SHOT_TIMESTAMP)
+            assertThat(h.storedTimestamps()).containsExactly(PiFixtures.SECOND_SHOT_TIMESTAMP)
+        }
+
+    // #68: and a kiosk clear only as session_cleared, which keeps the other profiles' rows.
+    @Test
+    fun stockPiKioskClearLeavesThatProfilesShotsOnly() =
+        runStockPiTest { h ->
+            h.sseMissing()
+            val socket = h.piConnected()
+            socket.serverFrame(PiFixtures.CONNECT_SESSION_STATE_FRAME)
+            socket.serverFrame(PiFixtures.SHOT_FRAME)
+            socket.serverFrame(PiFixtures.PROFILES_AFTER_ADD_FRAME)
+            socket.serverFrame(PiFixtures.SECOND_SHOT_FRAME)
+
+            // The kiosk clears Sam (shot #2); the default profile's shot #1 remains.
+            socket.serverFrame(PiFixtures.SESSION_CLEARED_FRAME)
+
+            assertThat(
+                h.repository.history.value
+                    .map { it.timestamp },
+            ).containsExactly(PiFixtures.SHOT_TIMESTAMP)
+            assertThat(h.storedTimestamps()).containsExactly(PiFixtures.SHOT_TIMESTAMP)
+        }
+
     // (b) Fork: SSE + Socket.IO.
 
     @Test

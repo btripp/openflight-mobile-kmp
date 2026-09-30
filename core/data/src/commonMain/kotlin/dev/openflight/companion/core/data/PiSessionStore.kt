@@ -59,6 +59,18 @@ internal class PiSessionStore(
     /** Every live `shot` and `shot_update`, in arrival order (plan R8h: the history writes them). */
     val liveShots = MutableSharedFlow<PiLiveShot>(extraBufferCapacity = LIVE_SHOT_BUFFER)
 
+    /**
+     * #68: the timestamps of rows that left the Pi's session, whoever deleted or cleared them (the
+     * kiosk too). Found by comparing each `session_state`/`session_cleared` with [knownRows].
+     */
+    val removedRows = MutableSharedFlow<Set<String>>(extraBufferCapacity = REMOVED_ROWS_BUFFER)
+
+    /**
+     * Every row the Pi's session is known to hold: its last snapshot (uncapped, unlike
+     * [sessionShots]) plus the live rows since. See [onSnapshot].
+     */
+    private val knownRows = MutableStateFlow(KnownRows())
+
     suspend fun apply(event: PiEvent) {
         when (event) {
             is PiEvent.Notice -> notices.emit(event.notice)
@@ -82,6 +94,8 @@ internal class PiSessionStore(
 
     /** The link left `Connected` (drop, host switch or stop): no reply to an in-flight request will come. */
     fun linkLost() {
+        // The Pi may restart before the link is back: the next snapshot is checked first.
+        knownRows.update { if (it.timestamps.isEmpty()) it else it.copy(fromEarlierLink = true) }
         deletion.update { it.fail(DeletionState.CONNECTION_DROPPED) }
         clear.update {
             if (it is ClearState.Pending) {
@@ -111,6 +125,7 @@ internal class PiSessionStore(
      * deletion and clear outcomes stay: [linkLost] already failed anything in flight.
      */
     fun reset() {
+        knownRows.value = KnownRows()
         sessionShots.value = emptyList()
         shotDetails.value = emptyMap()
         stats.value = null
@@ -135,12 +150,14 @@ internal class PiSessionStore(
                 // The next shot ends any capturing/calculating/failed indicator.
                 shotProcessing.value = null
                 onShot(event.detail)
+                onLiveRow(event.detail.timestamp)
                 event.stats?.let { stats.value = it }
                 liveShots.tryEmit(PiLiveShot(event.detail, event.raw?.toString(), provisional = event.provisional))
             }
 
             is PiEvent.ShotUpdate -> {
                 upsert(event.detail)
+                onLiveRow(event.detail.timestamp)
                 event.stats?.let { stats.value = it }
                 liveShots.tryEmit(
                     PiLiveShot(event.detail, event.raw?.toString(), isUpdate = true, enrichment = event.enrichment),
@@ -355,8 +372,34 @@ internal class PiSessionStore(
 
     /** The server lists the session oldest first; the app shows newest first. */
     private fun replaceSession(oldestFirst: List<ShotDetail>) {
+        onSnapshot(oldestFirst)
         sessionShots.value = oldestFirst.asReversed().take(PiSessionRepository.MAX_SESSION_SHOTS)
         remember(oldestFirst)
+    }
+
+    private fun onLiveRow(timestamp: String) {
+        // A row sent before the first snapshot after a reconnect is in that snapshot anyway.
+        knownRows.update { if (it.fromEarlierLink) it else it.copy(timestamps = it.timestamps + timestamp) }
+    }
+
+    /**
+     * #68, #74: the whole session (every profile, never capped) replaces [knownRows], and the rows
+     * that were known but aren't in it any more are reported in [removedRows].
+     *
+     * After a reconnect the Pi may have restarted, and a restarted Pi's session shares no row with
+     * the old one: then nothing is reported. A snapshot sharing a row is the same session, so the
+     * rows deleted while the link was down are reported too. (A session cleared of every row while
+     * the link was down looks like a restart, so it is left alone.)
+     */
+    private fun onSnapshot(oldestFirst: List<ShotDetail>) {
+        val current = oldestFirst.mapTo(LinkedHashSet()) { it.timestamp }
+        var removed = emptySet<String>()
+        knownRows.update { known ->
+            val sameSession = !known.fromEarlierLink || known.timestamps.any { it in current }
+            removed = if (sameSession) known.timestamps - current else emptySet()
+            KnownRows(current)
+        }
+        if (removed.isNotEmpty()) removedRows.tryEmit(removed)
     }
 
     private fun onDiagnostic(event: PiEvent.Diagnostic) {
@@ -416,8 +459,18 @@ internal class PiSessionStore(
         }
     }
 
+    /**
+     * @property fromEarlierLink the rows were learned before the link last dropped, so the Pi may
+     *   have restarted since.
+     */
+    private data class KnownRows(
+        val timestamps: Set<String> = emptySet(),
+        val fromEarlierLink: Boolean = false,
+    )
+
     private companion object {
         const val NOTICE_BUFFER = 16
         const val LIVE_SHOT_BUFFER = 64
+        const val REMOVED_ROWS_BUFFER = 16
     }
 }

@@ -146,6 +146,14 @@ interface PiSessionRepository {
      */
     val liveShots: Flow<PiLiveShot> get() = emptyFlow()
 
+    /**
+     * #68: the timestamps of rows that left the Pi's session, one-shot, whoever deleted or cleared
+     * them (the kiosk included): the rows a `session_state` or `session_cleared` no longer holds
+     * that the session held before, on this link or, when the Pi didn't restart, the one before.
+     * Defaults to none so fakes stay source-compatible.
+     */
+    val removedRows: Flow<Set<String>> get() = emptyFlow()
+
     /** The Socket.IO detail for an SSE/BLE shot, matched on timestamp. */
     fun detailFor(shot: ShotEvent): ShotDetail? = shotDetails.value[shot.timestamp]
 

@@ -24,6 +24,7 @@ import dev.openflight.companion.core.network.PiControlClient
 import dev.openflight.companion.core.network.WifiShotTransport
 import dev.openflight.companion.core.network.openFlightHttpClient
 import dev.openflight.companion.core.socketio.KtorWebSocketTransport
+import dev.openflight.companion.core.socketio.SocketConnectionState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -35,6 +36,8 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import org.junit.Assume.assumeTrue
 import java.io.File
 import java.nio.file.Files
@@ -146,6 +149,7 @@ class MockServerIT {
                 profiles()
                 deleteShot()
                 clearSession()
+                kioskDeleteAndClear()
                 deviceCommands()
                 reconnect()
                 shutdown()
@@ -407,6 +411,54 @@ class MockServerIT {
             steps.pass("clear_session (active profile)", "removed $before row(s) of profile $profileId")
         }
 
+        /**
+         * #68: another client (the Pi's kiosk) deletes a shot and clears the active profile. A stock
+         * Pi tells the phone only through `session_state`/`session_cleared`; the fork also sends
+         * schema v2 events. Either way the shots leave the phone's history and its stored history.
+         */
+        private suspend fun kioskDeleteAndClear() {
+            val profileId = pi.profiles.value.activeProfileId
+            repeat(KIOSK_SHOTS) {
+                val total = pi.sessionShots.value.size
+                pi.simulateShot()
+                await("a shot for the kiosk") { pi.sessionShots.value.size == total + 1 }
+            }
+            val timestamps =
+                pi.sessionShots.value
+                    .filter { it.profileId == profileId }
+                    .map { it.timestamp }
+            await("the kiosk's shots stored") { storedTimestamps().containsAll(timestamps) }
+            val kiosk =
+                checkNotNull(socketIoPiSocketFactory(KtorWebSocketTransport(httpClient)).create(server.host, scope))
+            try {
+                kiosk.connect()
+                await("kiosk connected") { kiosk.state.value is SocketConnectionState.Connected }
+
+                val deleted = timestamps.first()
+                kiosk.emit("delete_shot", buildJsonObject { put("timestamp", deleted) })
+                await("kiosk delete reaches the session") { pi.sessionShots.value.none { it.timestamp == deleted } }
+                await("kiosk delete leaves local history") { shots.history.value.none { it.timestamp == deleted } }
+                await("kiosk delete leaves stored history") { deleted !in storedTimestamps() }
+                steps.pass("kiosk delete_shot -> phone history", "timestamp=$deleted")
+
+                kiosk.emit("clear_session", buildJsonObject { put("profile_id", profileId) })
+                await("kiosk clear reaches the session") { pi.sessionShots.value.none { it.profileId == profileId } }
+                await("kiosk clear leaves local history") { shots.history.value.none { it.timestamp in timestamps } }
+                await("kiosk clear leaves stored history") { storedTimestamps().none { it in timestamps } }
+                steps.pass("kiosk clear_session -> phone history", "removed ${timestamps.size - 1} row(s)")
+            } finally {
+                kiosk.disconnect()
+            }
+        }
+
+        /** Every stored shot's timestamp, in every session. */
+        private suspend fun storedTimestamps(): List<String> =
+            history
+                .sessions()
+                .first()
+                .flatMap { history.shots(it.id).first() }
+                .map { it.detail.timestamp }
+
         private suspend fun deviceCommands() {
             pi.toggleDebug()
             await("debug on") { pi.debugState.value.enabled }
@@ -525,6 +577,7 @@ class MockServerIT {
         const val REFUSAL_SETTLE_MILLIS = 1_000L
         const val NO_SSE_SETTLE_MILLIS = 2_000L
         const val POLL_MILLIS = 50L
+        const val KIOSK_SHOTS = 2
 
         fun log(message: String) = println("[mock-server-it] $message")
     }
