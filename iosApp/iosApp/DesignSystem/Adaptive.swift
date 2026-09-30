@@ -99,3 +99,36 @@ struct AppListDetailPane<ListContent: View, DetailContent: View>: View {
         }
     }
 }
+
+/// A header row: a title with its buttons (or pills) at the trailing edge (issue #81). At an
+/// accessibility text size (AX1–AX5) one row squeezes the title into a narrow column, so words
+/// break mid-word and a label stacks one letter per line; there the buttons move under the title,
+/// on one row if they fit and stacked if they don't. At the other sizes it's the plain `HStack`
+/// with a `Spacer` it replaces, so the default layout doesn't change.
+struct AdaptiveHeaderRow<Title: View, Actions: View>: View {
+    var alignment: VerticalAlignment = .center
+    var spacing: CGFloat?
+    @ViewBuilder let title: () -> Title
+    @ViewBuilder let actions: () -> Actions
+
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    var body: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 12) {
+                title()
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: spacing) { actions() }
+                    VStack(alignment: .leading, spacing: spacing) { actions() }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            HStack(alignment: alignment, spacing: spacing) {
+                title()
+                Spacer()
+                actions()
+            }
+        }
+    }
+}

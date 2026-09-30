@@ -35,6 +35,7 @@ tag, to test Bluetooth against a schema-2-only Pi; the next tagged release is `v
 - iOS: in Demo mode the Demo banner no longer covers the navigation bar's back buttons, Bag's
   Edit, the iPad sidebar toggle or the Range's top controls; screens now start below it, and its
   text stops growing at xxLarge so it stays one compact line at accessibility sizes (#79).
+- iOS: at the accessibility text sizes, header rows (Practice's "Launch Monitor" with Range, the latest shot's "View on range", the profile's "Change", Bag's "Conditions" with its pill) put their buttons under the title, so no word breaks mid-word and the pill no longer cuts to "M…" (#81).
 
 ### Removed
 
