@@ -164,6 +164,18 @@ data class RangeBrowseState(
     /** The follow camera is suspended while the user has zoomed, panned or orbited (plan F8a). */
     val userTransformed: Boolean get() = !view.isIdentity
 
+    /** The selected shot's index in [shots] (the overlay lists newest first), or -1 with none selected. */
+    val selectedIndex: Int get() = shots.indexOfFirst { it.id == selectedShotId }
+
+    /**
+     * Tester request 2026-09-30: the overlay's Prev and Next step through its list in the order
+     * shown (#1, the newest, first). With no shot selected, Next picks #1 and Prev is disabled.
+     */
+    val canSelectPreviousShot: Boolean get() = mode is RangeMode.Overlay && selectedIndex > 0
+
+    /** See [canSelectPreviousShot]. */
+    val canSelectNextShot: Boolean get() = mode is RangeMode.Overlay && selectedIndex + 1 < shots.size
+
     companion object {
         /**
          * The overlay draws at most this many shots, newest first. 200 keeps a whole long session

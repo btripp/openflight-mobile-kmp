@@ -14,6 +14,12 @@ tag. Plain `v0.1.0` waits on the hardware test matrix on a real Raspberry Pi.
 iOS 0.1.0 (build 4), Android 0.1.0 (versionCode 4). Build 4 was uploaded to TestFlight without a
 tag, to test Bluetooth against a schema-2-only Pi; the next tagged release is `v0.1.0-beta.4`.
 
+### Added
+
+- **Prev and Next in the range overlay.** Step through the overlay's shots, newest first, and see
+  each one's numbers without tapping its line; the bar shows which shot is selected (e.g.
+  "3 / 12").
+
 ### Changed
 
 - **Bluetooth LE is schema 2 only** (#59). The app connects to a Pi whose Bluetooth serves only
