@@ -88,7 +88,9 @@ private data class ServerErrorBody(
  * Plan R8j: a `404` on the stream means the backend has no SSE route (stock upstream). That is
  * final for this instance: the state becomes an error of kind
  * [ConnectionErrorKind.STREAM_UNAVAILABLE] and nothing is retried until [retry] (or a new instance,
- * for another host or the next app start). Every other failure keeps the backoff loop.
+ * for another host or the next app start). So is an address the HTTP engine refuses before any
+ * response (an `IllegalArgumentException`, issue #70): an [ConnectionErrorKind.ENDPOINT_REJECTED]
+ * error. Every other failure keeps the backoff loop, which restarts at 1 s after any `200`.
  */
 @Suppress("TooManyFunctions") // The ShotTransport surface plus the stream loop and its event handlers.
 class WifiShotTransport(
@@ -158,19 +160,23 @@ class WifiShotTransport(
         var reconnectDelay = INITIAL_RECONNECT_DELAY
         while (coroutineContext.isActive) {
             try {
-                connect(endpoint.url(if (requestSchemaV2) STREAM_PATH_V2 else STREAM_PATH))
+                connect(endpoint.url(if (requestSchemaV2) STREAM_PATH_V2 else STREAM_PATH)) {
+                    // Issue #69: the stream answered 200, so this connection worked. Real drops end
+                    // with an error rather than a clean end, so reset the backoff here, not there.
+                    reconnectDelay = INITIAL_RECONNECT_DELAY
+                }
                 // connect() only returns when the byte channel ends cleanly.
-                reconnectDelay = INITIAL_RECONNECT_DELAY
                 throw OpenFlightHttpError.StreamEnded
             } catch (cancellation: CancellationException) {
                 throw cancellation
             } catch (_: SchemaV2Rejected) {
                 // An older Pi refused `?schema=2`: ask for the v1 stream straight away.
                 requestSchemaV2 = false
-            } catch (_: StreamNotFound) {
-                // Plan R8j: a stock backend has no SSE route. Retrying can't help, so stop until an
-                // explicit retry (or a new transport for another host / the next app start).
-                _state.value = ConnectionState.Error(STREAM_NOT_FOUND_MESSAGE, ConnectionErrorKind.STREAM_UNAVAILABLE)
+            } catch (permanent: PermanentStreamFailure) {
+                // Plan R8j (no SSE route on a stock backend) or issue #70 (an address the HTTP
+                // engine refuses). Retrying can't help, so stop until an explicit retry (or a new
+                // transport for another host / the next app start).
+                _state.value = permanent.state
                 return
             } catch (error: Exception) {
                 // Any failure -- a bad status, a decode error surfaced as an exception, or the
@@ -183,29 +189,41 @@ class WifiShotTransport(
         }
     }
 
-    private suspend fun connect(url: String) {
+    private suspend fun connect(
+        url: String,
+        onResponded: () -> Unit,
+    ) {
         _state.value = ConnectionState.Connecting
         parser.reset()
 
-        httpClient
-            .prepareRequest(url) {
-                headers { append(HttpHeaders.Accept, "text/event-stream") }
-                timeout {
-                    // An infinite request timeout: the request "completes" only when the stream ends,
-                    // which can be much later than any fixed deadline. socketTimeoutMillis is the real
-                    // guard: three missed 15 s heartbeats (plan §0.2).
-                    requestTimeoutMillis = HttpTimeoutConfig.INFINITE_TIMEOUT_MS
-                    socketTimeoutMillis = IDLE_TIMEOUT_MILLIS
+        var responded = false
+        try {
+            httpClient
+                .prepareRequest(url) {
+                    headers { append(HttpHeaders.Accept, "text/event-stream") }
+                    timeout {
+                        // An infinite request timeout: the request "completes" only when the stream
+                        // ends, which can be much later than any fixed deadline. socketTimeoutMillis
+                        // is the real guard: three missed 15 s heartbeats (plan §0.2).
+                        requestTimeoutMillis = HttpTimeoutConfig.INFINITE_TIMEOUT_MS
+                        socketTimeoutMillis = IDLE_TIMEOUT_MILLIS
+                    }
+                }.execute { response ->
+                    streamFailure(response.status)?.let { throw it }
+                    responded = true
+                    onResponded()
+                    _state.value = ConnectionState.Connected
+                    val channel = response.bodyAsChannel()
+                    val buffer = ByteArray(1)
+                    while (channel.readAvailable(buffer, 0, 1) != END_OF_STREAM) {
+                        parser.append(buffer[0])?.let { receive(it) }
+                    }
                 }
-            }.execute { response ->
-                streamFailure(response.status)?.let { throw it }
-                _state.value = ConnectionState.Connected
-                val channel = response.bodyAsChannel()
-                val buffer = ByteArray(1)
-                while (channel.readAvailable(buffer, 0, 1) != END_OF_STREAM) {
-                    parser.append(buffer[0])?.let { receive(it) }
-                }
-            }
+        } catch (invalid: IllegalArgumentException) {
+            // Issue #70: before any response, the HTTP engine refused the address itself (OkHttp:
+            // "Invalid URL host"). After one, it's a failure like any other and stays retryable.
+            throw if (responded) invalid else AddressRefused(host)
+        }
     }
 
     /** Why a stream response with [status] can't be read, or `null` for a `200`. */
@@ -324,8 +342,21 @@ class WifiShotTransport(
 /** The Pi answered `?schema=2` with `400`: it predates schema v2. */
 private class SchemaV2Rejected : Exception("The Pi doesn't serve schema v2")
 
+/** A stream failure no retry can fix; the run loop stops in [state] until an explicit retry. */
+private abstract class PermanentStreamFailure(
+    val state: ConnectionState.Error,
+) : Exception(state.description)
+
 /** Plan R8j: the Pi answered the stream with `404`: a stock backend without the SSE route. */
-private class StreamNotFound : Exception(STREAM_NOT_FOUND_MESSAGE)
+private class StreamNotFound :
+    PermanentStreamFailure(ConnectionState.Error(STREAM_NOT_FOUND_MESSAGE, ConnectionErrorKind.STREAM_UNAVAILABLE))
+
+/** Issue #70: the HTTP engine can't use [host] as an address at all. */
+private class AddressRefused(
+    host: String,
+) : PermanentStreamFailure(
+        ConnectionState.Error(EndpointDecision.Malformed(host.trim()).reason, ConnectionErrorKind.ENDPOINT_REJECTED),
+    )
 
 private const val STREAM_NOT_FOUND_MESSAGE = "OpenFlight returned HTTP 404: this Pi has no SSE shot stream."
 

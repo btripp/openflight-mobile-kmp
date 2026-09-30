@@ -58,6 +58,23 @@ class ConditionsAdjusterTest {
     }
 
     @Test
+    fun strongHeadwindNeverCarriesBehindTheTee() {
+        val wedge = ConditionsLaunches.input(ConditionsLaunches.SAND_WEDGE)
+
+        for (speed in listOf(30.0, 40.0)) {
+            val result =
+                adjuster.adjust(
+                    wedge,
+                    anchorCarryYards = 60.0,
+                    conditions = Conditions.ISA.copy(wind = Wind(speed, fromDegrees = 90.0)),
+                    targetBearing = target,
+                )
+
+            assertThat(result.carryYards, "carry into a $speed m/s headwind").isEqualTo(0.0)
+        }
+    }
+
+    @Test
     fun windFromBehindLengthensCarry() {
         val tailwind = carry(Conditions.ISA.copy(wind = Wind(tenMph, fromDegrees = 270.0)))
 

@@ -34,6 +34,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -83,6 +84,11 @@ internal fun interface WifiTransportFactory {
  * for the profile roster and the power status (failures are logged: a Pi without `--battery`
  * refuses the latter).
  *
+ * #68, #74: over Socket.IO (a stock Pi has nothing else) the same follows from
+ * [PiSessionRepository.removedRows]: every row that leaves the Pi's session, by the kiosk or any
+ * client, leaves [history] and [persistentHistory], however many rows the session held. Each
+ * stored row is deleted once, although a fork Pi reports it on both links.
+ *
  * Plan R8j (stock upstream Pi: no `/api/shots/stream`, no `/api/club`): when the Wi-Fi stream
  * answers 404 ([ConnectionErrorKind.STREAM_UNAVAILABLE]; the transport then stops probing until a
  * retry, a host change or the next start) and the Pi's Socket.IO link is connected, the Pi's live
@@ -116,8 +122,12 @@ internal class DefaultShotRepository(
     override val activeClub: StateFlow<GolfClub?> = mutableActiveClub.asStateFlow()
     override val supportsControls: StateFlow<Boolean> = mutableSupportsControls.asStateFlow()
 
-    // Only the current session's shot collector writes this, and sessions never overlap.
-    private var shotHistory = ShotHistory()
+    /**
+     * The session cache behind [history] and [latestShot]. The shot collector, local deletes and
+     * the Pi's confirmations change it from different threads, so every change goes through
+     * [changeHistory], an atomic compare-and-set (#73).
+     */
+    private val shotHistory = MutableStateFlow(ShotHistory())
     private val activeTransport = MutableStateFlow<ShotTransport?>(null)
 
     /** The active transport's kind, so [shutdownPi] can refuse to run over Bluetooth. */
@@ -131,6 +141,9 @@ internal class DefaultShotRepository(
 
     private val mutableLiveShotSource = MutableStateFlow(LiveShotSource.NONE)
 
+    /** The newest rows [forgetPiRows] deleted from [persistentHistory], oldest first. */
+    private val forgottenRows = MutableStateFlow(emptySet<String>())
+
     /** Plan R8j: where [history]'s live shots come from right now (for tests and MockServerIT). */
     internal val liveShotSource: StateFlow<LiveShotSource> = mutableLiveShotSource.asStateFlow()
     private val controlMutex = Mutex()
@@ -142,6 +155,7 @@ internal class DefaultShotRepository(
             scope.launch {
                 val pi = piSession
                 val history = persistentHistory
+                if (pi != null) launch { pi.removedRows.collect(::forgetPiRows) }
                 if (pi != null && history != null) {
                     launch { pi.liveShots.collect(history::record) }
                     // A current Pi (backend main) has no SSE stream, so on Wi-Fi its Socket.IO link
@@ -266,7 +280,10 @@ internal class DefaultShotRepository(
     }
 
     override fun deleteShot(eventId: String) {
-        val timestamp = shotHistory.shots.firstOrNull { it.eventId == eventId }?.timestamp ?: return
+        val timestamp =
+            shotHistory.value.shots
+                .firstOrNull { it.eventId == eventId }
+                ?.timestamp ?: return
         deleteConfirmed(timestamp) { it.eventId == eventId }
     }
 
@@ -292,7 +309,7 @@ internal class DefaultShotRepository(
             val outcome = pi.deletionState.first { it !is DeletionState.Pending || it.timestamp != timestamp }
             if (outcome is DeletionState.Deleted && outcome.timestamp == timestamp) {
                 removeLocally(matches)
-                persistentHistory?.deleteShot(timestamp)
+                forgetPiRows(listOf(timestamp))
             }
         }
     }
@@ -311,12 +328,10 @@ internal class DefaultShotRepository(
                 ?.activeProfileId
                 .orEmpty()
         if (pi == null || profileId.isEmpty()) {
-            shotHistory = ShotHistory(maximumCount = shotHistory.maximumCount)
-            mutableHistory.value = shotHistory.shots
-            mutableLatestShot.value = shotHistory.latestShot
+            changeHistory { ShotHistory(maximumCount = it.maximumCount) }
             return
         }
-        // The rows the Pi is about to drop: its session's rows for this profile.
+        // The rows the Pi is about to drop, as far as its newest MAX_SESSION_SHOTS show them.
         val cleared =
             pi.sessionShots.value
                 .filter { it.profileId == profileId }
@@ -326,7 +341,8 @@ internal class DefaultShotRepository(
             val outcome = pi.clearState.first { it !is ClearState.Pending || it.profileId != profileId }
             if (outcome is ClearState.Cleared && outcome.profileId == profileId) {
                 removeLocally { pi.detailFor(it)?.profileId == profileId }
-                persistentHistory?.deleteShots(cleared)
+                // Usually already gone through removedRows, which also has the rows beyond these (#74).
+                forgetPiRows(cleared)
             }
         }
     }
@@ -334,9 +350,52 @@ internal class DefaultShotRepository(
     private fun connectedPi(): PiSessionRepository? = piSession?.takeIf { it.linkState.value == PiLinkState.Connected }
 
     private fun removeLocally(predicate: (ShotEvent) -> Boolean) {
-        shotHistory = shotHistory.copy(shots = shotHistory.shots.filterNot(predicate))
-        mutableHistory.value = shotHistory.shots
-        mutableLatestShot.value = shotHistory.latestShot
+        changeHistory { current ->
+            val kept = current.shots.filterNot(predicate)
+            if (kept.size == current.shots.size) current else current.copy(shots = kept)
+        }
+    }
+
+    /**
+     * #68, #74: rows the Pi no longer holds leave [history] and, once each, [persistentHistory]. A
+     * fork Pi reports a delete or clear on Socket.IO and as a schema v2 event, and the app's own
+     * one is also settled by its confirmation, so a row already deleted isn't deleted again.
+     */
+    private fun forgetPiRows(timestamps: Collection<String>) {
+        val gone = timestamps.toSet()
+        if (gone.isEmpty()) return
+        removeLocally { it.timestamp in gone }
+        var fresh = emptyList<String>()
+        forgottenRows.update { seen ->
+            fresh = gone.filterNot(seen::contains)
+            val all = seen + fresh
+            if (all.size > MAX_FORGOTTEN_ROWS) all.drop(all.size - MAX_FORGOTTEN_ROWS).toSet() else all
+        }
+        if (fresh.isNotEmpty()) persistentHistory?.deleteShots(fresh)
+    }
+
+    /**
+     * Applies [transform] to the session cache atomically ([transform] may run more than once, so
+     * it must be pure) and publishes the result. Returns whether the history changed.
+     */
+    private fun changeHistory(transform: (ShotHistory) -> ShotHistory): Boolean {
+        var changed = false
+        shotHistory.update { current -> transform(current).also { changed = it !== current } }
+        if (changed) publishHistory()
+        return changed
+    }
+
+    /**
+     * Copies the newest cache into [history] and [latestShot]. Another thread may publish an older
+     * snapshot in between, so it repeats until the cache is unchanged after its write: the last
+     * write is then always the newest one.
+     */
+    private fun publishHistory() {
+        do {
+            val current = shotHistory.value
+            mutableHistory.value = current.shots
+            mutableLatestShot.value = current.latestShot
+        } while (shotHistory.value !== current)
     }
 
     /**
@@ -428,8 +487,7 @@ internal class DefaultShotRepository(
     private fun applySchemaEvent(event: SchemaV2Event) {
         when (event) {
             is SchemaV2Event.ShotDeleted -> {
-                removeLocally { it.timestamp == event.timestamp }
-                persistentHistory?.deleteShot(event.timestamp)
+                forgetPiRows(listOf(event.timestamp))
             }
 
             is SchemaV2Event.SessionCleared -> {
@@ -438,9 +496,12 @@ internal class DefaultShotRepository(
                     (shot.profileId ?: piSession?.detailFor(shot)?.profileId) == profileId
                 }
                 // The current session's rows for that profile, as the Pi just dropped them.
-                val cleared = shotHistory.shots.filter(matches).map { it.timestamp }
+                val cleared =
+                    shotHistory.value.shots
+                        .filter(matches)
+                        .map { it.timestamp }
                 removeLocally(matches)
-                persistentHistory?.deleteShots(cleared)
+                forgetPiRows(cleared)
             }
 
             else -> {
@@ -457,11 +518,7 @@ internal class DefaultShotRepository(
         shot: ShotEvent,
         writeThrough: Boolean = true,
     ) {
-        val updated = shotHistory.record(shot)
-        if (updated === shotHistory) return
-        shotHistory = updated
-        mutableHistory.value = updated.shots
-        mutableLatestShot.value = updated.latestShot
+        if (!changeHistory { it.record(shot) }) return
         if (writeThrough) persistentHistory?.record(shot, piSession?.detailFor(shot))
     }
 
@@ -513,7 +570,7 @@ internal class DefaultShotRepository(
     /** A Pi live shot into [history]; a `shot_update` replaces the shot it finalizes. */
     private fun recordLiveShot(live: PiLiveShot) {
         val mapped = live.toShotEvent() ?: return
-        val shots = shotHistory.shots
+        val shots = shotHistory.value.shots
         val shot =
             if (live.isUpdate && shots.none { it.eventId == mapped.eventId }) {
                 // Same id whenever timestamp and number match; else match on shot_number, then timestamp.
@@ -605,6 +662,9 @@ internal class DefaultShotRepository(
 
         /** Like the Wi-Fi transport's control-request timeout. */
         const val CLUB_CONFIRMATION_TIMEOUT_MILLIS = 10_000L
+
+        /** More than a Pi session's rows in practice; a duplicate beyond it is only a no-op delete. */
+        const val MAX_FORGOTTEN_ROWS = 2_000
     }
 }
 

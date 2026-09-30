@@ -219,10 +219,19 @@ class EndpointPolicyTest {
         assertCleartextRefused("[fec0::1]")
     }
 
+    /**
+     * Issue #70: OkHttp refuses a zone ID in the URL host (`IllegalArgumentException: Invalid URL
+     * host`), so an address with one is refused here, in plain words, before any request.
+     */
     @Test
-    fun ipv6LinkLocalKeepsItsZoneEncodedForTheUrl() {
-        assertAllowedUrl("[fe80::1%en0]:8080", "http://[fe80::1%25en0]:8080/api/club")
-        assertAllowedUrl("[fe80::1%25wlan0]", "http://[fe80::1%25wlan0]:8080/api/club")
+    fun ipv6ZoneIdsAreRefusedInPlainWords() {
+        for (input in listOf("[fe80::1%en0]:8080", "[fe80::1%25wlan0]", "http://[fe80::1%25en0]:8080", "fe80::1%en0")) {
+            assertThat(EndpointPolicy.rejectionReason(input), name = input).isEqualTo(
+                "Addresses with a network interface (the part after %) aren't supported. " +
+                    "Remove it, or use the Pi's .local name.",
+            )
+            assertThat(EndpointPolicy.evaluate(input), name = input).isEqualTo(EndpointDecision.ZoneId)
+        }
     }
 
     @Test
@@ -264,6 +273,15 @@ class EndpointPolicyTest {
         assertMalformed("[1:2:3:4:5:6:7]")
         assertMalformed("[gggg::1]")
         assertMalformed("[fe80::1%]")
+    }
+
+    /** Issue #76: a hex group is hex digits only; a sign isn't part of one. */
+    @Test
+    fun ipv6GroupsWithASignAreRefused() {
+        assertMalformed("[fe80::-1]")
+        assertMalformed("[fe80::+1]")
+        assertMalformed("http://[fe80::-1]")
+        assertMalformed("[+fe80::1]")
     }
 
     @Test

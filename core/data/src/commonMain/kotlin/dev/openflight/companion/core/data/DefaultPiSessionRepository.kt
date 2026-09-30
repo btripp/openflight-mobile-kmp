@@ -104,6 +104,7 @@ internal class DefaultPiSessionRepository(
     override val mockMode: StateFlow<Boolean?> = store.mockMode.asStateFlow()
     override val notices: SharedFlow<PiNotice> = store.notices.asSharedFlow()
     override val liveShots: Flow<PiLiveShot> = store.liveShots.asSharedFlow()
+    override val removedRows: Flow<Set<String>> = store.removedRows.asSharedFlow()
 
     private val activeSocket = MutableStateFlow<PiSocket?>(null)
     private var currentKey: SessionKey? = null
@@ -479,5 +480,10 @@ private fun SocketConnectionState.toLinkState(): PiLinkState =
                 reason,
                 localNetworkDenied,
             )
+        }
+
+        // Issue #70: the address itself was refused, so it's shown like a policy rejection.
+        is SocketConnectionState.Failed -> {
+            PiLinkState.Rejected(reason)
         }
     }
