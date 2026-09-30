@@ -88,6 +88,17 @@ class ShotDistanceEstimatorTest {
     }
 
     @Test
+    fun strongHeadwindGivesNoCarryAndNoRoll() {
+        val gale = Conditions.ISA.copy(wind = Wind(speedMps = 40.0, fromDegrees = 0.0))
+
+        val estimate = assertNotNull(estimator.estimate(ConditionsLaunches.SAND_WEDGE, gale, TargetBearing(0.0)))
+
+        assertThat(estimate.carryYards).isEqualTo(0.0)
+        assertThat(estimate.rollYards).isEqualTo(0.0)
+        assertThat(estimate.totalYards).isEqualTo(0.0)
+    }
+
+    @Test
     fun unusableShotHasNoEstimate() {
         val shot = ConditionsLaunches.DRIVER.copy(ballSpeedMph = 0.0)
 

@@ -184,7 +184,7 @@ class ClubAnalysisViewModel(
                     valueLabel = BagCopy.distance(value, units),
                     plusMinusLabel =
                         summary.takeIf { metric == AnalysisMetric.CARRY && it.shotCount >= 2 }?.let {
-                            BagCopy.plusMinus(it.plusMinusYards.toDouble(), units)
+                            BagCopy.plusMinus(it.stdDevCarryYards, units)
                         },
                     shotCountLabel = BagCopy.shotCount(summary.shotCount),
                     fraction = (value / longest).coerceIn(0.0, 1.0),

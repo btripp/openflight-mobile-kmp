@@ -228,7 +228,7 @@ class BagViewModel(
                     plusMinusLabel =
                         summary?.takeIf { it.shotCount >= 2 }?.let {
                             BagCopy.plusMinus(
-                                it.plusMinusYards.toDouble(),
+                                it.stdDevCarryYards,
                                 units,
                             )
                         },
