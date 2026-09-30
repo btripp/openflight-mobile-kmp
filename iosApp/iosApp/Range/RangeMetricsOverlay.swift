@@ -22,11 +22,24 @@ struct RangeMetricsOverlay: View {
     var topInset: CGFloat = 72
     let onSelectClub: (GolfClub) -> Void
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    /// Issue #80: the "NEXT CLUB" eyebrow and its chevron scale with Dynamic Type from their
+    /// default sizes, instead of staying fixed while the club name grows. The chevron stops at
+    /// 17 pt so it leaves the eyebrow and the club name room.
+    @ScaledMetric(relativeTo: .caption2) private var eyebrowSize: CGFloat = 9
+    @ScaledMetric(relativeTo: .caption2) private var chevronSize: CGFloat = 11
+
     private var shot: ShotEvent? { state.displayedShot }
     /// Plan F8f: the chosen units (the range quick settings and Settings › Practice share them).
     private var numbers: RangeNumbers { state.camera.numbers }
+    /// Issue #80: at accessibility text sizes the grids take half the columns (the shared rule).
     private var layout: RangeDetailLayout {
-        DrivingRangeUiStateKt.detailLayout(state, landscape: isLandscape, docked: docksToSide)
+        DrivingRangeUiStateKt.detailLayout(
+            state,
+            landscape: isLandscape,
+            docked: docksToSide,
+            largeText: dynamicTypeSize.isAccessibilitySize
+        )
     }
     private var club: RangeClubState { state.club }
 
@@ -140,8 +153,10 @@ struct RangeMetricsOverlay: View {
     private var compactStrip: some View {
         Text(DrivingRangeUiStateKt.compactMetricsSummary(state))
             .font(.caption.weight(.semibold).monospacedDigit())
-            .lineLimit(1)
+            // Issue #80: wraps at accessibility sizes instead of shrinking into an ellipsis.
+            .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 1)
             .minimumScaleFactor(0.7)
+            .multilineTextAlignment(.center)
             .padding(.horizontal, 12)
             .padding(.vertical, 7)
             .background(.black.opacity(0.55), in: Capsule())
@@ -220,11 +235,11 @@ struct RangeMetricsOverlay: View {
             HStack(spacing: 5) {
                 VStack(spacing: 2) {
                     Text("NEXT CLUB")
-                        .font(.system(size: 9, weight: .bold))
+                        .font(.system(size: eyebrowSize, weight: .bold))
                         .tracking(0.8)
                         .foregroundStyle(.white.opacity(0.68))
                         .lineLimit(1)
-                        .minimumScaleFactor(0.7)
+                        .minimumScaleFactor(0.5)
                     Text(club.selected.displayName)
                         .font(.subheadline.weight(.bold))
                         .lineLimit(1)
@@ -238,7 +253,7 @@ struct RangeMetricsOverlay: View {
                         .tint(Theme.success)
                 } else {
                     Image(systemName: "chevron.down")
-                        .font(.system(size: 11, weight: .bold))
+                        .font(.system(size: min(chevronSize, 17), weight: .bold))
                         .foregroundStyle(Theme.success)
                 }
             }
@@ -272,6 +287,16 @@ private struct RangeMetricValue: Identifiable {
     var id: String { title }
     var isDegrees: Bool { unit == "°" }
     var isMissing: Bool { value == ShotMetricFormatter.shared.MISSING }
+
+    /// "SPIN AXIS" read as "Spin axis".
+    var spokenTitle: String { title.prefix(1) + title.dropFirst().lowercased() }
+
+    /// The value as the Dashboard's metrics speak it: "12.6 degrees", "2,380 rpm", "not measured".
+    var spokenValue: String {
+        if isMissing { return "not measured" }
+        if isDegrees { return "\(value) degrees" }
+        return unit.isEmpty ? value : "\(value) \(unit)"
+    }
 }
 
 private struct RangePrimaryMetric: View {
@@ -282,12 +307,18 @@ private struct RangePrimaryMetric: View {
     var compact = false
     let accessibilityIdentifier: String
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     var body: some View {
         VStack(spacing: 2) {
+            // Issue #80: at accessibility sizes the title and unit shrink to fit, rather than
+            // pushing the card (and Carry beside it) off the screen. Other sizes are unchanged.
             Text(title)
                 .font(.caption2.weight(.bold))
                 .tracking(1.4)
                 .foregroundStyle(.white.opacity(0.72))
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? 1 : nil)
+                .minimumScaleFactor(dynamicTypeSize.isAccessibilitySize ? 0.5 : 1)
             HStack(alignment: .firstTextBaseline, spacing: 4) {
                 Text(value)
                     .font(.system(size: compact ? 28 : 38, weight: .heavy, design: .rounded))
@@ -297,9 +328,12 @@ private struct RangePrimaryMetric: View {
                 Text(unit)
                     .font(.caption.weight(.bold))
                     .foregroundStyle(.white.opacity(0.72))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.5)
             }
         }
-        .frame(maxWidth: .infinity)
+        // A zero minimum width lets Ball speed and Carry share the row equally at any text size.
+        .frame(minWidth: 0, maxWidth: .infinity)
         .padding(.horizontal, 14)
         .padding(.vertical, compact ? 6 : 10)
         .background(.black.opacity(0.48), in: RoundedRectangle(cornerRadius: 18))
@@ -315,13 +349,18 @@ private struct RangePrimaryMetric: View {
 private struct RangeDetailMetric: View {
     let metric: RangeMetricValue
 
+    /// Issue #80: the title and unit scale with Dynamic Type from their default 9 pt, instead of
+    /// staying fixed while the value grows.
+    @ScaledMetric(relativeTo: .caption2) private var smallSize: CGFloat = 9
+
     var body: some View {
         VStack(spacing: 2) {
             Text(metric.title)
-                .font(.system(size: 9, weight: .bold))
+                .font(.system(size: smallSize, weight: .bold))
                 .tracking(0.8)
                 .foregroundStyle(.white.opacity(0.62))
                 .lineLimit(1)
+                .minimumScaleFactor(0.7)
             HStack(alignment: .firstTextBaseline, spacing: 2) {
                 // Degrees attach tight ("11.4°", like the shared formatDegrees); word units follow.
                 Text(metric.isDegrees && !metric.isMissing ? metric.value + "°" : metric.value)
@@ -330,12 +369,13 @@ private struct RangeDetailMetric: View {
                     .minimumScaleFactor(0.65)
                 if !metric.unit.isEmpty, !metric.isDegrees, !metric.isMissing {
                     Text(metric.unit)
-                        .font(.system(size: 9, weight: .semibold))
+                        .font(.system(size: smallSize, weight: .semibold))
                         .foregroundStyle(.white.opacity(0.62))
+                        .lineLimit(1)
                 }
             }
         }
-        .frame(maxWidth: .infinity, minHeight: 45)
+        .frame(minWidth: 0, maxWidth: .infinity, minHeight: 45)
         .padding(.horizontal, 6)
         .padding(.vertical, 5)
         .background(.black.opacity(0.48), in: RoundedRectangle(cornerRadius: 12))
@@ -343,5 +383,10 @@ private struct RangeDetailMetric: View {
             RoundedRectangle(cornerRadius: 12)
                 .stroke(.white.opacity(0.13), lineWidth: 0.8)
         }
+        // Issue #80: one element named by its title, its value spoken with the unit in words
+        // ("12.6 degrees", not "12.6°"), like the Dashboard's metrics.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(metric.spokenTitle)
+        .accessibilityValue(metric.spokenValue)
     }
 }
