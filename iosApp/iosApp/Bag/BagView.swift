@@ -257,9 +257,10 @@ struct ConditionsCardView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack {
+            // Issue #81: at an accessibility text size the pill and Edit go under the title.
+            AdaptiveHeaderRow {
                 Text("Conditions").font(.of(.headline, weight: .semibold))
-                Spacer()
+            } actions: {
                 StatusPill(text: card.modeLabel, color: Theme.info)
                 Button("Edit", action: onEdit)
                     .accessibilityIdentifier(BagTestTags.shared.CONDITIONS_EDIT)

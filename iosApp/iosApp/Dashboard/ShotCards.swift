@@ -39,7 +39,8 @@ struct ShotCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
-            HStack {
+            // Issue #81: at an accessibility text size "View on range" goes under the club.
+            AdaptiveHeaderRow {
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 8) {
                         Eyebrow("LATEST SHOT")
@@ -58,7 +59,7 @@ struct ShotCard: View {
                             .accessibilityIdentifier("dashboard.player")
                     }
                 }
-                Spacer()
+            } actions: {
                 if let onViewOnRange {
                     ViewOnRangeButton(identifier: DashboardTestTags.shared.VIEW_ON_RANGE, action: onViewOnRange)
                 } else {

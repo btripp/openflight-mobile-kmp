@@ -36,15 +36,19 @@ final class DemoModeObserver: ObservableObject {
 }
 
 /// Plan F14: the persistent Demo badge: a gold strip above every screen while Demo mode is on, so
-/// no made-up shot is ever taken for a measurement. It sits in the top safe-area inset, so the
-/// screens under it lay out below it.
+/// no made-up shot is ever taken for a measurement. Its text stops growing at `.xxLarge` (issue
+/// #79: at AX3 it grew to about 180 pt), so it stays one compact line.
 struct DemoBanner: View {
     var body: some View {
         Text("DEMO · MADE-UP SHOTS, NO PI")
             .font(.ofEyebrow)
             .tracking(1.7)
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
+            .dynamicTypeSize(...DynamicTypeSize.xxLarge)
             .foregroundStyle(Theme.bgDeep)
             .frame(maxWidth: .infinity)
+            .padding(.horizontal, 8)
             .padding(.vertical, 4)
             .background(Theme.gold)
             .accessibilityElement(children: .ignore)
@@ -67,12 +71,19 @@ struct DemoTag: View {
 }
 
 extension View {
-    /// Plan F14: [DemoBanner] in the top safe-area inset while [on].
+    /// Plan F14: [DemoBanner] above this view while [on], its gold running up under the status bar.
+    ///
+    /// Issue #79: stacked above the view rather than put in a `safeAreaInset`. The inset reached
+    /// SwiftUI content, but not the UIKit-backed `NavigationStack`, `TabView` and
+    /// `NavigationSplitView` below it, whose navigation bars (back buttons, Bag's Edit, the iPad
+    /// sidebar toggle) and the full-screen Range's controls still laid out from the status bar,
+    /// under the banner. Stacked, the view's frame starts below the banner, so all of it does.
     func demoBanner(_ on: Bool) -> some View {
-        safeAreaInset(edge: .top, spacing: 0) {
+        VStack(spacing: 0) {
             if on {
                 DemoBanner()
             }
+            self
         }
     }
 }

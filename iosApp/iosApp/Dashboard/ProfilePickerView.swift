@@ -28,12 +28,15 @@ struct ProfileSelector: View {
             Button {
                 send(ProfilePickerEventOpen.shared)
             } label: {
-                HStack {
-                    Image(systemName: "person.crop.circle")
-                    Text(profile.label)
-                        .font(.of(.body, weight: .semibold))
-                        .lineLimit(2)
-                    Spacer()
+                // Issue #81: at an accessibility text size "Change" goes under the profile.
+                AdaptiveHeaderRow {
+                    HStack {
+                        Image(systemName: "person.crop.circle")
+                        Text(profile.label)
+                            .font(.of(.body, weight: .semibold))
+                            .lineLimit(2)
+                    }
+                } actions: {
                     Text("Change")
                         .font(.of(.subheadline, weight: .semibold))
                         .foregroundStyle(Theme.gold)
