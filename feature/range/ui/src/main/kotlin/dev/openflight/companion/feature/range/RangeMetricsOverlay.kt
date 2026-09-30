@@ -103,7 +103,7 @@ internal fun RangeMetricsOverlay(
             )
             OfMetricPrimary(
                 title = "CARRY",
-                value = numbers.distance(shot?.estimatedCarryYards),
+                value = numbers.distance(uiState.displayedCarryYards),
                 unit = numbers.distanceUnit.uppercase(),
                 compact = expandToFill,
                 modifier =
