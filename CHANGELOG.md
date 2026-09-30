@@ -24,6 +24,10 @@ tag, to test Bluetooth against a schema-2-only Pi; the next tagged release is `v
 
 ### Fixed
 
+- Settings › Audio call-outs: unchecking every field now keeps them off, instead of switching
+  Carry and Ball speed back on (#75).
+- Practice no longer drops a new shot or brings back a deleted one when both happen at the same
+  moment (#73).
 - **Over Bluetooth, History stores each shot's final values** (#66). A shot that arrived
   provisional and then final could be stored with the provisional's ball speed, carry and carry
   range, and nothing corrected it, so History, Bag stats and gapping were wrong.

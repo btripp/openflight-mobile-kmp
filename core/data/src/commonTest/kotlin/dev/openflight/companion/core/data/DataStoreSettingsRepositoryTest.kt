@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import app.cash.turbine.test
 import assertk.assertThat
+import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isNull
@@ -251,6 +252,16 @@ class DataStoreSettingsRepositoryTest {
             val settings = DataStoreSettingsRepository(dataStore)
 
             assertThat(settings.calloutFields.first()).isEqualTo(listOf(CalloutField.CARRY, CalloutField.BALL_SPEED))
+        }
+
+    @Test
+    fun uncheckingEveryCalloutFieldKeepsTheListEmpty() =
+        runTest {
+            val dataStore = backgroundScope.dataStore()
+            DataStoreSettingsRepository(dataStore).setCalloutFields(emptyList())
+
+            // Issue #75: the empty list is stored as "" and must not read back as the defaults.
+            assertThat(DataStoreSettingsRepository(dataStore).calloutFields.first()).isEmpty()
         }
 
     @Test

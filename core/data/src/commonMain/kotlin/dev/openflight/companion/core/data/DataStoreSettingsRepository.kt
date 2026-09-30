@@ -293,10 +293,12 @@ private const val CALLOUT_FIELDS_SEPARATOR = ","
 
 /**
  * Parses the comma-joined [CalloutField] names [setCalloutFields][DataStoreSettingsRepository.setCalloutFields]
- * stores. An unrecognized entry (e.g. from a future app version) is dropped rather than failing
- * the whole read; an empty or all-unrecognized result falls back to the default field list.
+ * stores. `""` is the user's choice of no fields at all and reads back as an empty list (#75). An
+ * unrecognized entry (e.g. from a future app version) is dropped rather than failing the whole
+ * read; an all-unrecognized value falls back to the default field list.
  */
 private fun calloutFieldsFromStorageValue(stored: String): List<CalloutField>? {
+    if (stored.isEmpty()) return emptyList()
     val fields =
         stored
             .split(CALLOUT_FIELDS_SEPARATOR)
