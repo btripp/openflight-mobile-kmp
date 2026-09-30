@@ -41,6 +41,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
@@ -184,16 +185,18 @@ class DrivingRangeViewModel(
      * Pi over a connected Socket.IO link simulates. The battery warning is issue #48.
      */
     private val piState =
-        combine(piSession.mockMode, piSession.linkState, simulateError, piSession.powerStatus) {
-            mock,
-            link,
-            error,
-            power,
-            ->
+        combine(
+            piSession.mockMode,
+            piSession.linkState,
+            simulateError,
+            piSession.powerStatus,
+            piSession.shotDetails,
+        ) { mock, link, error, power, details ->
             PiState(
                 canSimulate = mock == true && PiFeatureAvailability.of(link).isAvailable,
                 simulateError = error,
                 batteryWarning = PiBatteryWarning.of(power),
+                details = details,
             )
         }
 
@@ -214,6 +217,7 @@ class DrivingRangeViewModel(
                     pi.canSimulate,
                     pi.simulateError,
                     pi.batteryWarning,
+                    carrySpinAdjustedYards = spinAdjustedCarry(shot, pi.details),
                 )
             }
         }.stateIn(
@@ -238,6 +242,15 @@ class DrivingRangeViewModel(
             combine(settings.viewingProfile, piSession.profiles, RangeProfileState::of)
                 .distinctUntilChanged()
                 .collect(::applyProfiles)
+        }
+        viewModelScope.launch {
+            // A live shot's Pi row can change after the shot shows (its spin-adjusted carry
+            // arrives): the roll-out follows it. The first value is what the range opened with.
+            piSession.shotDetails
+                .map { details -> flight.value.displayedShot?.let { details[it.timestamp] } }
+                .distinctUntilChanged()
+                .drop(1)
+                .collect { flight.value.displayedShot?.let(::refreshRollOut) }
         }
     }
 
@@ -446,9 +459,58 @@ class DrivingRangeViewModel(
     }
 
     private fun observe(shot: ShotEvent?) {
-        if (shot == null || shot.eventId == lastObservedEventId) return
+        if (shot == null) return
+        if (shot.eventId == lastObservedEventId) {
+            // The same shot again: its final version (a `shot_update`, or a schema 2 final).
+            if (profileFilter.shows(shot.profileId)) refreshShot(shot)
+            return
+        }
         lastObservedEventId = shot.eventId
         if (profileFilter.shows(shot.profileId)) observeShown(shot)
+    }
+
+    /**
+     * Tester report 2026-09-30: the Pi sends a shot as soon as the OPS243 has it, then its final
+     * version once the IWR6843 and camera finish (launch, direction, a revised ball speed). The final
+     * version replaces the shown or queued one in place; a shot already in the air isn't flown
+     * again, but one still preparing, or one that couldn't fly, is planned again with the final numbers.
+     */
+    private fun refreshShot(shot: ShotEvent) {
+        if (pendingShot?.eventId == shot.eventId) pendingShot = shot
+        if (pendingLiveShot?.eventId == shot.eventId) pendingLiveShot = shot
+        val shown = flight.value
+        if (shown.displayedShot?.eventId != shot.eventId || shown.displayedShot == shot) return
+        when (shown.phase) {
+            RangePhase.Preparing, is RangePhase.Unavailable -> {
+                prepare(shot)
+            }
+
+            RangePhase.Waiting, RangePhase.Flying, RangePhase.Landed -> {
+                flight.value = shown.copy(displayedShot = shot)
+                refreshRollOut(shot)
+            }
+        }
+    }
+
+    /**
+     * Estimates [shot]'s roll-out again (its carry changed) off the main thread. Skipped while a
+     * flight is being planned: that plan brings its own. A newer shot or flight makes it stale.
+     */
+    private fun refreshRollOut(shot: ShotEvent) {
+        if (flight.value.phase == RangePhase.Preparing) return
+        preparationJob?.cancel()
+        val measurements = measurementsFor(shot)
+        val air = conditions.conditions.value
+        val bearing = conditions.targetBearing.value
+        val current = generation
+        preparationJob =
+            viewModelScope.launch {
+                val rollOut =
+                    withContext(computeDispatcher) { distanceEstimate(measurements, air, bearing) }?.toRollOut()
+                if (generation == current && flight.value.displayedShot == shot) {
+                    flight.value = flight.value.copy(rollOut = rollOut)
+                }
+            }
     }
 
     /** A live shot the viewing profile shows (plan F8f: another profile's neither flies nor shows). */
@@ -891,18 +953,7 @@ class DrivingRangeViewModel(
                 stopFlight()
                 browse.update { it.copy(selectedShotId = shotId) }
                 flight.value = FlightState(RangePhase.Waiting, shot)
-                val measurements = measurementsFor(shot)
-                val air = conditions.conditions.value
-                val bearing = conditions.targetBearing.value
-                val current = generation
-                preparationJob =
-                    viewModelScope.launch {
-                        val rollOut =
-                            withContext(computeDispatcher) { distanceEstimate(measurements, air, bearing) }?.toRollOut()
-                        if (generation == current && flight.value.displayedShot == shot) {
-                            flight.value = flight.value.copy(rollOut = rollOut)
-                        }
-                    }
+                refreshRollOut(shot)
             }
 
             RangeMode.Live -> {
@@ -968,10 +1019,26 @@ class DrivingRangeViewModel(
 
     /**
      * The stored shot's Pi detail when it has one (its spin-adjusted carry anchors the estimate),
-     * keyed by the event id the shot flies under.
+     * keyed by the event id the shot flies under. A live shot keeps its own numbers and takes the
+     * spin-adjusted carry from its Pi session row (joined on the timestamp, like Practice).
      */
-    private fun measurementsFor(shot: ShotEvent): FlightMeasurements =
-        (historyDetails[shot.eventId]?.toFlightMeasurements() ?: shot.toFlightMeasurements()).copy(id = shot.eventId)
+    private fun measurementsFor(shot: ShotEvent): FlightMeasurements {
+        historyDetails[shot.eventId]?.toFlightMeasurements()?.let { return it.copy(id = shot.eventId) }
+        val spinAdjusted = piSession.shotDetails.value[shot.timestamp]?.carrySpinAdjusted
+        return shot.toFlightMeasurements().copy(id = shot.eventId, carrySpinAdjustedYards = spinAdjusted)
+    }
+
+    /**
+     * The Pi's spin-adjusted carry for [shot] (the kiosk's and Practice's carry): its stored detail's,
+     * else its live session row's; `null` when the Pi sent none (0 counts as none, like the web UI).
+     */
+    private fun spinAdjustedCarry(
+        shot: ShotEvent,
+        details: Map<String, ShotDetail>,
+    ): Double? =
+        (historyDetails[shot.eventId] ?: details[shot.timestamp])
+            ?.carrySpinAdjusted
+            ?.takeIf { it.isFinite() && it > 0 }
 
     /**
      * @property rollOut the displayed shot's estimated roll-out: computed with each flight, and for
@@ -993,6 +1060,7 @@ class DrivingRangeViewModel(
         val canSimulate: Boolean,
         val simulateError: String?,
         val batteryWarning: PiBatteryWarning?,
+        val details: Map<String, ShotDetail>,
     )
 
     companion object {

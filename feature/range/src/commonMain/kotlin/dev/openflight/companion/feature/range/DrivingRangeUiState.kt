@@ -179,6 +179,8 @@ sealed interface DrivingRangeUiState {
         override val canSimulate: Boolean = false,
         override val simulateError: String? = null,
         override val batteryWarning: PiBatteryWarning? = null,
+        /** The Pi's spin-adjusted carry for [shot], when it sent one; read [displayedCarryYards]. */
+        val carrySpinAdjustedYards: Double? = null,
     ) : DrivingRangeUiState {
         /** The pre-F8d shape, kept so Swift callers of the seven-argument init still compile. */
         @Suppress("LongParameterList") // The primary constructor's shape before plan F8d.
@@ -195,6 +197,16 @@ sealed interface DrivingRangeUiState {
         override val displayedShot: ShotEvent get() = shot
     }
 }
+
+/**
+ * The CARRY tile: the Pi's spin-adjusted carry when it sent one (what the kiosk, Practice and the
+ * drawn flight use), else the shot's table carry; `null` without a shot.
+ */
+val DrivingRangeUiState.displayedCarryYards: Double?
+    get() {
+        val shot = displayedShot ?: return null
+        return (this as? DrivingRangeUiState.Showing)?.carrySpinAdjustedYards ?: shot.estimatedCarryYards
+    }
 
 /** The replay button shows once there's a shot and nothing is being prepared or flown (DrivingRangeView.swift). */
 val DrivingRangeUiState.canReplay: Boolean

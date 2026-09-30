@@ -89,7 +89,7 @@ struct RangeMetricsOverlay: View {
             .rangeObstruction("ballSpeed")
             RangePrimaryMetric(
                 title: "CARRY",
-                value: numbers.distance(yards: shot.map { KotlinDouble(value: $0.estimatedCarryYards) }, decimals: 0),
+                value: numbers.distance(yards: DrivingRangeUiStateKt.displayedCarryYards(state), decimals: 0),
                 unit: numbers.distanceUnit.uppercased(),
                 compact: !docksToSide,
                 accessibilityIdentifier: RangeTestTags.shared.CARRY
