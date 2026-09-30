@@ -28,6 +28,12 @@ object RangeTestTags {
     const val SCENE = "range.scene"
     const val CAMERA_MODE = "range.cameraMode"
 
+    /**
+     * Issue #80 (iOS): at accessibility text sizes the camera mode, History and Replay collapse
+     * into this overflow menu, so Exit and the settings gear stay on screen.
+     */
+    const val MORE_CONTROLS = "range.moreControls"
+
     /** The full detail-metrics panel (club selector and the seven detail metrics). */
     const val METRICS_DETAIL = "range.metricsDetail"
 

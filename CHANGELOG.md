@@ -32,6 +32,11 @@ tag, to test Bluetooth against a schema-2-only Pi; the next tagged release is `v
 - Android: a status pill whose text wraps (Settings' long "Live session" reconnect reason, most
   visibly at 200% text) is now a rounded rectangle, so its lines no longer crowd the pill's
   curved edges (#65). One-line pills keep their fully rounded ends.
+- **The Range works at the largest text sizes** (#80). On iOS at accessibility sizes the top bar
+  collapses to Exit, a "More" menu (camera, History, Replay) and settings, so nothing runs off
+  the screen; the metrics use two columns with scaling labels, and the angles read as degrees to
+  VoiceOver. On Android at 150% text and above the dock uses two columns instead of cutting
+  values short.
 
 ### Removed
 

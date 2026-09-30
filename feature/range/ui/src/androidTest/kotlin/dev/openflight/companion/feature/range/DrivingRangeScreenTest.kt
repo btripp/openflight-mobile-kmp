@@ -9,6 +9,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
@@ -24,6 +26,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.Density
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import dev.openflight.companion.core.designsystem.OfDropdownMenuTags
@@ -363,6 +366,51 @@ class DrivingRangeScreenTest {
             RangeTestTags.REPLAY,
         )) {
             assertFalse(status.overlaps(bounds(control)), "status pill overlaps $control")
+        }
+    }
+
+    /**
+     * Issue #80: at 200% text the dense four-column dock cut every value short ("92.3 …",
+     * "2,64…"). Large text now takes the two-column grid, where each title and value fits whole:
+     * none is ellipsized or clipped.
+     */
+    @Test
+    fun givenLargeFont_whenWaitingForAShot_thenNoDetailMetricIsCutShort() {
+        composeRule.setContent {
+            val density = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale = 2f)) {
+                OfTheme {
+                    DrivingRangeScreen(
+                        uiState = DrivingRangeUiState.Showing(shot, RangePhase.Waiting, activeFlight = null),
+                        reduceMotion = true,
+                        onEvent = { events += it },
+                        onExit = { exits++ },
+                        windowClass = OfWindowClass.COMPACT,
+                    )
+                }
+            }
+        }
+
+        val texts =
+            composeRule
+                .onAllNodes(
+                    hasAnyAncestor(hasTestTag(RangeTestTags.METRICS_DETAIL)) and
+                        SemanticsMatcher.keyIsDefined(SemanticsActions.GetTextLayoutResult),
+                    useUnmergedTree = true,
+                ).fetchSemanticsNodes()
+        // The club selector and the seven metrics, each with a title and a value.
+        assertTrue(texts.size >= 2 * 8, "only ${texts.size} texts in the dock")
+        for (node in texts) {
+            val layouts = mutableListOf<TextLayoutResult>()
+            node.config[SemanticsActions.GetTextLayoutResult].action?.invoke(layouts)
+            val layout = layouts.single()
+            val text = layout.layoutInput.text.text
+            for (line in 0 until layout.lineCount) {
+                assertFalse(layout.isLineEllipsized(line), "\"$text\" ellipsized")
+            }
+            // Clipped (maxLines without an ellipsis): the visible lines end before the text does.
+            val shown = layout.getLineEnd(layout.lineCount - 1, visibleEnd = true)
+            assertEquals(text.trimEnd().length, shown, "\"$text\" clipped")
         }
     }
 
