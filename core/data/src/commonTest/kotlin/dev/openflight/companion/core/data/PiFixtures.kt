@@ -4,6 +4,9 @@ package dev.openflight.companion.core.data
 import dev.openflight.companion.core.socketio.SocketEvent
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonObject
 
 /**
  * Socket.IO frames for the Pi's session API.
@@ -292,6 +295,57 @@ internal object PiFixtures {
             """"unit":"mph","mode":"swing-speed"},"stats":{"shot_count":1,"avg_ball_speed":97.4,""" +
             """"max_ball_speed":97.4,"min_ball_speed":97.4,"std_dev":0,"avg_club_speed":97.4,""" +
             """"avg_smash_factor":null,"avg_carry_est":0}}]"""
+
+    /** The `shot_to_dict` row inside a captured `shot` frame ([SHOT_FRAME], [SECOND_SHOT_FRAME]). */
+    fun shotRow(frame: String): JsonObject =
+        event(frame)
+            .args[0]
+            .jsonObject
+            .getValue("shot")
+            .jsonObject
+
+    /**
+     * HAND-BUILT: [SHOT_FRAME]'s captured row as shot [number] at [timestamp], optionally under
+     * another [profileId], as a `shot` frame {shot, stats} (server.py:3670, stock `7ca4b40`).
+     */
+    fun shotFrame(
+        number: Int,
+        timestamp: String,
+        profileId: String = DEFAULT_PROFILE_ID,
+    ): String {
+        val row =
+            JsonObject(
+                shotRow(SHOT_FRAME) +
+                    mapOf(
+                        "shot_number" to JsonPrimitive(number),
+                        "timestamp" to JsonPrimitive(timestamp),
+                        "profile_id" to JsonPrimitive(profileId),
+                    ),
+            )
+        return """42["shot",{"shot":$row,"stats":{}}]"""
+    }
+
+    /**
+     * HAND-BUILT: `session_state` (stock `7ca4b40` server.py:1662 `_session_state_payload`: stats,
+     * every profile's rows oldest first, club) holding the rows of the given `shot` frames. The
+     * server sends it on connect, on `get_session` and after any client's `delete_shot`.
+     */
+    fun sessionStateFrame(vararg shotFrames: String): String {
+        val rows = JsonArray(shotFrames.map(::shotRow))
+        return """42["session_state",{"stats":{"shot_count":${rows.size}},"shots":$rows,"club":"driver"}]"""
+    }
+
+    /**
+     * HAND-BUILT: `session_cleared` (stock `7ca4b40` server.py:1932 `handle_clear_session`,
+     * `{profile_id, shots}` with the rows that remain) after any client's `clear_session`.
+     */
+    fun sessionClearedFrame(
+        profileId: String,
+        vararg remainingShotFrames: String,
+    ): String {
+        val rows = JsonArray(remainingShotFrames.map(::shotRow))
+        return """42["session_cleared",{"profile_id":"$profileId","shots":$rows}]"""
+    }
 
     /** Parses a `42[...]` frame into the [SocketEvent] the client would publish. */
     fun event(frame: String): SocketEvent {
