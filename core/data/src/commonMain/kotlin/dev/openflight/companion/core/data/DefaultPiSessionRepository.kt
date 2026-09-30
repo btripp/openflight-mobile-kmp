@@ -480,4 +480,9 @@ private fun SocketConnectionState.toLinkState(): PiLinkState =
                 localNetworkDenied,
             )
         }
+
+        // Issue #70: the address itself was refused, so it's shown like a policy rejection.
+        is SocketConnectionState.Failed -> {
+            PiLinkState.Rejected(reason)
+        }
     }

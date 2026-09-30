@@ -50,6 +50,16 @@ sealed interface EndpointDecision {
         override val reason: String = "Remove the user name and password from the address."
     }
 
+    /**
+     * An IPv6 literal with a zone ID (`[fe80::1%en0]`). OkHttp can't put one in a URL host and
+     * throws, so it's refused here rather than failing on every connection attempt (issue #70).
+     */
+    data object ZoneId : Rejected {
+        override val reason: String =
+            "Addresses with a network interface (the part after %) aren't supported. " +
+                "Remove it, or use the Pi's .local name."
+    }
+
     /** Plain `http` to a host that isn't on the local network. */
     data class CleartextToPublicHost(
         val host: String,
@@ -70,7 +80,8 @@ sealed interface EndpointDecision {
  *   link-local `169.254/16`, IPv6 link-local `fe80::/10` and unique-local `fc00::/7` (IPv4-mapped
  *   IPv6 follows the IPv4 rules). Any other name or address, including a bare single-label name
  *   that DNS might resolve anywhere, is public.
- * - Credentials (`user:pass@`), any other scheme and malformed input are rejected.
+ * - Credentials (`user:pass@`), IPv6 zone IDs (`%en0`), any other scheme and malformed input are
+ *   rejected.
  *
  * Input is what a user types: a bare host, `host:port`, `[v6]:port`, or a full URL whose path,
  * query and fragment are dropped. A missing scheme means `http`; `http` without a port gets the
@@ -110,6 +121,10 @@ object EndpointPolicy {
                 EndpointDecision.Malformed(trimmed)
             }
 
+            parsed.hasZone -> {
+                EndpointDecision.ZoneId
+            }
+
             scheme == HTTP && !parsed.isLocal -> {
                 EndpointDecision.CleartextToPublicHost(parsed.displayHost)
             }
@@ -128,6 +143,7 @@ object EndpointPolicy {
         val displayHost: String,
         val port: Int?,
         val isLocal: Boolean,
+        val hasZone: Boolean = false,
     )
 
     private fun parseAuthority(authority: String): ParsedAuthority? {
@@ -164,12 +180,12 @@ object EndpointPolicy {
         if (zone != null && !ZONE.matches(zone)) return null
         val bytes = Ipv6.parse(address) ?: return null
         val lower = address.lowercase()
-        val urlLiteral = if (zone == null) lower else "$lower%25$zone"
         return ParsedAuthority(
-            urlHost = "[$urlLiteral]",
+            urlHost = "[$lower]",
             displayHost = lower,
             port = port,
             isLocal = Ipv6.isLocal(bytes),
+            hasZone = zone != null,
         )
     }
 
@@ -281,7 +297,8 @@ internal object Ipv6 {
                 result += (v4[0] shl BYTE_BITS) or v4[1]
                 result += (v4[2] shl BYTE_BITS) or v4[3]
             } else {
-                val valid = part.isNotEmpty() && part.length <= MAX_GROUP_DIGITS
+                // Hex digits only: toIntOrNull would also take a leading sign (issue #76).
+                val valid = part.isNotEmpty() && part.length <= MAX_GROUP_DIGITS && part.all { it.isHexDigit() }
                 result += (if (valid) part.toIntOrNull(HEX) else null) ?: return null
             }
         }
@@ -296,3 +313,5 @@ internal object Ipv6 {
         return loopback || linkLocal || uniqueLocal || (mapped && Ipv4.isLocal(bytes.copyOfRange(12, 16)))
     }
 }
+
+private fun Char.isHexDigit(): Boolean = this in '0'..'9' || this in 'a'..'f' || this in 'A'..'F'

@@ -37,6 +37,14 @@ sealed interface SocketConnectionState {
         val reason: String,
         val localNetworkDenied: Boolean = false,
     ) : SocketConnectionState
+
+    /**
+     * Stopped for good: retrying can't help (the transport refused the address, issue #70).
+     * [reason] is the plain-words sentence to show; [SocketIoClient.reconnectNow] tries again.
+     */
+    data class Failed(
+        val reason: String,
+    ) : SocketConnectionState
 }
 
 /** [SocketIoClient.emit] was called while not [SocketConnectionState.Connected]. */

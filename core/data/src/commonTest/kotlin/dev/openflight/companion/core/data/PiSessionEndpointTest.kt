@@ -57,6 +57,16 @@ class PiSessionEndpointTest {
                 .isEqualTo(PiLinkState.Reconnecting(1, 500, LocalNetworkDenial.MESSAGE, localNetworkDenied = true))
         }
 
+    /** Issue #70: an address the socket's transport refuses is shown like a policy rejection, not a retry. */
+    @Test
+    fun aSocketThatFailedOnItsAddressIsARejectedLink() =
+        runPiTest { h ->
+            h.socket.state.value = SocketConnectionState.Failed("The app can't connect to this address.")
+
+            assertThat(h.repository.linkState.value)
+                .isEqualTo(PiLinkState.Rejected("The app can't connect to this address."))
+        }
+
     @Test
     fun theHostIsRememberedOnlyOnceTheLinkConnects() =
         runPiTest(host = "192.168.1.100:8080") { h ->
