@@ -43,6 +43,10 @@ tag, to test Bluetooth against a schema-2-only Pi; the next tagged release is `v
   values short.
 - iOS: gold buttons ("Hit a shot", "Looks right", Retry, Simulate and others) show dark text on
   gold, as on Android, instead of hard-to-read white, and a disabled one stays readable (#82).
+- A very strong headwind no longer shows a negative carry and total: the carry stops at 0 and
+  no roll is added to it (#71).
+- Bag: the metric carry spread (± N m) no longer rounds twice, so 2.4 m reads "± 2 m" instead
+  of "± 3 m" (#72).
 
 ### Removed
 

@@ -10,6 +10,7 @@ import assertk.assertions.isGreaterThan
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isTrue
 import dev.openflight.companion.core.insights.GapInsight
+import dev.openflight.companion.core.insights.UnitSystem
 import dev.openflight.companion.core.model.GolfClub
 import dev.openflight.companion.core.testing.FakeBagRepository
 import dev.openflight.companion.core.testing.FakeConditionsRepository
@@ -41,14 +42,27 @@ class ClubAnalysisViewModelTest {
         Dispatchers.resetMain()
     }
 
-    private fun viewModel() =
+    private fun viewModel(settings: FakeSettingsRepository = FakeSettingsRepository()) =
         ClubAnalysisViewModel(
             bags,
             history,
             FakeConditionsRepository(),
-            FakeSettingsRepository(),
+            settings,
             computeDispatcher = dispatcher,
         )
+
+    @Test
+    fun theMetricCarrySpreadIsRoundedOnce() =
+        runTest {
+            // A spread of 1.58 yds (1.45 m); rounding the yards first would show "± 2 m".
+            bags.seedDefaultBagIfEmpty()
+            history.put("s1", fiveShots(GolfClub.IRON_7, 160.0))
+
+            viewModel(FakeSettingsRepository(units = UnitSystem.METRIC)).uiState.testIgnoringRest {
+                val state = awaitUntil { it.bars.isNotEmpty() }
+                assertThat(state.bars.single().plusMinusLabel).isEqualTo("± 1 m")
+            }
+        }
 
     @Test
     fun barsAreRankedLongestFirstAndScaledToTheLongest() =

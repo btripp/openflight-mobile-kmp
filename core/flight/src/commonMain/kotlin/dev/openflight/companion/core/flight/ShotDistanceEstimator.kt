@@ -18,7 +18,8 @@ enum class CarryAnchor {
  * Carry, roll and total for one shot under some [Conditions] (plan F2 §0.2).
  *
  * @property carryYards the anchor carry, adjusted for conditions when [isAdjusted].
- * @property rollYards the estimated run after carry (always [DistanceProvenance.ESTIMATED]).
+ * @property rollYards the estimated run after carry (always [DistanceProvenance.ESTIMATED]); 0 when
+ *   [carryYards] is 0.
  * @property totalYards [carryYards] + [rollYards].
  * @property lateralDriftYards extra sideways movement from the wind (+ right); 0 without wind.
  * @property anchorCarryYards the server carry the adjustment started from.
@@ -97,7 +98,13 @@ class ShotDistanceEstimator(
         val densityChanged = abs(adjusted.airDensity - AirDensity.ISA_SEA_LEVEL) > ISA_DENSITY_TOLERANCE
         val isAdjusted = densityChanged || adjusted.windApplied
         val carry = if (isAdjusted) adjusted.carryYards else anchorCarry
-        val roll = rollEstimator.estimate(adjusted.landing, adjusted.landingSpinRpm, conditions.surface).rollYards
+        // A ball held at the tee by the wind (carry clamped to 0) doesn't roll on from behind it (#71).
+        val roll =
+            if (carry > 0) {
+                rollEstimator.estimate(adjusted.landing, adjusted.landingSpinRpm, conditions.surface).rollYards
+            } else {
+                0.0
+            }
 
         val estimate =
             ShotDistanceEstimate(
