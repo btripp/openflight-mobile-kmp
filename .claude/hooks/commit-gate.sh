@@ -25,7 +25,7 @@ else
 fi
 
 # `git commit`, `git -C dir commit`, also after `&&`/`;`. Not `git commit-tree` etc.
-if ! printf '%s' "$cmd" | grep -Eq '(^|[;&|[:space:]])git([[:space:]]+-C[[:space:]]+[^[:space:]]+)?[[:space:]]+commit([[:space:]]|$|")'; then
+if ! printf '%s' "$cmd" | grep -Eq '(^|[;&|[:space:]])git([[:space:]]+-C[[:space:]]+("[^"]+"|'"'"'[^'"'"']+'"'"'|[^[:space:]]+))?[[:space:]]+commit([[:space:]]|$|")'; then
   exit 0
 fi
 
@@ -35,7 +35,31 @@ if [ "${OPENFLIGHT_SKIP_COMMIT_GATE:-0}" = "1" ]; then
 fi
 
 root="${cwd:-${CLAUDE_PROJECT_DIR:-$PWD}}"
+
+# Build the checkout being committed, not the session's: `git -C <dir> commit` and
+# `cd <dir> && … git commit` (e.g. an agent worktree) point somewhere other than cwd.
+target=""
+git_c_re='git[[:space:]]+-C[[:space:]]+("[^"]+"|'"'"'[^'"'"']+'"'"'|[^[:space:];&|]+)[[:space:]]+commit'
+cd_re='(^|[;&|[:space:]])cd[[:space:]]+("[^"]+"|'"'"'[^'"'"']+'"'"'|[^[:space:];&|]+)'
+if [[ "$cmd" =~ $git_c_re ]]; then
+  target="${BASH_REMATCH[1]}"
+elif [[ "$cmd" =~ $cd_re ]]; then
+  target="${BASH_REMATCH[2]}"
+fi
+if [ -n "$target" ]; then
+  target="${target#[\"\']}"
+  target="${target%[\"\']}"
+  case "$target" in
+    "~") target="$HOME" ;;
+    "~/"*) target="$HOME/${target#\~/}" ;;
+  esac
+  case "$target" in /*) ;; *) target="$root/$target" ;; esac
+  if [ -d "$target" ]; then
+    root="$target"
+  fi
+fi
 root="$(git -C "$root" rev-parse --show-toplevel 2>/dev/null || echo "$root")"
+echo "commit-gate: checking $root" >&2
 cd "$root" || exit 0
 
 # Staged, unstaged and untracked files: the hook runs before the command, so `git commit -a` and
