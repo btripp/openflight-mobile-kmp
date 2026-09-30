@@ -215,6 +215,29 @@ class SocketIoClientTest {
             assertThat(transport.urls).hasSize(6)
         }
 
+    /**
+     * Issue #70: OkHttp throws `IllegalArgumentException` for a host it can't put in a URL. That
+     * can't succeed on a retry, so the client stops with a plain-words reason until [reconnectNow].
+     */
+    @Test
+    fun anOpenRefusingTheAddressStopsRetryingWithAPlainWordsReason() =
+        runClientTest { (transport, client) ->
+            transport.failures += IllegalArgumentException("Invalid URL host: \"[fe80::1%en0]\"")
+            client.connect()
+            runCurrent()
+            assertThat(client.state.value).isEqualTo(SocketConnectionState.Failed(INVALID_ADDRESS_REASON))
+
+            // Far beyond the 5 s maximum backoff: no further attempt.
+            advanceTimeBy(60_000)
+            runCurrent()
+            assertThat(transport.urls).hasSize(1)
+
+            client.reconnectNow()
+            handshake(transport)
+            assertThat(transport.urls).hasSize(2)
+            assertThat(client.state.value).isEqualTo(SocketConnectionState.Connected("sio-sid"))
+        }
+
     @Test
     fun aSuccessfulConnectResetsTheBackoff() =
         runClientTest { (transport, client) ->

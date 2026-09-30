@@ -48,7 +48,10 @@ data class ReconnectPolicy(
  * open packet, sends the Socket.IO connect (`40`), then answers pings (`2` → `3`) and publishes
  * every event on [events] until the connection ends. The connection counts as dead when no packet
  * arrives within `pingInterval + pingTimeout` (the server pings every `pingInterval`). Any failure
- * or close schedules the next attempt with [reconnectPolicy]; a connect ack resets it.
+ * or close schedules the next attempt with [reconnectPolicy]; a connect ack resets it. The one
+ * exception is an address the transport refuses outright (an `IllegalArgumentException` from its
+ * open, issue #70): that ends the loop in [SocketConnectionState.Failed] until [reconnectNow] or a
+ * new [connect].
  *
  * Events are published whether or not the connect ack has arrived: Flask-SocketIO's `connect`
  * handler broadcasts (`club_changed`, `session_state`, ...) before the ack reaches the client.
@@ -131,6 +134,10 @@ class SocketIoClient(
                     reason
                 } catch (cancellation: CancellationException) {
                     throw cancellation
+                } catch (_: InvalidAddressException) {
+                    connected = null
+                    mutableState.value = SocketConnectionState.Failed(INVALID_ADDRESS_REASON)
+                    return
                 } catch (error: Throwable) {
                     denied = LocalNetworkDenial.isDenied(error)
                     error.message ?: error.toString()
@@ -157,7 +164,7 @@ class SocketIoClient(
      * Android 17 dropped the packets of an attempt made before `ACCESS_LOCAL_NETWORK` was granted).
      */
     private suspend fun runConnection(onConnected: () -> Unit): String {
-        val connection = withOpenTimeout(openTimeoutMillis, OPEN_TIMED_OUT) { transport.open(url) }
+        val connection = withOpenTimeout(openTimeoutMillis, OPEN_TIMED_OUT) { transport.openOrRefuse(url) }
         var ackReceived = false
         try {
             val handshake =
@@ -281,6 +288,27 @@ class SocketIoClient(
         const val HANDSHAKE_TIMED_OUT = "Timed out waiting for the server's handshake"
     }
 }
+
+/** Shown in [SocketConnectionState.Failed] when the transport refuses the address itself (issue #70). */
+internal const val INVALID_ADDRESS_REASON =
+    "The app can't connect to this address. Check the Pi's address, or use its .local name."
+
+/** The transport refused the address before connecting; retrying can't fix that. */
+private class InvalidAddressException(
+    cause: IllegalArgumentException,
+) : Exception(cause.message, cause)
+
+/**
+ * Opens [url], turning an `IllegalArgumentException` (OkHttp's "Invalid URL host") into
+ * [InvalidAddressException]. Only the open is wrapped: later, a malformed packet's
+ * `SerializationException` is also an `IllegalArgumentException` and stays retryable.
+ */
+private suspend fun EngineIoTransport.openOrRefuse(url: String): EngineIoConnection =
+    try {
+        open(url)
+    } catch (invalid: IllegalArgumentException) {
+        throw InvalidAddressException(invalid)
+    }
 
 /** An attempt's open or handshake took longer than the open timeout: a failed attempt, retried. */
 internal class SocketOpenTimeoutException(

@@ -51,6 +51,13 @@ tag, to test Bluetooth against a schema-2-only Pi; the next tagged release is `v
   no roll is added to it (#71).
 - Bag: the metric carry spread (± N m) no longer rounds twice, so 2.4 m reads "± 2 m" instead
   of "± 3 m" (#72).
+- Network: a Pi address with a network interface (`[fe80::1%en0]`) is refused in Settings with
+  a plain explanation instead of connecting forever. An address the phone can't use at all now
+  says so and stops, rather than showing "unreachable" and retrying without end (#70).
+- Network: IPv6 addresses with a `+` or `-` in them (`[fe80::-1]`) are refused as not valid,
+  instead of being accepted and then failing to connect (#76).
+- Network: after a live shot stream drops, the app reconnects within a second again, instead of
+  waiting longer after each drop until every reconnect took 15 seconds (#69).
 
 ### Removed
 

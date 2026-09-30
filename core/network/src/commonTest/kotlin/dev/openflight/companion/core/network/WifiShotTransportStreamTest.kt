@@ -3,6 +3,7 @@ package dev.openflight.companion.core.network
 
 import app.cash.turbine.test
 import assertk.assertThat
+import assertk.assertions.containsExactly
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isInstanceOf
@@ -12,15 +13,23 @@ import dev.openflight.companion.core.model.ConnectionErrorKind
 import dev.openflight.companion.core.model.ConnectionState
 import dev.openflight.companion.core.model.GolfClub
 import io.ktor.client.engine.mock.MockEngine
+import io.ktor.client.engine.mock.MockEngineConfig
+import io.ktor.client.engine.mock.MockRequestHandler
 import io.ktor.client.engine.mock.respond
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
+import io.ktor.utils.io.ByteChannel
 import io.ktor.utils.io.ByteReadChannel
+import io.ktor.utils.io.cancel
+import io.ktor.utils.io.writeFully
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.io.IOException
 import kotlin.test.Test
 
 private const val EVENT_ID_1 = "11111111-1111-1111-1111-111111111111"
@@ -196,6 +205,79 @@ class WifiShotTransportStreamTest {
             transport.disconnect()
         }
 
+    /**
+     * Issue #70: OkHttp throws `IllegalArgumentException` for a host it can't put in a URL. Retrying
+     * can't fix the address, so the transport stops with a plain-words error until [retry].
+     */
+    @Test
+    fun anAddressTheHttpEngineRefusesStopsRetryingWithAPlainWordsError() =
+        runTest {
+            var requests = 0
+            val engine =
+                virtualTimeEngine(testScheduler) {
+                    requests++
+                    throw IllegalArgumentException("Invalid URL host: \"[fe80::1%en0]\"")
+                }
+            val transport = wifiShotTransport(engine, testScheduler)
+
+            try {
+                transport.start()
+                runCurrent()
+                assertThat(transport.state.value).isEqualTo(
+                    ConnectionState.Error(
+                        EndpointDecision.Malformed(DEFAULT_TEST_HOST).reason,
+                        ConnectionErrorKind.ENDPOINT_REJECTED,
+                    ),
+                )
+
+                // Well past the 15 s maximum backoff: nothing is retried on its own.
+                advanceTimeBy(60_000)
+                runCurrent()
+                assertThat(requests).isEqualTo(1)
+
+                transport.retry()
+                runCurrent()
+                assertThat(requests).isEqualTo(2)
+            } finally {
+                // A still-retrying loop would keep the virtual clock busy forever after a failure.
+                transport.disconnect()
+            }
+        }
+
+    /**
+     * Issue #69: real network drops end the body with an error, never a clean end of stream. A
+     * connection that got its `200` counts as working, so the next reconnect waits the initial 1 s
+     * again. Before the fix the gaps grew 1, 2, 4, 8 s, then stayed at 15 s for good.
+     */
+    @Test
+    fun aStreamThatConnectedAndThenDroppedReconnectsAfterTheInitialDelay() =
+        runTest {
+            val requestTimes = mutableListOf<Long>()
+            val engine =
+                virtualTimeEngine(testScheduler) {
+                    requestTimes += testScheduler.currentTime
+                    val body = ByteChannel(autoFlush = true)
+                    body.writeFully(sseShotChunk(EVENT_ID_1).encodeToByteArray())
+                    body.cancel(IOException("Connection reset"))
+                    respond(
+                        content = body,
+                        status = HttpStatusCode.OK,
+                        headers = headersOf(HttpHeaders.ContentType, "text/event-stream"),
+                    )
+                }
+            val transport = wifiShotTransport(engine, testScheduler)
+
+            try {
+                transport.start()
+                advanceTimeBy(4_500)
+                runCurrent()
+
+                assertThat(requestTimes).containsExactly(0L, 1_000L, 2_000L, 3_000L, 4_000L)
+            } finally {
+                transport.disconnect()
+            }
+        }
+
     @Test
     fun disconnectStopsTheRunLoop() =
         runTest {
@@ -224,3 +306,15 @@ private fun streamEngine(body: () -> String): MockEngine =
             headers = headersOf(HttpHeaders.ContentType, "text/event-stream"),
         )
     }
+
+/** A [MockEngine] whose requests run on the test's virtual clock, so `advanceTimeBy` covers them. */
+private fun virtualTimeEngine(
+    scheduler: TestCoroutineScheduler,
+    handler: MockRequestHandler,
+): MockEngine =
+    MockEngine(
+        MockEngineConfig().apply {
+            dispatcher = StandardTestDispatcher(scheduler)
+            addHandler(handler)
+        },
+    )
