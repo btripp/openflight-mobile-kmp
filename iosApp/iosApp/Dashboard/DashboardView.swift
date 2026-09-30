@@ -323,8 +323,7 @@ struct DashboardContent: View {
                         .font(.of(.callout, weight: .bold))
                         .frame(maxWidth: .infinity, minHeight: 36)
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(Theme.gold)
+                .buttonStyle(.goldProminent)
                 .accessibilityIdentifier(DashboardTestTags.shared.HIT_SHOT)
                 Button {
                     send(DashboardEventExitDemo.shared)
@@ -405,8 +404,7 @@ struct DashboardContent: View {
                     UIApplication.shared.open(url)
                 }
             }
-            .buttonStyle(.borderedProminent)
-            .tint(Theme.gold)
+            .buttonStyle(.goldProminent)
             .accessibilityIdentifier(DashboardTestTags.shared.OPEN_SETTINGS)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -425,8 +423,7 @@ struct DashboardContent: View {
                 .font(.of(.caption))
                 .foregroundStyle(Theme.creamDim)
             Button("Looks right") { send(DashboardEventClubConfirmed.shared) }
-                .buttonStyle(.borderedProminent)
-                .tint(Theme.gold)
+                .buttonStyle(.goldProminent)
                 .accessibilityIdentifier(DashboardTestTags.shared.CLUB_CONFIRM)
         }
         .frame(maxWidth: .infinity, alignment: .leading)

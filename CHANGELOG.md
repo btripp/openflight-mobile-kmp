@@ -41,6 +41,8 @@ tag, to test Bluetooth against a schema-2-only Pi; the next tagged release is `v
   the screen; the metrics use two columns with scaling labels, and the angles read as degrees to
   VoiceOver. On Android at 150% text and above the dock uses two columns instead of cutting
   values short.
+- iOS: gold buttons ("Hit a shot", "Looks right", Retry, Simulate and others) show dark text on
+  gold, as on Android, instead of hard-to-read white, and a disabled one stays readable (#82).
 
 ### Removed
 
