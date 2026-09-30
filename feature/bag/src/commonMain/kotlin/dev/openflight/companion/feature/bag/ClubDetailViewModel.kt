@@ -217,7 +217,7 @@ private fun summaryLines(
     units: UnitSystem,
 ): List<String> {
     val carry = BagCopy.distance(summary.meanCarryYards, units)
-    val spread = BagCopy.plusMinus(summary.plusMinusYards.toDouble(), units)
+    val spread = BagCopy.plusMinus(summary.stdDevCarryYards, units)
     val middle = BagCopy.distance(summary.p10CarryYards, units) + "–" + BagCopy.distance(summary.p90CarryYards, units)
     val side =
         summary.meanOfflineYards?.let { offline ->

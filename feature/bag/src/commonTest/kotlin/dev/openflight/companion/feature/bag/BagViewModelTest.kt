@@ -13,6 +13,7 @@ import assertk.assertions.isTrue
 import dev.openflight.companion.core.data.BagRepository
 import dev.openflight.companion.core.data.SessionSource
 import dev.openflight.companion.core.insights.GapFlag
+import dev.openflight.companion.core.insights.UnitSystem
 import dev.openflight.companion.core.model.Conditions
 import dev.openflight.companion.core.model.Firmness
 import dev.openflight.companion.core.model.GolfClub
@@ -83,6 +84,20 @@ class BagViewModelTest {
                 assertThat(sevenIron.gap?.label).isEqualTo("5 yds gap · tight")
                 assertThat(row(state, GolfClub.IRON_8)!!.gap).isNull()
                 assertThat(state.carryAdjusted).isFalse()
+            }
+        }
+
+    @Test
+    fun theMetricCarrySpreadIsRoundedOnce() =
+        runTest {
+            // Five shots at 158..162 yds: a spread of 1.58 yds (1.45 m). Rounding the yards first
+            // (2 yds = 1.83 m) would show "± 2 m".
+            settings.units.value = UnitSystem.METRIC
+            history.put("s1", fiveShots(GolfClub.IRON_7, 160.0))
+
+            viewModel().uiState.testIgnoringRest {
+                val state = awaitUntil { row(it, GolfClub.IRON_7)?.plusMinusLabel != null }
+                assertThat(row(state, GolfClub.IRON_7)!!.plusMinusLabel).isEqualTo("± 1 m")
             }
         }
 

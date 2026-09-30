@@ -13,6 +13,8 @@ internal object ConditionsLaunches {
         measured(club = "7-iron", speedMph = 100.0, launch = 20.5, spin = 6_500.0, carry = 133.0)
     val PITCHING_WEDGE =
         measured(club = "pw", speedMph = 82.0, launch = 28.0, spin = 9_000.0, carry = 101.0)
+    val SAND_WEDGE =
+        measured(club = "sw", speedMph = 60.0, launch = 32.0, spin = 9_500.0, carry = 60.0)
 
     fun measured(
         club: String,
