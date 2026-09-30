@@ -32,6 +32,9 @@ tag, to test Bluetooth against a schema-2-only Pi; the next tagged release is `v
 - Android: a status pill whose text wraps (Settings' long "Live session" reconnect reason, most
   visibly at 200% text) is now a rounded rectangle, so its lines no longer crowd the pill's
   curved edges (#65). One-line pills keep their fully rounded ends.
+- iOS: in Demo mode the Demo banner no longer covers the navigation bar's back buttons, Bag's
+  Edit, the iPad sidebar toggle or the Range's top controls; screens now start below it, and its
+  text stops growing at xxLarge so it stays one compact line at accessibility sizes (#79).
 
 ### Removed
 
