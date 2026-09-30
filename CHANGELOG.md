@@ -32,6 +32,8 @@ tag, to test Bluetooth against a schema-2-only Pi; the next tagged release is `v
 - Android: a status pill whose text wraps (Settings' long "Live session" reconnect reason, most
   visibly at 200% text) is now a rounded rectangle, so its lines no longer crowd the pill's
   curved edges (#65). One-line pills keep their fully rounded ends.
+- iOS: gold buttons ("Hit a shot", "Looks right", Retry, Simulate and others) show dark text on
+  gold, as on Android, instead of hard-to-read white, and a disabled one stays readable (#82).
 
 ### Removed
 

@@ -46,9 +46,7 @@ struct SessionActionPanel: View {
                     HStack(spacing: 12) {
                         if failed.canRetry {
                             Button(SessionActionCopy.shared.RETRY, action: onRetry)
-                                .buttonStyle(.borderedProminent)
-                                .tint(Theme.gold)
-                                .foregroundStyle(Theme.bgDeep)
+                                .buttonStyle(.goldProminent)
                                 .controlSize(.large)
                                 .accessibilityIdentifier(SessionActionTestTags.shared.RETRY)
                         }

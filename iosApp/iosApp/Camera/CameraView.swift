@@ -211,8 +211,7 @@ struct CameraContent: View {
                         ProgressView().tint(Theme.gold)
                     } else {
                         Button("Play") { send(CameraEventPlayReplay(replayId: row.replayId)) }
-                            .buttonStyle(.borderedProminent)
-                            .tint(Theme.gold)
+                            .buttonStyle(.goldProminent)
                             .disabled(!state.availability.isAvailable || state.replay is CameraReplayStatePreparing)
                             .accessibilityIdentifier("camera.replay.\(row.replayId)")
                     }
