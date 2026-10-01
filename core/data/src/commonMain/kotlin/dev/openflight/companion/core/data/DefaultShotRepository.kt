@@ -448,7 +448,8 @@ internal class DefaultShotRepository(
                     launch(start = CoroutineStart.UNDISPATCHED) {
                         var previous: ConnectionState = ConnectionState.Idle
                         transport.state.collect { state ->
-                            // R8h: every successful (re)connect is a new history session.
+                            // R8h: every successful (re)connect starts a history session, or continues
+                            // the current one after a short gap (ShotHistoryRepository.startSession).
                             if (state == ConnectionState.Connected && previous != state) {
                                 persistentHistory?.startSession(key.host, key.type)
                             }

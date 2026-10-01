@@ -63,7 +63,10 @@ interface ShotHistoryRepository {
         profileId: String? = null,
     ): Flow<List<HistoryShot>>
 
-    /** Starts a new session: called on every successful (re)connect of the shot transport. */
+    /**
+     * Called on every successful (re)connect of the shot transport: starts a new session, or
+     * continues the current one when it's the same Pi and transport within a short idle gap.
+     */
     fun startSession(
         host: String?,
         transport: TransportType,

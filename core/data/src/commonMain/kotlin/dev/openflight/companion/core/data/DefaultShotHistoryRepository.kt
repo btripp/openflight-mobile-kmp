@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
@@ -66,7 +67,13 @@ internal class DefaultShotHistoryRepository(
     /** The `sessions.source` this repository writes and reads (plan F14). */
     private val world: String = if (demoWorld) SessionEntity.SOURCE_DEMO else SessionEntity.SOURCE_LOCAL
 
-    private val currentSession = MutableStateFlow<SessionEntity?>(null)
+    private val currentSession = MutableStateFlow<CurrentSession?>(null)
+
+    /**
+     * Sessions a continued session rolled over into ([fileShot]), by the rolled-over session's id.
+     * Read and written only by the write queue's consumer.
+     */
+    private val rolledOver = mutableMapOf<String, CurrentSession>()
     private val mutableCurrentSessionId = MutableStateFlow<String?>(null)
     override val currentSessionId: StateFlow<String?> = mutableCurrentSessionId.asStateFlow()
 
@@ -118,20 +125,24 @@ internal class DefaultShotHistoryRepository(
                 ).map { entities -> entities.map { it.toHistoryShot() } }
         }
 
+    /**
+     * Tester report 2026-09-30: a reconnect to the same Pi over the same transport within
+     * [SESSION_IDLE_GAP_MILLIS] of the session's last shot (or its start) continues it, so
+     * switching apps, locking the screen or a Wi-Fi blip doesn't split a practice session.
+     * Otherwise a new session starts.
+     */
     override fun startSession(
         host: String?,
         transport: TransportType,
     ) {
-        val session =
-            SessionEntity(
-                id = newSessionId(),
-                startedAtEpochMillis = now(),
-                host = host?.takeIf { transport == TransportType.WIFI },
-                transport = transport.name,
-                source = world,
-            )
-        currentSession.value = session
-        mutableCurrentSessionId.value = session.id
+        val sessionHost = host?.takeIf { transport == TransportType.WIFI }
+        val time = now()
+        val current = currentSession.value
+        if (current != null && current.isContinuedBy(sessionHost, transport.name, time)) {
+            currentSession.value = current.copy(continued = true)
+            return
+        }
+        makeCurrent(newSession(sessionHost, transport.name, time))
     }
 
     override fun record(
@@ -246,22 +257,84 @@ internal class DefaultShotHistoryRepository(
     private fun upsert(shot: ShotEntity) {
         // Captured now, so a shot is filed under the session it arrived in even if a reconnect
         // starts the next one before the write runs. A shot before any connect gets its own session.
-        val session = currentSession.value ?: startUnknownSession()
-        enqueue { it.upsert(session, shot) }
+        val filed = currentSession.value ?: startUnknownSession()
+        val time = now()
+        currentSession.update { if (it?.session?.id == filed.session.id) it.copy(lastActivityMillis = time) else it }
+        enqueue { fileShot(it, filed, shot) }
     }
 
-    private fun startUnknownSession(): SessionEntity {
-        val session =
-            SessionEntity(
-                id = newSessionId(),
-                startedAtEpochMillis = now(),
-                host = null,
-                transport = UNKNOWN,
-                source = world,
-            )
+    /**
+     * Runs on the write queue. A continued session ([startSession]) may be filed into by a Pi that
+     * restarted during the gap and numbers its shots afresh; upserting by shot number would then
+     * overwrite a stored shot. So the first shot whose number a different stored shot holds (another
+     * timestamp) starts a new session, and it and every later shot of the old one are filed there.
+     */
+    private suspend fun fileShot(
+        dao: ShotHistoryDao,
+        filed: CurrentSession,
+        shot: ShotEntity,
+    ) {
+        val target = rolledOver[filed.session.id] ?: filed
+        if (!target.continued || !dao.isNumberHeldByAnotherShot(target.session.id, shot)) {
+            dao.upsert(target.session, shot)
+            return
+        }
+        val time = now()
+        val next = CurrentSession(newSession(target.session.host, target.session.transport, time), false, time)
+        rolledOver[filed.session.id] = next
+        rolledOver[target.session.id] = next
+        currentSession.update { if (it?.session?.id == target.session.id) next else it }
+        if (currentSession.value?.session?.id == next.session.id) mutableCurrentSessionId.value = next.session.id
+        dao.upsert(next.session, shot)
+    }
+
+    private fun startUnknownSession(): CurrentSession {
+        val time = now()
+        val current = CurrentSession(newSession(host = null, transport = UNKNOWN, time), false, time)
         // Two first shots racing each other must still share one session.
-        if (currentSession.compareAndSet(null, session)) mutableCurrentSessionId.value = session.id
-        return currentSession.value ?: session
+        if (currentSession.compareAndSet(null, current)) mutableCurrentSessionId.value = current.session.id
+        return currentSession.value ?: current
+    }
+
+    private fun newSession(
+        host: String?,
+        transport: String,
+        startedAt: Long,
+    ) = SessionEntity(
+        id = newSessionId(),
+        startedAtEpochMillis = startedAt,
+        host = host,
+        transport = transport,
+        source = world,
+    )
+
+    private fun makeCurrent(session: SessionEntity) {
+        currentSession.value =
+            CurrentSession(session, continued = false, lastActivityMillis = session.startedAtEpochMillis)
+        mutableCurrentSessionId.value = session.id
+    }
+
+    /**
+     * The session shots are filed under.
+     *
+     * @property continued a reconnect continued it ([startSession]), so [fileShot] watches for a
+     *   Pi that numbers its shots afresh.
+     * @property lastActivityMillis the phone's clock when it last filed a shot in it, or its start.
+     */
+    private data class CurrentSession(
+        val session: SessionEntity,
+        val continued: Boolean,
+        val lastActivityMillis: Long,
+    ) {
+        /** A connect at [time] to the same Pi ([host]) over the same [transport], within the idle gap. */
+        fun isContinuedBy(
+            host: String?,
+            transport: String,
+            time: Long,
+        ): Boolean =
+            session.host == host &&
+                session.transport == transport &&
+                time - lastActivityMillis <= SESSION_IDLE_GAP_MILLIS
     }
 
     /** Queues [write]; it is dropped when there is no database. */
@@ -283,10 +356,13 @@ internal class DefaultShotHistoryRepository(
         }
     }
 
-    private companion object {
-        const val UNKNOWN = "UNKNOWN"
+    internal companion object {
+        /** A reconnect within this long of the session's last shot continues it ([startSession]). */
+        const val SESSION_IDLE_GAP_MILLIS = 30 * 60 * 1_000L
+
+        private const val UNKNOWN = "UNKNOWN"
 
         /** SQLite's `LIMIT -1`: no limit. */
-        const val NO_LIMIT = -1
+        private const val NO_LIMIT = -1
     }
 }
