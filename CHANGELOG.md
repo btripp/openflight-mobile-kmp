@@ -11,8 +11,11 @@ tag. Plain `v0.1.0` waits on the hardware test matrix on a real Raspberry Pi.
 
 ## [Unreleased]
 
-iOS 0.1.0 (build 4), Android 0.1.0 (versionCode 4). Build 4 was uploaded to TestFlight without a
-tag, to test Bluetooth against a schema-2-only Pi; the next tagged release is `v0.1.0-beta.4`.
+## [0.1.0-beta.4] - 2026-10-01
+
+iOS 0.1.0 (build 5) for TestFlight, and the signed Android APK 0.1.0 (versionCode 5). Covers the
+beta.4 tester fixes and the beta.5 bug-hunt fixes. Build 4 went to TestFlight untagged, to test
+Bluetooth against a schema-2-only Pi.
 
 ### Added
 
@@ -31,6 +34,7 @@ tag, to test Bluetooth against a schema-2-only Pi; the next tagged release is `v
   needs the Pi's schema 2 build; a Pi without it shows "The Pi needs its Bluetooth update" and
   can still use Network. A refused schema 2 handshake is an error with Retry, not a fallback.
 - Build numbers bumped to iOS build 4 and Android versionCode 4 (#60).
+- Build numbers bumped to iOS build 5 and Android versionCode 5 for this release.
 
 ### Fixed
 
@@ -217,7 +221,8 @@ Android 0.1.0 (versionCode 1). No GitHub release or store build.
   training, player selection, a radar/debug panel and a Pi shutdown.
 - Imperial or Metric units, accessibility labels, and app icons from the OpenFlight logo.
 
-[Unreleased]: https://github.com/btripp/openflight-mobile-kmp/compare/v0.1.0-beta.3...HEAD
+[Unreleased]: https://github.com/btripp/openflight-mobile-kmp/compare/v0.1.0-beta.4...HEAD
+[0.1.0-beta.4]: https://github.com/btripp/openflight-mobile-kmp/compare/v0.1.0-beta.3...v0.1.0-beta.4
 [0.1.0-beta.3]: https://github.com/btripp/openflight-mobile-kmp/compare/v0.1.0-beta.2...v0.1.0-beta.3
 [0.1.0-beta.2]: https://github.com/btripp/openflight-mobile-kmp/compare/v0.1.0-beta.1...v0.1.0-beta.2
 [0.1.0-beta.1]: https://github.com/btripp/openflight-mobile-kmp/compare/v0.1.0-sim...v0.1.0-beta.1
