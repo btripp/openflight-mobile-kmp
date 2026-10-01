@@ -255,7 +255,7 @@ private fun SceneLayer(
             flight = uiState.activeFlight,
             cameraMode = uiState.cameraMode,
             reduceMotion = reduceMotion,
-            onFlightCompleted = { onEvent(DrivingRangeEvent.FlightCompleted) },
+            onFlightComplete = { onEvent(DrivingRangeEvent.FlightCompleted) },
             modifier =
                 Modifier
                     .fillMaxSize()
@@ -265,7 +265,7 @@ private fun SceneLayer(
             overlay = browse.overlayFlights,
             overlayMode = browse.mode is RangeMode.Overlay,
             selectedOverlayId = if (browse.mode is RangeMode.Overlay) browse.selectedShotId else null,
-            onViewChanged = { onEvent(DrivingRangeEvent.ViewChanged(it)) },
+            onViewChange = { onEvent(DrivingRangeEvent.ViewChanged(it)) },
             onResetView = { onEvent(DrivingRangeEvent.ResetView) },
             onSelectLanding = { onEvent(DrivingRangeEvent.SelectShot(it)) },
             theme = uiState.camera.theme,

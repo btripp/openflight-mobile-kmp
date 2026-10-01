@@ -40,6 +40,9 @@ tag, to test Bluetooth against a schema-2-only Pi; the next tagged release is `v
   now continues the session. If the Pi restarted during the gap and numbers its shots from 1
   again, the app starts a new session instead of overwriting stored shots. (A session still ends
   if the system closes the app.)
+- Android tablets and foldables: rotating or unfolding into (or out of) the two-pane layout no
+  longer resets Practice's and Bag's panes, so a list keeps its scroll position and a detail pane
+  its state.
 - Settings › Audio call-outs: unchecking every field now keeps them off, instead of switching
   Carry and Ball speed back on (#75).
 - Practice no longer drops a new shot or brings back a deleted one when both happen at the same

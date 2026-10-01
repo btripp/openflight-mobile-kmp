@@ -3,6 +3,7 @@ package dev.openflight.companion.feature.settings
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -110,7 +111,7 @@ internal fun RadarCard(
                 unit = slider.unit,
                 enabled = slider.availability.isAvailable,
                 disabledReason = slider.availability.disabledReason,
-                onValueCommitted = { onEvent(SettingsEvent.SetRadarValue(slider.field, it)) },
+                onValueCommit = { onEvent(SettingsEvent.SetRadarValue(slider.field, it)) },
                 modifier = Modifier.testTag(SettingsTestTags.slider(slider.field)),
             )
         }
@@ -123,7 +124,7 @@ internal fun RadarCard(
 
 /** `DebugPanel.tsx`'s trigger history, newest first. */
 @Composable
-private fun Diagnostics(rows: List<TriggerDiagnosticRow>) {
+private fun ColumnScope.Diagnostics(rows: List<TriggerDiagnosticRow>) {
     if (rows.isEmpty()) return
     OfDivider()
     OfText(text = "RECENT TRIGGERS", role = OfTextRole.Eyebrow, color = OfColorTokens.CreamDim)

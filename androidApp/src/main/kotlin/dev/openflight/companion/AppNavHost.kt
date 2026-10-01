@@ -140,6 +140,7 @@ object AppNavTags {
  */
 @Composable
 fun AppNavHost(
+    modifier: Modifier = Modifier,
     navController: NavHostController = rememberNavController(),
     windowClass: OfWindowClass = rememberOfWindowClass(),
 ) {
@@ -150,6 +151,7 @@ fun AppNavHost(
     val destination = backStackEntry?.destination
     val current = if (destination == null) TopLevelDestination.PRACTICE else TopLevelDestination.of(destination)
     OfAdaptiveScaffold(
+        modifier = modifier,
         windowClass = windowClass,
         showNavigation = current != null,
         items =

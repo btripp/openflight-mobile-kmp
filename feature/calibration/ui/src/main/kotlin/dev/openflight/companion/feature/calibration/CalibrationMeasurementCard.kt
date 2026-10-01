@@ -4,6 +4,7 @@ package dev.openflight.companion.feature.calibration
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -56,7 +57,7 @@ internal fun MeasurementCard(sensor: SensorUiState) {
 }
 
 @Composable
-private fun SamplingContent(sensor: SensorUiState.Sampling) {
+private fun ColumnScope.SamplingContent(sensor: SensorUiState.Sampling) {
     val angles = sensor.displayAngles
     if (angles == null) {
         OfText(

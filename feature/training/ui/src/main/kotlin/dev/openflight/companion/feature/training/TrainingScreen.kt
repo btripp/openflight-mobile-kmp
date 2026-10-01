@@ -219,7 +219,7 @@ private fun SpeedTile(
     value: String,
     unit: String,
     tag: String,
-    modifier: Modifier,
+    modifier: Modifier = Modifier,
 ) {
     Column(
         modifier =

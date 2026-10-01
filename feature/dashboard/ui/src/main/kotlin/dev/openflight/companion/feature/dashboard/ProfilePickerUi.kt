@@ -3,6 +3,7 @@ package dev.openflight.companion.feature.dashboard
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -103,7 +104,7 @@ private fun ProfileSheetContent(
 }
 
 @Composable
-private fun Roster(
+private fun ColumnScope.Roster(
     profile: ProfilePickerState,
     onEvent: (DashboardEvent) -> Unit,
 ) {
@@ -185,7 +186,7 @@ private fun ProfileRowItem(
 
 /** Rendered inline in the sheet, not as a dialog over it (Expo `ProfileNameForm.tsx`). */
 @Composable
-private fun NameForm(
+private fun ColumnScope.NameForm(
     title: String,
     confirmLabel: String,
     draft: String,
@@ -229,7 +230,7 @@ private fun NameForm(
 }
 
 @Composable
-private fun ConfirmRemoval(
+private fun ColumnScope.ConfirmRemoval(
     removal: ProfileSheet.ConfirmingRemoval,
     onEvent: (DashboardEvent) -> Unit,
 ) {

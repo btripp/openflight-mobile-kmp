@@ -7,6 +7,7 @@ paths:
 
 From the androidx [Compose component API guidelines](https://github.com/androidx/androidx/blob/androidx-main/compose/docs/compose-component-api-guidelines.md)
 and [Compose API guidelines](https://github.com/androidx/androidx/blob/androidx-main/compose/docs/compose-api-guidelines.md).
+compose-rules (run by `spotlessCheck`) enforces several of these mechanically.
 
 - **Parameter order:** required parameters, then `modifier: Modifier = Modifier` as the first
   optional parameter, then other optional parameters, then a trailing `content` slot. Apply

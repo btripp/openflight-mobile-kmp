@@ -47,7 +47,7 @@ class RangeThemeTest {
                         flight = null,
                         cameraMode = RangeCameraMode.FIXED,
                         reduceMotion = true,
-                        onFlightCompleted = {},
+                        onFlightComplete = {},
                         modifier = Modifier.size(width = 360.dp, height = 640.dp),
                         theme = theme,
                     )

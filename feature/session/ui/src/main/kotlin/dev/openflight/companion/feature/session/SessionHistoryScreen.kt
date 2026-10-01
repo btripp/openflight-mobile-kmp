@@ -63,6 +63,7 @@ fun SessionHistoryRoute(
     onBack: () -> Unit,
     onOpenSession: (sessionId: String) -> Unit,
     onShareCsv: (csv: String, filename: String) -> Unit,
+    modifier: Modifier = Modifier,
     viewModel: SessionHistoryViewModel = koinViewModel(),
     windowClass: OfWindowClass = rememberOfWindowClass(),
     onReplayOnRange: ((sessionId: String) -> Unit)? = null,
@@ -74,6 +75,7 @@ fun SessionHistoryRoute(
         OfListDetailPane(
             hasSelection = false,
             windowClass = windowClass,
+            modifier = modifier,
             list = {
                 SessionHistoryScreen(
                     uiState = uiState,
@@ -103,6 +105,7 @@ fun SessionHistoryRoute(
             onEvent = viewModel::onEvent,
             onBack = onBack,
             onOpenSession = onOpenSession,
+            modifier = modifier,
         )
     }
 }

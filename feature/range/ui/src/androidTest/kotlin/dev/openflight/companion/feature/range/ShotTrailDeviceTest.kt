@@ -4,6 +4,7 @@ package dev.openflight.companion.feature.range
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -44,7 +45,7 @@ class ShotTrailDeviceTest {
                     flight = flight,
                     cameraMode = RangeCameraMode.FIXED,
                     reduceMotion = true,
-                    onFlightCompleted = {},
+                    onFlightComplete = {},
                     modifier = Modifier.size(width = 360.dp, height = 640.dp),
                     view = ShotTrailPreview.VIEW,
                     freezeProgress = 1f,
@@ -63,7 +64,7 @@ class ShotTrailDeviceTest {
 
     @Test
     fun givenThePreview_whenKeepLastAndALandingRingAreOn_thenMoreIsDrawn() {
-        var keepLast by mutableStateOf(0)
+        var keepLast by mutableIntStateOf(0)
         var effect by mutableStateOf(LandingEffect.OFF)
         composeRule.setContent {
             OfTheme {
