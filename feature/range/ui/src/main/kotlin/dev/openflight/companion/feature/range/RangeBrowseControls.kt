@@ -116,6 +116,19 @@ private fun OverlayControls(
     mode: RangeMode.Overlay,
     onEvent: (DrivingRangeEvent) -> Unit,
 ) {
+    val count = browse.shots.size
+    SmallButton("Prev", RangeTestTags.PREVIOUS, enabled = browse.canSelectPreviousShot) {
+        onEvent(DrivingRangeEvent.PreviousShot)
+    }
+    OfText(
+        text = if (browse.selectedIndex >= 0) "${browse.selectedIndex + 1} / $count" else "– / $count",
+        role = OfTextRole.BodySmall,
+        color = OfColorTokens.Cream,
+        modifier = Modifier.testTag(RangeTestTags.POSITION),
+    )
+    SmallButton("Next", RangeTestTags.NEXT, enabled = browse.canSelectNextShot) {
+        onEvent(DrivingRangeEvent.NextShot)
+    }
     mode.sessionId?.let { sessionId ->
         SmallButton("Replay session", RangeTestTags.REPLAY_SESSION) {
             onEvent(DrivingRangeEvent.StartReplay(sessionId))

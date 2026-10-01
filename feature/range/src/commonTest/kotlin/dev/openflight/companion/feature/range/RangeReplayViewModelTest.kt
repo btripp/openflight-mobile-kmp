@@ -339,6 +339,41 @@ class RangeReplayViewModelTest {
         }
 
     @Test
+    fun overlayNextAndPreviousStepThroughTheListNewestFirst() =
+        runTest(scheduler) {
+            seedSession()
+            val viewModel = makeViewModel()
+
+            viewModel.uiState.test {
+                viewModel.onEvent(DrivingRangeEvent.StartOverlay(sessionId = "s1"))
+                val loaded = awaitUntil { it.browse.overlayFlights.isNotEmpty() }
+                assertThat(loaded.browse.selectedIndex).isEqualTo(-1)
+                assertThat(loaded.browse.canSelectPreviousShot).isFalse()
+                assertThat(loaded.browse.canSelectNextShot).isTrue()
+
+                // From no selection, Next picks #1: the newest shot.
+                viewModel.onEvent(DrivingRangeEvent.NextShot)
+                awaitUntil { it.browse.selectedShotId == "3" && it.displayedShot != null }
+                viewModel.onEvent(DrivingRangeEvent.NextShot)
+                val second = awaitUntil { it.browse.selectedShotId == "2" && it.displayedShot?.club == "7-iron" }
+                assertThat(second.browse.canSelectPreviousShot).isTrue()
+                viewModel.onEvent(DrivingRangeEvent.PreviousShot)
+                awaitUntil { it.browse.selectedShotId == "3" }
+                viewModel.onEvent(DrivingRangeEvent.NextShot)
+                viewModel.onEvent(DrivingRangeEvent.NextShot)
+                val last = awaitUntil { it.browse.selectedShotId == "1" }
+                assertThat(last.browse.canSelectNextShot).isFalse()
+                assertThat(last.phase).isEqualTo(RangePhase.Waiting)
+
+                // Past the end nothing changes.
+                viewModel.onEvent(DrivingRangeEvent.NextShot)
+                advanceUntilIdle()
+                assertThat(expectMostRecentItemOr(last).browse.selectedShotId).isEqualTo("1")
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
     fun theViewTransformIsKeptAndResetRestoresTheFollowCamera() =
         runTest(scheduler) {
             val viewModel = makeViewModel()

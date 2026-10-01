@@ -3,7 +3,9 @@ package dev.openflight.companion.core.data
 
 import app.cash.turbine.test
 import assertk.assertThat
+import assertk.assertions.contains
 import assertk.assertions.containsExactly
+import assertk.assertions.containsExactlyInAnyOrder
 import assertk.assertions.hasSize
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
@@ -36,12 +38,15 @@ class ShotHistoryRepositoryTest {
     ) {
         val logs = mutableListOf<String>()
         private var sessionCount = 0
+
+        /** The phone's clock, when a test sets it; otherwise 1 s per session started so far. */
+        var nowMillis: Long? = null
         val repository =
             DefaultShotHistoryRepository(
                 openDatabase = openDatabase,
                 scope = scope.backgroundScope,
                 fallbackDatabase = fallbackDatabase,
-                now = { 1_000L * sessionCount },
+                now = { nowMillis ?: (1_000L * sessionCount) },
                 newSessionId = { "session-${++sessionCount}" },
                 log = { logs += it },
             )
@@ -56,10 +61,12 @@ class ShotHistoryRepositoryTest {
     }
 
     @Test
-    fun everyConnectStartsANewSessionListedNewestFirst() =
+    fun aConnectAfterTheIdleGapStartsANewSessionListedNewestFirst() =
         runHistoryTest { h ->
+            h.nowMillis = 1_000L
             h.repository.startSession("pi.local:8080", TransportType.WIFI)
             h.repository.record(liveShot(1, "2026-09-14T09:00:00"))
+            h.nowMillis = 1_000L + IDLE_GAP + 1_000L
             h.repository.startSession("pi.local:8080", TransportType.WIFI)
             h.repository.record(liveShot(1, "2026-09-14T10:00:00"))
             h.repository.record(liveShot(2, "2026-09-14T10:05:00"))
@@ -70,7 +77,7 @@ class ShotHistoryRepositoryTest {
             assertThat(sessions[0]).isEqualTo(
                 HistorySession(
                     id = "session-2",
-                    startedAtEpochMillis = 2_000L,
+                    startedAtEpochMillis = 1_000L + IDLE_GAP + 1_000L,
                     host = "pi.local:8080",
                     transport = TransportType.WIFI,
                     shotCount = 2,
@@ -80,6 +87,107 @@ class ShotHistoryRepositoryTest {
             )
             assertThat(h.repository.currentSessionId.value).isEqualTo("session-2")
         }
+
+    // region Tester report 2026-09-30: a reconnect within the idle gap continues the session
+
+    @Test
+    fun aReconnectWithinTheIdleGapContinuesTheSession() =
+        runHistoryTest { h ->
+            h.nowMillis = 0L
+            h.repository.startSession("pi.local:8080", TransportType.WIFI)
+            h.nowMillis = 60_000L
+            h.repository.record(liveShot(1, "2026-09-30T17:55:00"))
+            // The app went to the background and came back: the gap counts from the last shot.
+            h.nowMillis = 60_000L + IDLE_GAP
+            h.repository.startSession("pi.local:8080", TransportType.WIFI)
+            h.repository.record(liveShot(2, "2026-09-30T18:20:00"))
+            h.repository.awaitWrites()
+
+            val session =
+                h.repository
+                    .sessions()
+                    .first()
+                    .single()
+            assertThat(session.id).isEqualTo("session-1")
+            assertThat(session.shotCount).isEqualTo(2)
+            assertThat(h.repository.currentSessionId.value).isEqualTo("session-1")
+        }
+
+    @Test
+    fun aReconnectToAnotherPiOrOverAnotherTransportStartsANewSession() =
+        runHistoryTest { h ->
+            h.nowMillis = 0L
+            h.repository.startSession("pi.local:8080", TransportType.WIFI)
+            h.repository.record(liveShot(1, "2026-09-30T17:55:00"))
+            h.repository.startSession("other.local:8080", TransportType.WIFI)
+            h.repository.record(liveShot(1, "2026-09-30T17:56:00"))
+            h.repository.startSession("other.local:8080", TransportType.BLUETOOTH)
+            h.repository.record(shot(1))
+            h.repository.awaitWrites()
+
+            assertThat(
+                h.repository
+                    .sessions()
+                    .first()
+                    .map { it.shotCount },
+            ).containsExactly(1, 1, 1)
+        }
+
+    @Test
+    fun aPiThatRenumbersInAContinuedSessionRollsOverWithoutOverwriting() =
+        runHistoryTest { h ->
+            h.nowMillis = 0L
+            h.repository.startSession("pi.local:8080", TransportType.WIFI)
+            h.repository.record(liveShot(1, "2026-09-30T17:55:00"))
+            h.repository.record(liveShot(2, "2026-09-30T17:56:00"))
+            // The Pi restarted during a short gap: its next shot is #1 again.
+            h.nowMillis = 120_000L
+            h.repository.startSession("pi.local:8080", TransportType.WIFI)
+            h.repository.record(liveShot(1, "2026-09-30T18:00:00"))
+            h.repository.record(liveShot(2, "2026-09-30T18:01:00"))
+            h.repository.awaitWrites()
+
+            val sessions = h.repository.sessions().first()
+            assertThat(sessions.map { it.id }).containsExactly("session-2", "session-1")
+            assertThat(
+                h.repository
+                    .shots("session-1")
+                    .first()
+                    .map { it.detail.timestamp },
+            ).containsExactlyInAnyOrder("2026-09-30T17:55:00", "2026-09-30T17:56:00")
+            assertThat(
+                h.repository
+                    .shots("session-2")
+                    .first()
+                    .map { it.detail.timestamp },
+            ).containsExactlyInAnyOrder("2026-09-30T18:00:00", "2026-09-30T18:01:00")
+            assertThat(h.repository.currentSessionId.value).isEqualTo("session-2")
+        }
+
+    @Test
+    fun aReplayOrUpdateOfAStoredShotInAContinuedSessionDoesNotRollOver() =
+        runHistoryTest { h ->
+            h.nowMillis = 0L
+            h.repository.startSession("pi.local:8080", TransportType.WIFI)
+            h.repository.record(liveShot(1, "2026-09-30T17:55:00", spinRpm = null))
+            h.repository.startSession("pi.local:8080", TransportType.WIFI)
+            // The Pi's final version of shot #1 after the reconnect, then the next shot.
+            h.repository.record(liveShot(1, "2026-09-30T17:55:00", spinRpm = 4_614.0))
+            h.repository.record(liveShot(2, "2026-09-30T17:57:00"))
+            h.repository.awaitWrites()
+
+            val shots = h.repository.shots("session-1").first()
+            assertThat(
+                h.repository
+                    .sessions()
+                    .first()
+                    .map { it.id },
+            ).containsExactly("session-1")
+            assertThat(shots.map { it.detail.spinRpm }).contains(4_614.0)
+            assertThat(shots.size).isEqualTo(2)
+        }
+
+    // endregion
 
     @Test
     fun aBluetoothSessionKeepsNoHost() =
@@ -291,6 +399,8 @@ class ShotHistoryRepositoryTest {
     }
 
     private companion object {
+        const val IDLE_GAP = DefaultShotHistoryRepository.SESSION_IDLE_GAP_MILLIS
+
         fun inMemoryDatabase(): ShotHistoryDatabase = inMemoryShotHistoryDatabaseBuilder().buildShotHistoryDatabase()
 
         fun detail(
