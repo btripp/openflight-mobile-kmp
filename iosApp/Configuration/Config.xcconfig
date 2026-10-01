@@ -3,7 +3,7 @@ TEAM_ID=
 PRODUCT_NAME=OpenFlight
 PRODUCT_BUNDLE_IDENTIFIER=dev.openflight.companion
 
-CURRENT_PROJECT_VERSION=4
+CURRENT_PROJECT_VERSION=5
 MARKETING_VERSION=0.1.0
 
 // Personal signing values (TEAM_ID, and a bundle ID or build number override if you need one)
