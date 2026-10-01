@@ -14,7 +14,8 @@ import org.jetbrains.kotlin.gradle.dsl.KotlinAndroidProjectExtension
  * AGP 9 compiles Kotlin itself (built-in Kotlin), so no `kotlin-android` plugin is
  * applied. Adds the Compose compiler and Jetpack Compose from the BOM
  * ([addJetpackComposeDependencies], including the `src/androidTest` UI test stack), SDK levels
- * from the catalog, Java/Kotlin 17 bytecode, spotless and detekt.
+ * from the catalog, Java/Kotlin 17 bytecode, spotless, detekt and Android Lint
+ * ([configureOpenFlightLint]).
  */
 class AndroidApplicationConventionPlugin : Plugin<Project> {
     override fun apply(target: Project) {
@@ -37,6 +38,9 @@ class AndroidApplicationConventionPlugin : Plugin<Project> {
                 }
                 buildFeatures {
                     compose = true
+                }
+                lint {
+                    configureOpenFlightLint()
                 }
                 packaging {
                     resources {

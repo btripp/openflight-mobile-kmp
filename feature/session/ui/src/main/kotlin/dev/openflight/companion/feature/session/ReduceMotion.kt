@@ -20,6 +20,10 @@ internal fun rememberReduceMotionEnabled(): Boolean {
     }
 }
 
-/** [LazyItemScope.animateItem], unless [reduceMotion]. */
+/**
+ * [LazyItemScope.animateItem], unless [reduceMotion]. `animateItem()` is only in scope on
+ * [LazyItemScope], so this can't be a `Modifier` extension (hence the lint suppression).
+ */
+@Suppress("ModifierFactoryExtensionFunction")
 internal fun LazyItemScope.animateItemUnless(reduceMotion: Boolean): Modifier =
     if (reduceMotion) Modifier else Modifier.animateItem()

@@ -9,9 +9,12 @@
 
   "user" trust anchors let HTTPS to a Pi with an operator-provisioned certificate
   (backend feat/lan-https, a private CA the user installed in Android settings) work.
+  Both are deliberate, hence the lint suppressions below.
 -->
-<network-security-config>
-    <base-config cleartextTrafficPermitted="true">
+<network-security-config xmlns:tools="http://schemas.android.com/tools">
+    <base-config
+        cleartextTrafficPermitted="true"
+        tools:ignore="InsecureBaseConfiguration,AcceptsUserCertificates">
         <trust-anchors>
             <certificates src="system" />
             <certificates src="user" />

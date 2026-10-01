@@ -78,6 +78,7 @@ Convention plugin ids: `openflight.kmp.library`, `openflight.kmp.room`,
 ## Tests
 - commonTest: `kotlin.test` + **assertk** (Truth-style assertions), **Turbine** for Flows,
   `kotlinx-coroutines-test` `runTest`. Android-only tests may use Truth.
+- Details (fakes, dispatchers, what not to add) in `.claude/rules/testing.md`.
 - No `test` prefix on test names. Instrumented/UI tests use `given_when_then` or `when_then`,
   on `ComponentActivity` (`createAndroidComposeRule<ComponentActivity>()`).
 - Device UI tests: `./gradlew :feature:<name>:ui:connectedDebugAndroidTest` and
@@ -88,16 +89,19 @@ Convention plugin ids: `openflight.kmp.library`, `openflight.kmp.room`,
 - Port assertions and numbers from the reference `ios/OpenFlightTests`. Don't reinvent them.
 
 ## Invariants (check after every change)
-1. `./gradlew spotlessCheck detekt` passes. Run `spotlessApply` first.
+1. `./gradlew spotlessCheck detekt lintDebug` passes. Run `spotlessApply` first. Android Lint
+   treats warnings as errors (`AndroidLint.kt`): fix a finding, or suppress it at its site with
+   a reason.
 2. `./gradlew allTests` passes. It runs `testAndroidHostTest`, `iosSimulatorArm64Test`, the
    Android-only modules' `testDebugUnitTest` and `verifyNoComposeInCommonMain`.
 3. `./gradlew :androidApp:assembleDebug :shared:linkDebugFrameworkIosSimulatorArm64`
    succeeds.
 4. No `core:*` module depends on `feature:*`, `shared` or an app module, and no feature
-   module (or its `:ui`) depends on another feature.
+   module (or its `:ui`) depends on another feature. `./gradlew :androidApp:assertModuleGraph`
+   enforces it (rules in `androidApp/build.gradle.kts`).
 5. Feature UIs use only the `core:designsystem` wrappers (`Of*`), never raw Material3.
-6. No Android framework types in `commonMain`, and none in the public API of `core:data` or
-   `core:model`.
+6. No Android framework types in `commonMain` (the common/iOS compile rejects them), and none in
+   the public API of `core:data` or `core:model`.
 7. Don't commit generated screenshot goldens (they're gitignored).
 8. Every Kotlin file carries `// SPDX-License-Identifier: AGPL-3.0-or-later`. Spotless adds
    and enforces it.
@@ -117,7 +121,8 @@ Convention plugin ids: `openflight.kmp.library`, `openflight.kmp.room`,
 invariants above:
 - **jvm** (ubuntu): a grep guard against Compose in `feature/*/src/commonMain` and `shared/src`
   and against Compose Multiplatform in the build, then
-  `./gradlew spotlessCheck detekt allTests :androidApp:assembleDebug -x iosSimulatorArm64Test`.
+  `./gradlew spotlessCheck detekt lintDebug allTests :androidApp:assertModuleGraph
+  :androidApp:assembleDebug -x iosSimulatorArm64Test`.
 - **ios** (macos): `./gradlew iosSimulatorArm64Test :shared:linkDebugFrameworkIosSimulatorArm64`,
   then the `xcodebuild … build` above.
 
@@ -138,8 +143,8 @@ error strings is not a substitute for the process's actual exit status, and a pi
 (`... | grep -v ...`, `... | tail`) silently swallows the left-hand side's exit code unless you
 capture it explicitly. Run verification so the exit code survives, e.g.:
 ```bash
-./gradlew spotlessCheck detekt allTests :androidApp:assembleDebug \
-  :shared:linkDebugFrameworkIosSimulatorArm64 > log 2>&1; rc=$?
+./gradlew spotlessCheck detekt lintDebug allTests :androidApp:assertModuleGraph \
+  :androidApp:assembleDebug :shared:linkDebugFrameworkIosSimulatorArm64 > log 2>&1; rc=$?
 ```
 then branch on `rc` (or `${PIPESTATUS[0]}` if a pipe is unavoidable), and only commit when
 every command in the verification chain returned 0. This project's execution log records at
@@ -148,22 +153,10 @@ that as the failure mode to avoid, not a one-off.
 
 `.claude/hooks/commit-gate.sh` (wired in `.claude/settings.json`) enforces this: it runs the
 chain before any `git commit` and blocks the commit on a non-zero exit. If it blocks, fix the
-cause. Don't bypass it. `/verify` runs the same chain on demand. Path-scoped conventions for
-shared KMP code, Compose UI and SwiftUI live in `.claude/rules/`.
+cause. Don't bypass it. `/verify` runs the same chain on demand. Path-scoped conventions live in
+`.claude/rules/`: shared KMP code, coroutines, tests, Compose UI, design-system components,
+SwiftUI and games.
 
 ## Games (`feature:games`, plan F9)
-- `feature:games` (KMP, depends on core:data, core:flight, core:insights, core:model) holds the
-  pure game engine plus `GamesViewModel` and `ActivitiesViewModel`. Its Android UI
-  (`feature:games:ui`) and SwiftUI screens come in F9b/F9c; both VMs are already in
-  `gamesModule` (shared `appModules`), `KoinHelper` and the iOS bridge.
-- Engine: `GameMode` (TargetCallout, ClosestToPin, Bullseye, GolfPong, IconicShots) scores a
-  pure `GameShot`; `GameSessionReducer.reduce(state, event)` has no clock (timestamps come in the
-  events). A swing belongs to whoever is up when its `event_id` is **first sighted** and is
-  scored when it turns **final** (`FinalShotStream`, A14). Undo takes back the last attribution.
-- `GamesViewModel` publishes the running game to `ActiveGameRepository` and clears it on End or
-  `onCleared`; End files an `Activity` (type = `GameType.storageValue`, JSON from `GameRecords`).
-  No connected Pi means `GamesUiState.ConnectToPlay`; "Simulate shot" shows only for a `--mock` Pi.
-- Navigation takes a typed `GameLaunch(type, distanceYards)` (A6): Android passes it with
-  `koinViewModel { parametersOf(launch) }`, iOS with `KoinHelper().gamesViewModel(launch:)`.
-- The iconic-shot catalog is Kotlin constants (`IconicShotCatalog`, A15): generic, descriptive
-  scenarios only, never real players' names or tournament trademarks.
+The engine, ViewModels and launch conventions live in `.claude/rules/games.md` (loaded when you
+read games code).

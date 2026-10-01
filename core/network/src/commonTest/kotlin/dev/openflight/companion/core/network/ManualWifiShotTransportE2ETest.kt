@@ -23,6 +23,8 @@ import kotlin.test.Test
  * does). Watch stdout for `[manual-e2e]` lines. Restore `@Ignore` afterwards.
  */
 class ManualWifiShotTransportE2ETest {
+    // Manual only (see the KDoc above); kotlin.test's @Ignore takes no reason.
+    @Suppress("IgnoreWithoutReason")
     @Ignore
     @Test
     fun listensAndPrintsLiveShotsForManualVerification() =

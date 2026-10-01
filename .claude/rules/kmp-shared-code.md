@@ -10,7 +10,8 @@ paths:
 
 - `commonMain` is pure Kotlin: no `android.*`, `androidx.compose.*`, `org.jetbrains.compose.*`,
   Apple `platform.*`, or `java.*` APIs without a common equivalent. `verifyNoComposeInCommonMain`
-  and CI's grep guard catch Compose. Nothing catches the rest automatically.
+  and CI's grep guard catch Compose; the common and iOS compiles reject `android.*`/`java.*`
+  (checked 2026-09-30), so a local Android-only build won't catch them. Run `allTests` or link iOS.
 - Keep `expect`/`actual` rare and small. The repo's pattern is an `expect` factory or Koin module
   (`expect val platformDataModule: Module`, `expect fun openFlightHttpClient(): HttpClient`,
   `expect fun deviceModel(): String`). Prefer an interface in `commonMain`, with the platform
@@ -19,7 +20,9 @@ paths:
 - A feature module's `commonMain` holds only the `ViewModel`, `UiState`, events, effects and pure
   helpers. ViewModels expose `uiState: StateFlow<…>`, take intents through a single
   `onEvent(event)`, and emit one-shot effects as `val effects: Flow<…>` (a `Channel`'s
-  `receiveAsFlow()`). Display formatting goes in pure helpers, not in the UI layers.
+  `receiveAsFlow()`). Display formatting goes in pure helpers, not in the UI layers. The effects
+  Channel deliberately departs from Android's "don't send events from the ViewModel to the UI"
+  recommendation. Keep it (see `kotlin-coroutines.md`).
 - A new ViewModel, or a new state/effect flow Swift must observe, needs a
   `@NativeCoroutinesState` / `@NativeCoroutines` extension in
   `shared/src/iosMain/kotlin/dev/openflight/companion/NativeViewModels.kt`, and new ViewModels a

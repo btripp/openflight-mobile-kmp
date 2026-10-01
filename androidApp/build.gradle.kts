@@ -2,6 +2,32 @@ plugins {
     alias(libs.plugins.openflight.android.application)
     // Typed navigation routes are @Serializable objects.
     alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.module.graph.assert)
+}
+
+// Invariant 4, checked by `assertModuleGraph` over everything androidApp reaches (which includes
+// `shared`, so the iOS framework's graph too): core never depends on feature/shared/app, and no
+// feature (or its :ui) depends on another feature. Rules match "<from> -X> <to>" as one regex.
+moduleGraphAssert {
+    restricted =
+        arrayOf(
+            ":core:.* -X> :(feature|shared|androidApp).*",
+            """:feature:([a-z]+)(:ui)? -X> :feature:(?!\1(:ui)?$).*""",
+        )
+    configurations =
+        setOf(
+            "api",
+            "implementation",
+            "testImplementation",
+            "androidTestImplementation",
+            "commonMainApi",
+            "commonMainImplementation",
+            "commonTestImplementation",
+            "androidMainApi",
+            "androidMainImplementation",
+            "iosMainApi",
+            "iosMainImplementation",
+        )
 }
 
 // Release signing comes from user-level Gradle properties (~/.gradle/gradle.properties), never

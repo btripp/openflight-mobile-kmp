@@ -14,7 +14,8 @@ import org.jetbrains.kotlin.gradle.dsl.KotlinAndroidProjectExtension
  * Used by `core:designsystem` and the `feature:<name>:ui` modules.
  *
  * - `com.android.library` with AGP 9's built-in Kotlin, plus the Compose compiler.
- * - SDK levels from the catalog, Java/Kotlin 17 bytecode, spotless and detekt.
+ * - SDK levels from the catalog, Java/Kotlin 17 bytecode, spotless, detekt and Android Lint
+ *   ([configureOpenFlightLint]).
  * - Jetpack Compose from the BOM ([addJetpackComposeDependencies]).
  * - JVM unit tests in `src/test` (kotlin.test on JUnit 4 + assertk) and device UI tests in
  *   `src/androidTest`: `./gradlew :<module>:connectedDebugAndroidTest` (needs an emulator).
@@ -45,6 +46,9 @@ class AndroidLibraryComposeConventionPlugin : Plugin<Project> {
                 }
                 buildFeatures {
                     compose = true
+                }
+                lint {
+                    configureOpenFlightLint()
                 }
                 packaging {
                     resources {
