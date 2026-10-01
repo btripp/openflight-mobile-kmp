@@ -47,10 +47,14 @@ class ShotHistoryWriteThroughTest {
                 bluetooth = ble,
             )
         private var sessions = 0
+
+        /** The phone's clock: tests move it past the idle gap to make a reconnect a new session. */
+        var nowMillis = 0L
         val history =
             DefaultShotHistoryRepository(
                 openDatabase = { inMemoryShotHistoryDatabaseBuilder().buildShotHistoryDatabase() },
                 scope = scope,
+                now = { nowMillis },
                 newSessionId = { "session-${++sessions}" },
                 log = {},
             )
@@ -109,10 +113,11 @@ class ShotHistoryWriteThroughTest {
         }
 
     @Test
-    fun aReconnectStartsANewSessionButStatesWithinOneConnectionDoNot() =
+    fun aReconnectAfterTheIdleGapStartsANewSessionButStatesWithinOneConnectionDoNot() =
         runWriteThroughTest { h ->
             h.wifi.state.value = ConnectionState.Connected
             h.wifi.shots.emit(timedShot(1, "2026-09-25T10:00:00"))
+            h.nowMillis += IDLE_GAP + 1
             h.wifi.state.value = ConnectionState.Connecting
             h.wifi.state.value = ConnectionState.Connected
             h.wifi.shots.emit(timedShot(2, "2026-09-25T10:05:00"))
@@ -145,10 +150,32 @@ class ShotHistoryWriteThroughTest {
         }
 
     @Test
-    fun aPiLinkReconnectStartsANewSession() =
+    fun aQuickReconnectContinuesTheSession() =
+        runWriteThroughTest { h ->
+            h.wifi.state.value = ConnectionState.Connected
+            h.wifi.shots.emit(timedShot(1, "2026-09-25T10:00:00"))
+            // The app went to the background and back, a minute later.
+            h.nowMillis += 60_000L
+            h.wifi.state.value = ConnectionState.Idle
+            h.wifi.state.value = ConnectionState.Connected
+            h.wifi.shots.emit(timedShot(2, "2026-09-25T10:05:00"))
+
+            assertThat(h.storedTimestamps("session-1"))
+                .containsExactlyInAnyOrder("2026-09-25T10:00:00", "2026-09-25T10:05:00")
+            assertThat(
+                h.history
+                    .sessions()
+                    .first()
+                    .map { it.id },
+            ).containsExactly("session-1")
+        }
+
+    @Test
+    fun aPiLinkReconnectAfterTheIdleGapStartsANewSession() =
         runWriteThroughTest { h ->
             val socket = h.piConnected()
             socket.serverFrame(PiFixtures.SHOT_FRAME)
+            h.nowMillis += IDLE_GAP + 1
             socket.state.value = SocketConnectionState.Reconnecting(1, 500, "Connection closed")
             socket.serverAcks()
             socket.serverFrame(PiFixtures.SECOND_SHOT_FRAME)
@@ -415,6 +442,7 @@ class ShotHistoryWriteThroughTest {
         }
 
     private companion object {
+        const val IDLE_GAP = DefaultShotHistoryRepository.SESSION_IDLE_GAP_MILLIS
         const val HOST = "pi.local:8080"
 
         fun importedSession(timestamp: String) =

@@ -41,6 +41,16 @@ class RangeFlightsTest {
     }
 
     @Test
+    fun theShotListShowsTheSpinAdjustedCarryWhenThePiSentOne() {
+        val row = ShotDetail(timestamp = "t", club = "9-iron", ballSpeedMph = 112.7, estimatedCarryYards = 166.0)
+        assertThat(storedShot(id = 1, detail = row.copy(carrySpinAdjusted = 144.0)).toRangeShotItem(1).carryYards)
+            .isEqualTo(144.0)
+        assertThat(storedShot(id = 2, detail = row).toRangeShotItem(1).carryYards).isEqualTo(166.0)
+        assertThat(storedShot(id = 3, detail = row.copy(carrySpinAdjusted = 0.0)).toRangeShotItem(1).carryYards)
+            .isEqualTo(166.0)
+    }
+
+    @Test
     fun clubsAreOrderedDriverFirstAndUnknownsLast() {
         assertThat(orderClubs(listOf("pw", "zzz", "driver", "7-iron", "driver")))
             .containsExactly("driver", "7-iron", "pw", "zzz")
