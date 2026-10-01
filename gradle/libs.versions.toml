@@ -31,6 +31,9 @@ kotlin = "2.4.20"
 kotlinx-coroutines = "1.11.0"
 kotlinx-serialization = "1.11.0"
 ktlint = "1.8.0"
+# Compose lint rules run as a ktlint custom rule set through Spotless (Compose modules only).
+# 0.6.7 is built against ktlint 1.8.0 (its POM and docs/ktlint.md matrix); bump both together.
+compose-rules = "0.6.7"
 ktor = "3.6.0"
 # Invariant 4 (module graph) as a build check: com.jraska.module.graph.assertion, plugin portal.
 module-graph-assert = "2.9.1"
@@ -134,6 +137,8 @@ spotless-gradlePlugin = { module = "com.diffplug.spotless:spotless-plugin-gradle
 detekt-gradlePlugin = { module = "io.gitlab.arturbosch.detekt:detekt-gradle-plugin", version.ref = "detekt" }
 ksp-gradlePlugin = { module = "com.google.devtools.ksp:symbol-processing-gradle-plugin", version.ref = "ksp" }
 androidx-room3-gradlePlugin = { module = "androidx.room3:room3-gradle-plugin", version.ref = "room3" }
+# ktlint custom rule set, resolved by Spotless (not a compile dependency).
+compose-rules-ktlint = { module = "io.nlopez.compose.rules:ktlint", version.ref = "compose-rules" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

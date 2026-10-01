@@ -128,7 +128,7 @@ private fun RateSlider(
         range = RATE_MIN_PERCENT..RATE_MAX_PERCENT,
         step = RATE_STEP_PERCENT,
         unit = "%",
-        onValueCommitted = { percent -> onEvent(SettingsEvent.SetCalloutRate(percent / RATE_PERCENT)) },
+        onValueCommit = { percent -> onEvent(SettingsEvent.SetCalloutRate(percent / RATE_PERCENT)) },
         modifier = Modifier.testTag(SettingsTestTags.CALLOUTS_RATE),
     )
 }

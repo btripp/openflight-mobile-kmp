@@ -179,7 +179,7 @@ private fun DetailRow(
 @Composable
 private fun DetailCell(
     metric: DetailMetric,
-    modifier: Modifier,
+    modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
         OfMetricDetail(

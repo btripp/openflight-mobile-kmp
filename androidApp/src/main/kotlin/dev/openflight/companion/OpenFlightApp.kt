@@ -37,14 +37,17 @@ import org.koin.compose.koinInject
  * @param windowClass the phone or tablet layout (plan F1a); tests force one, the app follows the window.
  */
 @Composable
-fun OpenFlightApp(windowClass: OfWindowClass = rememberOfWindowClass()) {
+fun OpenFlightApp(
+    modifier: Modifier = Modifier,
+    windowClass: OfWindowClass = rememberOfWindowClass(),
+) {
     OfTheme {
         AppLifecycleSource()
         // Plan F14: the Demo badge above every screen while Demo mode is on. It takes the status
         // bar's inset, so the screens under it don't pad for the status bar again.
         val demoMode = koinInject<DemoModeRepository>()
         val demo by demoMode.enabled.collectAsState()
-        Column(modifier = Modifier.fillMaxSize()) {
+        Column(modifier = modifier.fillMaxSize()) {
             if (demo) DemoBanner()
             Box(
                 modifier =

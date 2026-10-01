@@ -71,7 +71,7 @@ fun ShotTrailPreviewCanvas(
         flight = flight,
         cameraMode = RangeCameraMode.FIXED,
         reduceMotion = reduceMotion,
-        onFlightCompleted = { if (!reduceMotion) landed = true },
+        onFlightComplete = { if (!reduceMotion) landed = true },
         modifier =
             modifier
                 .clip(RoundedCornerShape(PREVIEW_CORNER_DP.dp))

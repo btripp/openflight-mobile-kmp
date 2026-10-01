@@ -53,7 +53,7 @@ internal fun speedValue(
 @Composable
 private fun StatTile(
     tile: SessionStatTile,
-    modifier: Modifier,
+    modifier: Modifier = Modifier,
 ) {
     Column(
         modifier =

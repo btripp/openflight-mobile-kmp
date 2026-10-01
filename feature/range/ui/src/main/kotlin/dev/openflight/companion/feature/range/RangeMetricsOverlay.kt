@@ -212,7 +212,7 @@ private fun ClubMetric(
     club: RangeClubState,
     onSelectClub: (GolfClub) -> Unit,
     dense: Boolean,
-    modifier: Modifier,
+    modifier: Modifier = Modifier,
 ) {
     Column(
         modifier = modifier.background(CellBackground, CellShape).padding(if (dense) 2.dp else OfSpacing.Xs),
@@ -249,7 +249,7 @@ private fun ClubMetric(
 private fun DetailMetric(
     metric: RangeMetricValue,
     dense: Boolean,
-    modifier: Modifier,
+    modifier: Modifier = Modifier,
 ) {
     if (dense) {
         DenseMetric(metric, modifier)
@@ -274,7 +274,7 @@ private fun DetailMetric(
 @Composable
 private fun DenseMetric(
     metric: RangeMetricValue,
-    modifier: Modifier,
+    modifier: Modifier = Modifier,
 ) {
     val missing = metric.value == ShotMetricFormatter.MISSING
     val degrees = metric.unit == "°"

@@ -62,7 +62,7 @@ fun OfSwitchRow(
 
 /**
  * An integer slider with its label and live value, for example the radar panel's "Min Speed"
- * (`DebugPanel.tsx`'s `SliderControl`). The thumb moves locally while dragging; [onValueCommitted]
+ * (`DebugPanel.tsx`'s `SliderControl`). The thumb moves locally while dragging; [onValueCommit]
  * fires once on release, like the web UI's `onMouseUp`, so the Pi gets one update per drag.
  *
  * @param unit appended to the value as-is, for example " mph".
@@ -73,7 +73,7 @@ fun OfSlider(
     value: Int,
     range: IntRange,
     step: Int,
-    onValueCommitted: (Int) -> Unit,
+    onValueCommit: (Int) -> Unit,
     modifier: Modifier = Modifier,
     unit: String = "",
     enabled: Boolean = true,
@@ -94,7 +94,7 @@ fun OfSlider(
         Slider(
             value = dragging,
             onValueChange = { dragging = it },
-            onValueChangeFinished = { onValueCommitted(snap(dragging, range, step)) },
+            onValueChangeFinished = { onValueCommit(snap(dragging, range, step)) },
             valueRange = range.first.toFloat()..range.last.toFloat(),
             steps = ((range.last - range.first) / step - 1).coerceAtLeast(0),
             enabled = enabled,
@@ -147,7 +147,7 @@ private fun OfControlsPreview() {
                     enabled = false,
                     disabledReason = "Requires Network",
                 )
-                OfSlider(label = "Min Speed", value = 12, range = 0..50, step = 1, onValueCommitted = {}, unit = " mph")
+                OfSlider(label = "Min Speed", value = 12, range = 0..50, step = 1, onValueCommit = {}, unit = " mph")
             }
         }
     }

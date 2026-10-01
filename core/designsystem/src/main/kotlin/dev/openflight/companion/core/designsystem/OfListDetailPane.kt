@@ -9,6 +9,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.movableContentOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -57,6 +61,10 @@ object OfListDetailPaneTags {
  * clear the selection on back, and on two panes the [detail] shows a placeholder when nothing is
  * selected.
  *
+ * Each slot is composed once and moved (not recreated) when the layout changes, for example when a
+ * tablet rotates or a foldable unfolds between MEDIUM and EXPANDED, or the detail pane opens beside
+ * the list: the list keeps its scroll position and both keep their remembered state.
+ *
  * @param windowClass injectable for tests and previews; defaults to [rememberOfWindowClass].
  */
 @Composable
@@ -68,21 +76,31 @@ fun OfListDetailPane(
     windowClass: OfWindowClass = rememberOfWindowClass(),
     listFraction: Float = DEFAULT_LIST_FRACTION,
 ) {
+    // The branches below place each slot at a different spot in the tree; invoking the slot
+    // lambdas directly would dispose their state whenever the layout flips (compose-rules'
+    // content-slot-reused). Movable content carries that state to its new spot. The latest lambdas
+    // are read through rememberUpdatedState, so the movable content itself is created only once.
+    val currentList by rememberUpdatedState(list)
+    val currentDetail by rememberUpdatedState(detail)
+    val listContent = remember { movableContentOf { currentList() } }
+    val detailContent = remember { movableContentOf { currentDetail() } }
     when (OfPaneLayout.of(windowClass, hasSelection)) {
         OfPaneLayout.LIST -> {
-            Box(modifier.fillMaxSize().testTag(OfListDetailPaneTags.LIST)) { list() }
+            Box(modifier.fillMaxSize().testTag(OfListDetailPaneTags.LIST)) { listContent() }
         }
 
         OfPaneLayout.DETAIL -> {
-            Box(modifier.fillMaxSize().testTag(OfListDetailPaneTags.DETAIL)) { detail() }
+            Box(modifier.fillMaxSize().testTag(OfListDetailPaneTags.DETAIL)) { detailContent() }
         }
 
         OfPaneLayout.LIST_AND_DETAIL -> {
             Row(modifier.fillMaxSize()) {
-                Box(Modifier.weight(listFraction).fillMaxHeight().testTag(OfListDetailPaneTags.LIST)) { list() }
+                Box(Modifier.weight(listFraction).fillMaxHeight().testTag(OfListDetailPaneTags.LIST)) {
+                    listContent()
+                }
                 VerticalDivider(color = OfColorTokens.BgElevated)
                 Box(Modifier.weight(1f - listFraction).fillMaxHeight().testTag(OfListDetailPaneTags.DETAIL)) {
-                    detail()
+                    detailContent()
                 }
             }
         }

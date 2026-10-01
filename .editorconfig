@@ -14,6 +14,12 @@ ktlint_code_style = ktlint_official
 # Composables are PascalCase by convention.
 ktlint_function_naming_ignore_when_annotated_with = Composable
 ktlint_standard_function-signature = enabled
+# compose-rules (io.nlopez.compose.rules:ktlint, run by spotlessCheck in the Compose modules).
+# The core:designsystem wrappers that emit UI in place, so the emitter rules
+# (multiple-emitters-check, modifier-not-used-at-root, ...) see through them. OfTheme only
+# provides theming; OfBottomSheet and OfConfirmDialog draw in their own window (denylist).
+compose_content_emitters = OfAdaptiveScaffold,OfButton,OfCard,OfChip,OfConfidenceDots,OfContentWidth,OfDisabledReason,OfDivider,OfDropdownMenu,OfIcon,OfIconButton,OfLinearProgress,OfListDetailPane,OfMetricDetail,OfMetricPrimary,OfNotice,OfOutlinedButton,OfOverflowMenu,OfPill,OfScaffold,OfSegmentedPicker,OfSlider,OfSpinner,OfStatusChip,OfSwipeToDelete,OfSwitchRow,OfText,OfTextButton,OfTextField,OfTopBar
+compose_content_emitters_denylist = OfBottomSheet,OfConfirmDialog
 
 [*.{yml,yaml,json,toml}]
 indent_size = 2
