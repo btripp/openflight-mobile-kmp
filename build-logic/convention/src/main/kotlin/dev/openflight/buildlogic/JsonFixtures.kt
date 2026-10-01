@@ -102,4 +102,9 @@ fun Project.commonTestJsonFixtures(
     extensions.getByType(KotlinMultiplatformExtension::class.java).sourceSets.getByName("commonTest") {
         kotlin.srcDir(task.flatMap { it.outputDirectory })
     }
+    // Android Lint's tasks for the host-test sources (lint model, analysis; reached through
+    // androidApp's `lintDebug`) read this directory but don't inherit the srcDir's task dependency.
+    tasks.matching { it.name.startsWith("lint") || it.name.endsWith("LintModel") }.configureEach {
+        dependsOn(task)
+    }
 }

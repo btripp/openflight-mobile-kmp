@@ -32,6 +32,8 @@ kotlinx-coroutines = "1.11.0"
 kotlinx-serialization = "1.11.0"
 ktlint = "1.8.0"
 ktor = "3.6.0"
+# Invariant 4 (module graph) as a build check: com.jraska.module.graph.assertion, plugin portal.
+module-graph-assert = "2.9.1"
 okio = "3.18.2"
 spotless = "8.10.2"
 turbine = "1.2.1"
@@ -145,6 +147,7 @@ android-library = { id = "com.android.library", version.ref = "agp" }
 kmp-nativecoroutines = { id = "com.rickclephas.kmp.nativecoroutines", version.ref = "kmp-nativecoroutines" }
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 androidx-room3 = { id = "androidx.room3", version.ref = "room3" }
+module-graph-assert = { id = "com.jraska.module.graph.assertion", version.ref = "module-graph-assert" }
 
 # Convention plugins (build-logic/convention)
 openflight-kmp-library = { id = "openflight.kmp.library" }

@@ -81,7 +81,7 @@ if [ -z "${JAVA_HOME:-}" ] && [ -d "$studio_jbr" ]; then
   export JAVA_HOME="$studio_jbr"
 fi
 
-tasks=(spotlessCheck detekt allTests :androidApp:assembleDebug)
+tasks=(spotlessCheck detekt lintDebug allTests :androidApp:assertModuleGraph :androidApp:assembleDebug)
 if [ "$(uname -s)" = "Darwin" ]; then
   tasks+=(:shared:linkDebugFrameworkIosSimulatorArm64)
 else

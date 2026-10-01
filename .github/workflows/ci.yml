@@ -31,8 +31,8 @@ jobs:
       - name: Check, test, assemble
         # allTests on Linux has no iOS test tasks to run; exclude them explicitly anyway.
         run: >
-          ./gradlew spotlessCheck detekt allTests :androidApp:assembleDebug
-          -x iosSimulatorArm64Test
+          ./gradlew spotlessCheck detekt lintDebug allTests :androidApp:assertModuleGraph
+          :androidApp:assembleDebug -x iosSimulatorArm64Test
 
   ios:
     name: iOS tests + Xcode build (macOS)

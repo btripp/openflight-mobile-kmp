@@ -27,6 +27,15 @@ style:
     ignoreAnnotated: ['Preview']
   MaxLineLength:
     maxLineLength: 120
+  # UiState and model data classes are immutable snapshots (no `var` properties).
+  DataClassShouldBeImmutable:
+    active: true
+
+coroutines:
+  # Off by default in detekt; works without type resolution, unlike the other coroutine
+  # rules (see .claude/rules/kotlin-coroutines.md).
+  GlobalCoroutineUsage:
+    active: true
 
 complexity:
   TooManyFunctions:

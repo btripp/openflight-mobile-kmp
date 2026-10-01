@@ -11,5 +11,6 @@ plugins {
     alias(libs.plugins.kmp.nativecoroutines) apply false
     alias(libs.plugins.ksp) apply false
     alias(libs.plugins.androidx.room3) apply false
+    alias(libs.plugins.module.graph.assert) apply false
     id("openflight.spotless")
 }
