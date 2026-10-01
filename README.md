@@ -154,8 +154,6 @@ Done and on `main`:
 
 Next:
 
-- [ ] Range: a shot table pane (every measured field, one row per shot) for the current session,
-      without leaving the range
 - [ ] Estimated total and roll on Practice, Sessions, history and CSV, plus a "show total" toggle
 - [ ] Automatic conditions from location and Open-Meteo weather in the UI (the engine is done;
       the Bag screen only offers manual conditions so far)

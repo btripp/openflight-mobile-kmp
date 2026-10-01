@@ -93,6 +93,14 @@ sealed interface DrivingRangeEvent {
      */
     data object SimulateShot : DrivingRangeEvent
 
+    /**
+     * Tester request 2026-09-30: open or close the shot table ([DrivingRangeUiState.table]). A
+     * row opens its shot with [Launch].
+     */
+    data class ShowTable(
+        val open: Boolean,
+    ) : DrivingRangeEvent
+
     // endregion
 
     // region Plan F8f: range quick settings. Each persists through the same SettingsRepository key

@@ -93,6 +93,8 @@ fun DrivingRangeScreen(
     val openQuickSettings = { showQuickSettings = !showQuickSettings }
     BoxWithConstraints(modifier = modifier) {
         val screenHeight = maxHeight
+        // The scene always keeps most of the width, even with the quick settings open too.
+        val tableWidth = minOf(TableWidth, maxWidth * TABLE_MAX_WIDTH_FRACTION)
         Row(modifier = Modifier.fillMaxSize()) {
             val stageModifier = Modifier.weight(1f).fillMaxHeight()
             if (windowClass == OfWindowClass.EXPANDED && !browse.isLive) {
@@ -135,6 +137,15 @@ fun DrivingRangeScreen(
                     freezeProgress = freezeProgress,
                 )
             }
+            val table = uiState.table
+            if (sidePanel && table != null) {
+                // Tester request 2026-09-30: beside the scene on a tablet, so shots keep flying.
+                RangeShotTablePanel(
+                    table = table,
+                    onEvent = onEvent,
+                    modifier = Modifier.width(tableWidth).fillMaxHeight().safeDrawingPadding(),
+                )
+            }
             if (sidePanel && showQuickSettings) {
                 RangeQuickSettingsPanel(
                     uiState = uiState,
@@ -152,6 +163,10 @@ fun DrivingRangeScreen(
                 maxHeight = screenHeight * QUICK_SHEET_FRACTION,
             )
         }
+    }
+    val sheetTable = uiState.table
+    if (sheetTable != null && windowClass != OfWindowClass.EXPANDED) {
+        RangeShotTableSheet(table = sheetTable, onEvent = onEvent, maxHeight = TABLE_SHEET_MAX_HEIGHT)
     }
     if (showSessions) {
         RangeSessionSheet(sessions = browse.sessions, onEvent = onEvent, onDismiss = { showSessions = false })
@@ -272,6 +287,7 @@ private fun SceneLayer(
                     onToggleCamera = { onEvent(DrivingRangeEvent.ToggleCameraMode) },
                     onOpenSessions = onOpenSessions,
                     onOpenQuickSettings = onOpenQuickSettings,
+                    onToggleTable = { onEvent(DrivingRangeEvent.ShowTable(open = uiState.table == null)) },
                     onExit = onExit,
                     obstructions = obstructions,
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
@@ -342,6 +358,7 @@ private fun Controls(
     onToggleCamera: () -> Unit,
     onOpenSessions: () -> Unit,
     onOpenQuickSettings: () -> Unit,
+    onToggleTable: () -> Unit,
     onExit: () -> Unit,
     modifier: Modifier = Modifier,
     obstructions: RangeObstructionTracker? = null,
@@ -371,7 +388,15 @@ private fun Controls(
                         .padding(horizontal = 12.dp, vertical = 6.dp)
                         .testTag(RangeTestTags.STATUS),
             )
-            ControlButtons(uiState, onReplay, onToggleCamera, onOpenSessions, onOpenQuickSettings, obstructions)
+            ControlButtons(
+                uiState,
+                onReplay,
+                onToggleCamera,
+                onOpenSessions,
+                onOpenQuickSettings,
+                onToggleTable,
+                obstructions,
+            )
         },
         measurePolicy = ControlsLayout(gap = 10.dp),
     )
@@ -426,6 +451,7 @@ private fun ControlButtons(
     onToggleCamera: () -> Unit,
     onOpenSessions: () -> Unit,
     onOpenQuickSettings: () -> Unit,
+    onToggleTable: () -> Unit,
     obstructions: RangeObstructionTracker?,
 ) {
     FlowRow(
@@ -452,6 +478,12 @@ private fun ControlButtons(
                 modifier = Modifier.background(ControlBackground, PillShape).testTag(RangeTestTags.REPLAY),
             )
         }
+        OfOutlinedButton(
+            text = "Table",
+            onClick = onToggleTable,
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+            modifier = Modifier.background(ControlBackground, PillShape).testTag(RangeTestTags.TABLE_BUTTON),
+        )
         RangeQuickSettingsButton(onClick = onOpenQuickSettings)
     }
 }
@@ -541,6 +573,15 @@ private val DockWidth = 340.dp
 
 /** Plan F8f: the quick settings side panel's width on an expanded window. */
 private val QuickSettingsWidth = 360.dp
+
+/** The shot table's side panel on a tablet: wide enough for most of its columns. */
+private val TableWidth = 560.dp
+
+/** ...but never more than this share of the window, so the scene stays in view. */
+private const val TABLE_MAX_WIDTH_FRACTION = 0.45f
+
+/** The shot table's sheet on a phone: most of the screen, the range still peeking above it. */
+private val TABLE_SHEET_MAX_HEIGHT = 560.dp
 
 /** Plan F8f: the quick settings sheet covers at most this much of a compact window's height. */
 private const val QUICK_SHEET_FRACTION = 0.55f

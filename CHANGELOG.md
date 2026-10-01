@@ -16,6 +16,10 @@ tag, to test Bluetooth against a schema-2-only Pi; the next tagged release is `v
 
 ### Added
 
+- **A shot table on the range.** The new Table button lists every shot of the current session,
+  newest first, with all its numbers (ball and club speed, smash, carry, launch, direction, spin,
+  spin axis and club path) and an average row, without leaving the range. On a phone it's a sheet;
+  on a tablet it sits beside the scene so shots keep flying. Tap a row to view that shot on the range.
 - **Prev and Next in the range overlay.** Step through the overlay's shots, newest first, and see
   each one's numbers without tapping its line; the bar shows which shot is selected (e.g.
   "3 / 12").
