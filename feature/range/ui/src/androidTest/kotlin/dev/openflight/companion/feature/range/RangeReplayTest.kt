@@ -125,6 +125,52 @@ class RangeReplayTest {
     }
 
     @Test
+    fun given_compactWindow_when_tableTapped_then_sheetListsTheSessionAndARowOpensItsShot() {
+        history.put("s1", listOf(stored(2, "pw", 120.0), stored(1, "driver", 250.0)))
+        history.currentSessionId.value = "s1"
+        val viewModel = setRange(OfWindowClass.COMPACT)
+
+        composeRule.onNodeWithTag(RangeTestTags.TABLE_BUTTON).performClick()
+        composeRule.waitUntil(REPLAY_TIMEOUT_MILLIS) {
+            viewModel.uiState.value.table
+                ?.rows
+                ?.size == 2
+        }
+        composeRule.onNodeWithTag(RangeTestTags.TABLE_PANEL).assertIsDisplayed()
+        composeRule.onNodeWithTag(RangeTestTags.tableRow("2")).assertIsDisplayed()
+        composeRule.onNodeWithTag(RangeTestTags.TABLE_AVERAGE).assertIsDisplayed()
+
+        // A row opens its shot on the range, paused, and closes the sheet.
+        composeRule.onNodeWithTag(RangeTestTags.tableRow("1")).performClick()
+        composeRule.waitUntil(REPLAY_TIMEOUT_MILLIS) {
+            viewModel.uiState.value.displayedShot
+                ?.club == "driver"
+        }
+        composeRule.onNodeWithTag(RangeTestTags.TABLE_PANEL).assertDoesNotExist()
+        assertEquals("s1", (viewModel.uiState.value.mode as? RangeMode.Replay)?.sessionId)
+    }
+
+    @Test
+    fun given_expandedWindow_when_tableTapped_then_panelSitsBesideTheSceneUntilDone() {
+        history.put("s1", listOf(stored(1, "driver", 250.0)))
+        history.currentSessionId.value = "s1"
+        val viewModel = setRange(OfWindowClass.EXPANDED)
+
+        composeRule.onNodeWithTag(RangeTestTags.TABLE_BUTTON).performClick()
+        composeRule.waitUntil(REPLAY_TIMEOUT_MILLIS) {
+            viewModel.uiState.value.table
+                ?.rows
+                ?.size == 1
+        }
+        composeRule.onNodeWithTag(RangeTestTags.TABLE_PANEL).assertIsDisplayed()
+        composeRule.onNodeWithTag(RangeTestTags.SCENE).assertIsDisplayed()
+        assertEquals(RangeMode.Live, viewModel.uiState.value.mode)
+
+        composeRule.onNodeWithTag(RangeTestTags.TABLE_CLOSE).performClick()
+        composeRule.onNodeWithTag(RangeTestTags.TABLE_PANEL).assertDoesNotExist()
+    }
+
+    @Test
     fun given_overlay_when_nextAndPrevTapped_then_selectionStepsThroughTheList() {
         history.put("s1", listOf(stored(2, "pw", 120.0), stored(1, "driver", 250.0)))
         val viewModel = setRange(OfWindowClass.EXPANDED)

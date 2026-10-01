@@ -137,6 +137,9 @@ sealed interface DrivingRangeUiState {
     /** Issue #48: the Pi's battery is low or critical and nothing is charging it, or `null`. */
     val batteryWarning: PiBatteryWarning?
 
+    /** Tester request 2026-09-30: the current session's shot table while it's open, else `null`. */
+    val table: RangeShotTable?
+
     val mode: RangeMode get() = browse.mode
 
     /** The camera to render with; see [RangeCameraState.mode]. */
@@ -153,6 +156,7 @@ sealed interface DrivingRangeUiState {
         override val canSimulate: Boolean = false,
         override val simulateError: String? = null,
         override val batteryWarning: PiBatteryWarning? = null,
+        override val table: RangeShotTable? = null,
     ) : DrivingRangeUiState {
         /** The pre-F8d shape, kept so Swift callers of `init(club:camera:browse:)` still compile. */
         constructor(
@@ -181,6 +185,7 @@ sealed interface DrivingRangeUiState {
         override val batteryWarning: PiBatteryWarning? = null,
         /** The Pi's spin-adjusted carry for [shot], when it sent one; read [displayedCarryYards]. */
         val carrySpinAdjustedYards: Double? = null,
+        override val table: RangeShotTable? = null,
     ) : DrivingRangeUiState {
         /** The pre-F8d shape, kept so Swift callers of the seven-argument init still compile. */
         @Suppress("LongParameterList") // The primary constructor's shape before plan F8d.
@@ -206,6 +211,13 @@ val DrivingRangeUiState.displayedCarryYards: Double?
     get() {
         val shot = displayedShot ?: return null
         return (this as? DrivingRangeUiState.Showing)?.carrySpinAdjustedYards ?: shot.estimatedCarryYards
+    }
+
+/** This state with [table] open (or closed, `null`). */
+internal fun DrivingRangeUiState.withTable(table: RangeShotTable?): DrivingRangeUiState =
+    when (this) {
+        is DrivingRangeUiState.Ready -> copy(table = table)
+        is DrivingRangeUiState.Showing -> copy(table = table)
     }
 
 /** The replay button shows once there's a shot and nothing is being prepared or flown (DrivingRangeView.swift). */
