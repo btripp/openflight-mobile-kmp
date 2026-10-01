@@ -23,6 +23,8 @@ paths:
   `./gradlew :feature:<name>:ui:connectedDebugAndroidTest` (emulator needed; not in `allTests`
   or CI).
 - Port expected values from the reference `ios/OpenFlightTests`. Don't invent new numbers.
+- compose-rules (`io.nlopez.compose.rules:ktlint`) runs through `spotlessCheck` in these modules;
+  fix its findings, or `@Suppress("compose:<rule>")` with the reason inline (config in `.editorconfig`).
 
 ## Layouts (phones and tablets, plan F1a)
 

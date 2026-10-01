@@ -47,7 +47,7 @@ import dev.openflight.companion.core.flight.RangeCameraPose
  *
  * A new [ActiveFlight.playbackId] starts a playback; it runs on the frame clock for
  * [playbackSeconds] (divided by [ActiveFlight.speed] in replay) and then calls
- * [onFlightCompleted]. After that the frame clock keeps running for [RangeCameraRig.settleSeconds]
+ * [onFlightComplete]. After that the frame clock keeps running for [RangeCameraRig.settleSeconds]
  * so the follow camera can settle over the landing spot. A `null` [flight] (landed and dwelt, or
  * suspended) freezes the last flight where it is, like the reference's `suspend()`, until the
  * next playback replaces it: only one tracer is ever drawn.
@@ -68,7 +68,7 @@ import dev.openflight.companion.core.flight.RangeCameraPose
  *
  * They work in every mode (live, replay and overlay). While [view] isn't the identity the follow
  * camera is suspended and the fixed tee camera is transformed instead. Each gesture reports the
- * whole new [ViewTransform] through [onViewChanged]. In the overlay, [overlay]'s static
+ * whole new [ViewTransform] through [onViewChange]. In the overlay, [overlay]'s static
  * trajectories are drawn (re-projected only when the camera moves) and a tap near a landing
  * selects it through [onSelectLanding]. [rollOut] draws the estimated roll-out to the total dot
  * once the ball has landed (or for the selected overlay shot).
@@ -90,14 +90,14 @@ fun RangeCanvas(
     flight: ActiveFlight?,
     cameraMode: RangeCameraMode,
     reduceMotion: Boolean,
-    onFlightCompleted: () -> Unit,
+    onFlightComplete: () -> Unit,
     modifier: Modifier = Modifier,
     view: ViewTransform = ViewTransform.IDENTITY,
     rollOut: RangeRollOut? = null,
     overlay: List<OverlayFlight> = emptyList(),
     overlayMode: Boolean = false,
     selectedOverlayId: String? = null,
-    onViewChanged: (ViewTransform) -> Unit = {},
+    onViewChange: (ViewTransform) -> Unit = {},
     onResetView: () -> Unit = {},
     onSelectLanding: (String) -> Unit = {},
     theme: RangeTheme = RangeTheme.DAY,
@@ -111,13 +111,13 @@ fun RangeCanvas(
     val progress = remember { mutableFloatStateOf(0f) }
     val landedSeconds = remember { mutableFloatStateOf(0f) }
     val mode by rememberUpdatedState(cameraMode)
-    val completed by rememberUpdatedState(onFlightCompleted)
+    val completed by rememberUpdatedState(onFlightComplete)
     val currentView = rememberUpdatedState(view)
     val overlayState = rememberUpdatedState(overlay)
     val currentOverlay by overlayState
     val selectedState = rememberUpdatedState(selectedOverlayId)
     val rollOutState = rememberUpdatedState(rollOut)
-    val viewChanged by rememberUpdatedState(onViewChanged)
+    val viewChanged by rememberUpdatedState(onViewChange)
     val resetView by rememberUpdatedState(onResetView)
     val selectLanding by rememberUpdatedState(onSelectLanding)
     val obstructionState = rememberUpdatedState(obstructions)
@@ -251,7 +251,7 @@ fun RangeCanvas(
                 base = rig.fixedPose,
                 view = currentView,
                 overlay = { currentOverlay },
-                onViewChanged = { viewChanged(it) },
+                onViewChange = { viewChanged(it) },
                 onResetView = { resetView() },
                 onSelectLanding = { selectLanding(it) },
             )
@@ -292,7 +292,7 @@ private fun Modifier.rangeViewGestures(
     base: RangeCameraPose,
     view: State<ViewTransform>,
     overlay: () -> List<OverlayFlight>,
-    onViewChanged: (ViewTransform) -> Unit,
+    onViewChange: (ViewTransform) -> Unit,
     onResetView: () -> Unit,
     onSelectLanding: (String) -> Unit,
 ): Modifier =
@@ -346,7 +346,7 @@ private fun Modifier.rangeViewGestures(
                     }
                 if (next != local) {
                     local = next
-                    onViewChanged(next)
+                    onViewChange(next)
                 }
             } while (event.changes.any { it.pressed })
         }

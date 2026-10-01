@@ -62,7 +62,7 @@ private fun PreviewBox(
     trail: ShotTrailUiState,
     theme: RangeThemeSetting,
     preview: ShotTrailPreview,
-    modifier: Modifier,
+    modifier: Modifier = Modifier,
 ) {
     Box(modifier = modifier.testTag(SettingsTestTags.SHOT_TRAIL_PREVIEW)) { preview(trail, theme) }
 }
@@ -71,7 +71,7 @@ private fun PreviewBox(
 private fun ShotTrailPickers(
     trail: ShotTrailUiState,
     onEvent: (SettingsEvent) -> Unit,
-    modifier: Modifier,
+    modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(OfSpacing.Md)) {
         OfDropdownMenu(

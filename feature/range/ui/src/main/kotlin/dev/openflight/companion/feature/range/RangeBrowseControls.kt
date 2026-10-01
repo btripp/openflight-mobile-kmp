@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -75,7 +76,7 @@ internal fun RangeBrowseBar(
 }
 
 @Composable
-private fun ReplayTransport(
+private fun RowScope.ReplayTransport(
     browse: RangeBrowseState,
     mode: RangeMode.Replay,
     onEvent: (DrivingRangeEvent) -> Unit,
@@ -111,7 +112,7 @@ private fun ReplayTransport(
 }
 
 @Composable
-private fun OverlayControls(
+private fun RowScope.OverlayControls(
     browse: RangeBrowseState,
     mode: RangeMode.Overlay,
     onEvent: (DrivingRangeEvent) -> Unit,

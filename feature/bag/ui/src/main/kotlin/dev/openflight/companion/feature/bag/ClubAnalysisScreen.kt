@@ -86,12 +86,12 @@ fun ClubAnalysisScreen(
     ) { padding ->
         if (windowClass == OfWindowClass.EXPANDED) {
             Row(Modifier.fillMaxSize().padding(padding)) {
-                BarList(uiState, onEvent, onOpenClub, Modifier.weight(BARS_WEIGHT), showInsights = false)
+                BarList(uiState, onEvent, onOpenClub, showInsights = false, modifier = Modifier.weight(BARS_WEIGHT))
                 InsightList(uiState, Modifier.weight(1f - BARS_WEIGHT))
             }
         } else {
             OfContentWidth(Modifier.padding(padding)) {
-                BarList(uiState, onEvent, onOpenClub, Modifier.fillMaxSize(), showInsights = true)
+                BarList(uiState, onEvent, onOpenClub, showInsights = true, modifier = Modifier.fillMaxSize())
             }
         }
     }
@@ -102,8 +102,8 @@ private fun BarList(
     uiState: ClubAnalysisUiState,
     onEvent: (ClubAnalysisEvent) -> Unit,
     onOpenClub: (String) -> Unit,
-    modifier: Modifier,
     showInsights: Boolean,
+    modifier: Modifier = Modifier,
 ) {
     LazyColumn(
         modifier = modifier.testTag(BagTestTags.ANALYSIS_LIST),
@@ -161,7 +161,7 @@ private fun BarList(
 @Composable
 private fun InsightList(
     uiState: ClubAnalysisUiState,
-    modifier: Modifier,
+    modifier: Modifier = Modifier,
 ) {
     Column(modifier.padding(OfSpacing.Xl)) { InsightCard(uiState) }
 }
