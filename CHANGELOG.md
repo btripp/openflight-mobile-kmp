@@ -14,6 +14,12 @@ tag. Plain `v0.1.0` waits on the hardware test matrix on a real Raspberry Pi.
 iOS 0.1.0 (build 4), Android 0.1.0 (versionCode 4). Build 4 was uploaded to TestFlight without a
 tag, to test Bluetooth against a schema-2-only Pi; the next tagged release is `v0.1.0-beta.4`.
 
+### Added
+
+- **Prev and Next in the range overlay.** Step through the overlay's shots, newest first, and see
+  each one's numbers without tapping its line; the bar shows which shot is selected (e.g.
+  "3 / 12").
+
 ### Changed
 
 - **Bluetooth LE is schema 2 only** (#59). The app connects to a Pi whose Bluetooth serves only
@@ -24,6 +30,12 @@ tag, to test Bluetooth against a schema-2-only Pi; the next tagged release is `v
 
 ### Fixed
 
+- **A short break no longer splits a practice session.** Every reconnect to the Pi started a new
+  stored session, so switching apps, locking the screen or a Wi-Fi blip split one practice into
+  several. A reconnect to the same Pi over the same connection within 30 minutes of the last shot
+  now continues the session. If the Pi restarted during the gap and numbers its shots from 1
+  again, the app starts a new session instead of overwriting stored shots. (A session still ends
+  if the system closes the app.)
 - Android tablets and foldables: rotating or unfolding into (or out of) the two-pane layout no
   longer resets Practice's and Bag's panes, so a list keeps its scroll position and a detail pane
   its state.
@@ -31,6 +43,17 @@ tag, to test Bluetooth against a schema-2-only Pi; the next tagged release is `v
   Carry and Ball speed back on (#75).
 - Practice no longer drops a new shot or brings back a deleted one when both happen at the same
   moment (#73).
+- A shot deleted or a profile's session cleared on the Pi's own screen now also leaves Practice
+  and the phone's saved history, on a Pi without the phone-connectivity update too (#68).
+- Clearing a session now removes all of that profile's saved shots from it, not only its newest
+  200 (#74).
+- **The range shows a shot's final numbers when the Pi finishes it.** The Pi sends a shot as
+  soon as the OPS243 has it, then its final version once the IWR6843 and camera finish. The
+  range kept the first version (no launch or direction, a lower ball speed) until you picked the
+  shot in the overlay. It now updates the shot on screen, and its estimated total, in place.
+- **The range's CARRY matches the Pi.** The CARRY tile and the overlay's shot list show the
+  Pi's spin-adjusted carry when it sends one, as Practice and the kiosk do, and a live flight
+  lands there. They showed the table carry before (e.g. 166 yd against the kiosk's 144).
 - **Over Bluetooth, History stores each shot's final values** (#66). A shot that arrived
   provisional and then final could be stored with the provisional's ball speed, carry and carry
   range, and nothing corrected it, so History, Bag stats and gapping were wrong.

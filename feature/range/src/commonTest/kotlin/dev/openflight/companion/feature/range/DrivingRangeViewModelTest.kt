@@ -15,6 +15,8 @@ import dev.openflight.companion.core.data.RangeCameraMode
 import dev.openflight.companion.core.data.RangeThemeSetting
 import dev.openflight.companion.core.model.ConnectionState
 import dev.openflight.companion.core.model.GolfClub
+import dev.openflight.companion.core.model.ShotEvent
+import dev.openflight.companion.core.model.pi.ShotDetail
 import dev.openflight.companion.core.testing.FakeConditionsRepository
 import dev.openflight.companion.core.testing.FakePiSessionRepository
 import dev.openflight.companion.core.testing.FakeShotHistoryRepository
@@ -56,13 +58,14 @@ class DrivingRangeViewModelTest {
     private fun makeViewModel(
         shots: FakeShotRepository,
         computeDispatcher: CoroutineDispatcher = StandardTestDispatcher(scheduler),
+        piSession: FakePiSessionRepository = FakePiSessionRepository(),
     ): DrivingRangeViewModel =
         DrivingRangeViewModel(
             shots = shots,
             settings = settings,
             history = FakeShotHistoryRepository(),
             conditions = FakeConditionsRepository(),
-            piSession = FakePiSessionRepository(),
+            piSession = piSession,
             flightPlan = { m, c, b -> testFlightPlan(m, c, b) },
             computeDispatcher = computeDispatcher,
         )
@@ -449,6 +452,161 @@ class DrivingRangeViewModelTest {
             viewModel.uiState.test {
                 viewModel.onEvent(DrivingRangeEvent.ReduceMotionChanged(enabled = true))
                 assertThat(awaitUntil { it.cameraModeLocked }.camera.theme).isEqualTo(RangeTheme.NIGHT)
+            }
+        }
+
+    // endregion
+
+    // region Tester report 2026-09-30: the Pi's final version of a shot, and its spin-adjusted carry
+
+    /** The Pi's first version of a 9-iron: the OPS243 alone, before the IWR6843 and camera finish. */
+    private fun provisionalNineIron(): ShotEvent =
+        makeDrivingRangeShot(
+            club = "9-iron",
+            ballSpeedMph = 108.9,
+            carryYards = 160.0,
+            launchAngle = null,
+            horizontalLaunch = null,
+            spinRpm = 4_614.0,
+            spinAxis = null,
+        )
+
+    /** The same shot's `shot_update`: same event id, revised ball speed, launch and direction. */
+    private fun ShotEvent.finalVersion(): ShotEvent =
+        copy(ballSpeedMph = 112.7, estimatedCarryYards = 166.0, launchAngleVertical = 29.0, launchAngleHorizontal = 0.4)
+
+    /** The Pi's session row for [shot] (joined on the timestamp) with the kiosk's spin-adjusted carry. */
+    private fun piRow(
+        shot: ShotEvent,
+        spinAdjusted: Double?,
+    ): ShotDetail =
+        ShotDetail(
+            timestamp = shot.timestamp,
+            club = shot.club,
+            ballSpeedMph = shot.ballSpeedMph,
+            estimatedCarryYards = shot.estimatedCarryYards,
+            carrySpinAdjusted = spinAdjusted,
+        )
+
+    @Test
+    fun finalVersionOfFlyingShotReplacesItsNumbersWithoutFlyingAgain() =
+        runTest(scheduler) {
+            val shots = FakeShotRepository(settings)
+            val viewModel = makeViewModel(shots)
+            val provisional = provisionalNineIron()
+            val final = provisional.finalVersion()
+
+            viewModel.uiState.test {
+                shots.emit(provisional)
+                val flying = awaitUntil { it.phase == RangePhase.Flying }
+                shots.emit(final)
+                val updated = awaitUntil { it.displayedShot == final }
+
+                assertThat(updated.phase).isEqualTo(RangePhase.Flying)
+                assertThat(updated.activeFlight?.playbackId).isEqualTo(flying.activeFlight?.playbackId)
+                assertThat(updated.displayedShot?.launchAngleVertical).isEqualTo(29.0)
+            }
+        }
+
+    @Test
+    fun finalVersionOfLandedShotUpdatesTheShownShotAndItsRollOut() =
+        runTest(scheduler) {
+            val shots = FakeShotRepository(settings)
+            val piSession = FakePiSessionRepository()
+            val viewModel = makeViewModel(shots, piSession = piSession)
+            val provisional = provisionalNineIron()
+            val final = provisional.finalVersion()
+
+            viewModel.uiState.test {
+                shots.emit(provisional)
+                awaitUntil { it.phase == RangePhase.Flying }
+                viewModel.onEvent(DrivingRangeEvent.FlightCompleted)
+                advanceUntilIdle()
+                // As on a stock Pi: the store files the row before the live shot reaches the range.
+                piSession.shotDetails.value = mapOf(final.timestamp to piRow(final, spinAdjusted = 144.0))
+                shots.emit(final)
+                val updated = awaitUntil { it.displayedShot == final && it.rollOut?.carryYards == 144.0 }
+
+                assertThat(updated.phase).isEqualTo(RangePhase.Waiting)
+                assertThat(updated.displayedCarryYards).isEqualTo(144.0)
+            }
+        }
+
+    @Test
+    fun finalVersionOfQueuedShotFliesInsteadOfTheProvisionalOne() =
+        runTest(scheduler) {
+            val shots = FakeShotRepository(settings)
+            val viewModel = makeViewModel(shots)
+            val first = makeDrivingRangeShot()
+            val provisional = provisionalNineIron()
+            val final = provisional.finalVersion()
+
+            viewModel.uiState.test {
+                shots.emit(first)
+                awaitUntil { it.phase == RangePhase.Flying }
+                shots.emit(provisional)
+                runCurrent()
+                shots.emit(final)
+                runCurrent()
+                viewModel.onEvent(DrivingRangeEvent.FlightCompleted)
+                val state = awaitUntil { it.phase == RangePhase.Flying && it.displayedShot?.eventId == final.eventId }
+
+                assertThat(state.displayedShot).isEqualTo(final)
+            }
+        }
+
+    @Test
+    fun carryShowsThePiSpinAdjustedCarryAndTheFlightLandsThere() =
+        runTest(scheduler) {
+            val shots = FakeShotRepository(settings)
+            val piSession = FakePiSessionRepository()
+            val viewModel = makeViewModel(shots, piSession = piSession)
+            val shot = provisionalNineIron().finalVersion()
+            piSession.shotDetails.value = mapOf(shot.timestamp to piRow(shot, spinAdjusted = 144.0))
+
+            viewModel.uiState.test {
+                shots.emit(shot)
+                val state = awaitUntil { it.phase == RangePhase.Flying }
+
+                assertThat(state.displayedShot?.estimatedCarryYards).isEqualTo(166.0)
+                assertThat(state.displayedCarryYards).isEqualTo(144.0)
+                assertThat(state.rollOut?.carryYards).isEqualTo(144.0)
+            }
+        }
+
+    @Test
+    fun carryFallsBackToTheTableCarryWithoutASpinAdjustedOne() =
+        runTest(scheduler) {
+            val shots = FakeShotRepository(settings)
+            val piSession = FakePiSessionRepository()
+            val viewModel = makeViewModel(shots, piSession = piSession)
+            val shot = provisionalNineIron().finalVersion()
+            // The web UI treats 0 as absent.
+            piSession.shotDetails.value = mapOf(shot.timestamp to piRow(shot, spinAdjusted = 0.0))
+
+            viewModel.uiState.test {
+                shots.emit(shot)
+                assertThat(awaitUntil { it.phase == RangePhase.Flying }.displayedCarryYards).isEqualTo(166.0)
+            }
+        }
+
+    @Test
+    fun spinAdjustedCarryArrivingAfterTheShotUpdatesTheCarry() =
+        runTest(scheduler) {
+            val shots = FakeShotRepository(settings)
+            val piSession = FakePiSessionRepository()
+            val viewModel = makeViewModel(shots, piSession = piSession)
+            val shot = provisionalNineIron().finalVersion()
+
+            viewModel.uiState.test {
+                shots.emit(shot)
+                awaitUntil { it.phase == RangePhase.Flying }
+                viewModel.onEvent(DrivingRangeEvent.FlightCompleted)
+                advanceUntilIdle()
+                piSession.shotDetails.value = mapOf(shot.timestamp to piRow(shot, spinAdjusted = 144.0))
+                val state = awaitUntil { it.rollOut?.carryYards == 144.0 }
+
+                assertThat(state.displayedCarryYards).isEqualTo(144.0)
             }
         }
 

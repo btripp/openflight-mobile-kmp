@@ -241,6 +241,18 @@ abstract class ShotHistoryDao {
     @Update
     protected abstract suspend fun updateShot(shot: ShotEntity)
 
+    /**
+     * A different shot (another timestamp) already holds [shot]'s number in [sessionId]: the Pi
+     * numbers its shots afresh (it restarted). An update or replay of a stored shot keeps its timestamp.
+     */
+    open suspend fun isNumberHeldByAnotherShot(
+        sessionId: String,
+        shot: ShotEntity,
+    ): Boolean {
+        val stored = shot.shotNumber?.let { findByShotNumber(sessionId, it) }
+        return stored != null && stored.timestamp != shot.timestamp
+    }
+
     @Query("SELECT * FROM shots WHERE session_id = :sessionId AND shot_number = :shotNumber LIMIT 1")
     protected abstract suspend fun findByShotNumber(
         sessionId: String,

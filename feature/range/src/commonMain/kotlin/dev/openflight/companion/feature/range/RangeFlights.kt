@@ -56,7 +56,7 @@ fun HistoryShot.toRangeShotItem(number: Int): RangeShotItem {
         number = number,
         club = club,
         clubLabel = if (club.isEmpty()) "Unknown club" else GolfClub.displayNameFor(club),
-        carryYards = detail.estimatedCarryYards,
+        carryYards = detail.carrySpinAdjusted?.takeIf { it.isFinite() && it > 0 } ?: detail.estimatedCarryYards,
         ballSpeedMph = detail.ballSpeedMph,
         timestamp = detail.timestamp,
         flyable = toRangeShotEvent() != null,

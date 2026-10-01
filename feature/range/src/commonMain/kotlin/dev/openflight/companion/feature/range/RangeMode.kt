@@ -55,7 +55,7 @@ enum class ReplaySpeed(
  * @property id the stored row's id, as a string ([dev.openflight.companion.core.data.HistoryShot.id]).
  * @property number 1-based position in the session (replay) or the list (overlay).
  * @property club the club's wire value; [clubLabel] is its display name.
- * @property carryYards the server's carry, `null` when missing.
+ * @property carryYards the server's carry (spin-adjusted when the Pi sent one), `null` when missing.
  * @property flyable the shot has the ball speed and carry a flight needs.
  */
 data class RangeShotItem(
@@ -163,6 +163,18 @@ data class RangeBrowseState(
 
     /** The follow camera is suspended while the user has zoomed, panned or orbited (plan F8a). */
     val userTransformed: Boolean get() = !view.isIdentity
+
+    /** The selected shot's index in [shots] (the overlay lists newest first), or -1 with none selected. */
+    val selectedIndex: Int get() = shots.indexOfFirst { it.id == selectedShotId }
+
+    /**
+     * Tester request 2026-09-30: the overlay's Prev and Next step through its list in the order
+     * shown (#1, the newest, first). With no shot selected, Next picks #1 and Prev is disabled.
+     */
+    val canSelectPreviousShot: Boolean get() = mode is RangeMode.Overlay && selectedIndex > 0
+
+    /** See [canSelectPreviousShot]. */
+    val canSelectNextShot: Boolean get() = mode is RangeMode.Overlay && selectedIndex + 1 < shots.size
 
     companion object {
         /**

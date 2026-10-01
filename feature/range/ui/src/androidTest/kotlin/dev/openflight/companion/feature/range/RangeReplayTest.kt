@@ -8,6 +8,7 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.doubleClick
 import androidx.compose.ui.test.hasTestTag
@@ -118,6 +119,38 @@ class RangeReplayTest {
         composeRule.waitUntil(REPLAY_TIMEOUT_MILLIS) { isSelectedShot(driver.shotId) }
         assertEquals(
             "driver",
+            viewModel.uiState.value.displayedShot
+                ?.club,
+        )
+    }
+
+    @Test
+    fun given_overlay_when_nextAndPrevTapped_then_selectionStepsThroughTheList() {
+        history.put("s1", listOf(stored(2, "pw", 120.0), stored(1, "driver", 250.0)))
+        val viewModel = setRange(OfWindowClass.EXPANDED)
+        composeRule.onNodeWithTag(RangeTestTags.HISTORY).performClick()
+        composeRule.onNodeWithTag(RangeTestTags.overlaySession("s1")).performClick()
+        composeRule.waitUntil(REPLAY_TIMEOUT_MILLIS) { viewModel.uiState.value.browse.overlayFlights.size == 2 }
+
+        composeRule.onNodeWithTag(RangeTestTags.POSITION).assert(hasText("– / 2"))
+        composeRule.onNodeWithTag(RangeTestTags.PREVIOUS).assertIsNotEnabled()
+        // Newest first: Next picks the pitching wedge, then the driver.
+        composeRule.onNodeWithTag(RangeTestTags.NEXT).performClick()
+        composeRule.waitUntil(REPLAY_TIMEOUT_MILLIS) { isSelectedShot("2") }
+        composeRule.onNodeWithTag(RangeTestTags.NEXT).performClick()
+        composeRule.waitUntil(REPLAY_TIMEOUT_MILLIS) { isSelectedShot("1") }
+        composeRule.onNodeWithTag(RangeTestTags.POSITION).assert(hasText("2 / 2"))
+        composeRule.onNodeWithTag(RangeTestTags.NEXT).assertIsNotEnabled()
+        assertEquals(
+            "driver",
+            viewModel.uiState.value.displayedShot
+                ?.club,
+        )
+
+        composeRule.onNodeWithTag(RangeTestTags.PREVIOUS).performClick()
+        composeRule.waitUntil(REPLAY_TIMEOUT_MILLIS) { isSelectedShot("2") }
+        assertEquals(
+            "pw",
             viewModel.uiState.value.displayedShot
                 ?.club,
         )
