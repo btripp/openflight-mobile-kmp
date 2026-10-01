@@ -33,6 +33,7 @@ import dev.openflight.companion.core.model.pi.ShotDetail
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -43,6 +44,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -122,6 +124,37 @@ class DrivingRangeViewModel(
 
     /** Plan F8f: the units and "Show total + roll (est.)", shared with Settings › Practice. */
     private val numbers = combine(settings.units, settings.showTotalDistance, ::RangeNumbers).distinctUntilChanged()
+
+    /** Tester request 2026-09-30: the shot table is open ([DrivingRangeEvent.ShowTable]). */
+    private val tableOpen = MutableStateFlow(false)
+
+    /**
+     * While open, the current session's shots (the newest stored session before the first
+     * connect), only the viewing profile's, following new shots as they're stored.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val table: Flow<RangeShotTable?> =
+        tableOpen.flatMapLatest { open ->
+            if (!open) {
+                flowOf(null)
+            } else {
+                tableSessionId().flatMapLatest { sessionId ->
+                    val stored = if (sessionId == null) flowOf(emptyList()) else history.shots(sessionId)
+                    val profiles = browse.map { it.profiles }.distinctUntilChanged()
+                    combine(stored, profiles, numbers) { shots, shown, units ->
+                        RangeShotTable.of(sessionId, shots.filter { shown.shows(it.detail.profileId) }, units)
+                    }
+                }
+            }
+        }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private fun tableSessionId(): Flow<String?> =
+        history.currentSessionId
+            .flatMapLatest { id ->
+                if (id != null) flowOf(id) else history.sessions().map { sessions -> sessions.firstOrNull()?.id }
+            }.distinctUntilChanged()
+
     private val camera =
         combine(
             settings.rangeCameraMode,
@@ -220,11 +253,12 @@ class DrivingRangeViewModel(
                     carrySpinAdjustedYards = spinAdjustedCarry(shot, pi.details),
                 )
             }
-        }.stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
-            initialValue = initialState(),
-        )
+        }.combine(table) { state, table -> state.withTable(table) }
+            .stateIn(
+                scope = viewModelScope,
+                started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
+                initialValue = initialState(),
+            )
 
     init {
         viewModelScope.launch { shots.latestShot.collect(::observe) }
@@ -310,6 +344,7 @@ class DrivingRangeViewModel(
             is DrivingRangeEvent.ReduceMotionChanged -> reduceMotion.value = event.enabled
             is DrivingRangeEvent.Launch -> launch(event.launch)
             DrivingRangeEvent.SimulateShot -> simulateShot()
+            is DrivingRangeEvent.ShowTable -> tableOpen.value = event.open
             else -> onBrowseEvent(event)
         }
     }

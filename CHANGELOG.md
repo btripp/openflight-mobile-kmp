@@ -14,6 +14,13 @@ tag. Plain `v0.1.0` waits on the hardware test matrix on a real Raspberry Pi.
 iOS 0.1.0 (build 4), Android 0.1.0 (versionCode 4). Build 4 was uploaded to TestFlight without a
 tag, to test Bluetooth against a schema-2-only Pi; the next tagged release is `v0.1.0-beta.4`.
 
+### Added
+
+- **A shot table on the range.** The new Table button lists every shot of the current session,
+  newest first, with all its numbers (ball and club speed, smash, carry, launch, direction, spin,
+  spin axis and club path) and an average row, without leaving the range. On a phone it's a sheet;
+  on a tablet it sits beside the scene so shots keep flying. Tap a row to view that shot on the range.
+
 ### Changed
 
 - **Bluetooth LE is schema 2 only** (#59). The app connects to a Pi whose Bluetooth serves only

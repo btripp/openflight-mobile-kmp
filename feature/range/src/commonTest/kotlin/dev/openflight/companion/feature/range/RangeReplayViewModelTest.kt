@@ -292,6 +292,53 @@ class RangeReplayViewModelTest {
         }
 
     @Test
+    fun theTableShowsTheCurrentSessionWhileOpenAndFollowsNewShots() =
+        runTest(scheduler) {
+            seedSession()
+            history.currentSessionId.value = "s1"
+            val viewModel = makeViewModel()
+
+            viewModel.uiState.test {
+                advanceUntilIdle()
+                assertThat(expectMostRecentItem().table).isNull()
+
+                viewModel.onEvent(DrivingRangeEvent.ShowTable(open = true))
+                val open = awaitUntil { it.table != null }
+                assertThat(open.table?.sessionId).isEqualTo("s1")
+                assertThat(open.table?.rows?.map { it.id }).isEqualTo(listOf("3", "2", "1"))
+                // The live range keeps going while the table is open.
+                assertThat(open.mode).isEqualTo(RangeMode.Live)
+
+                history.put("s1", listOf(storedShot(4), storedShot(3), storedShot(2, club = "7-iron"), storedShot(1)))
+                assertThat(
+                    awaitUntil { it.table?.rows?.size == 4 }
+                        .table
+                        ?.rows
+                        ?.first()
+                        ?.id,
+                ).isEqualTo("4")
+
+                viewModel.onEvent(DrivingRangeEvent.ShowTable(open = false))
+                awaitUntil { it.table == null }
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
+    fun beforeAnyConnectTheTableShowsTheNewestStoredSession() =
+        runTest(scheduler) {
+            history.put("old", listOf(storedShot(1, sessionId = "old")), startedAtEpochMillis = 1L)
+            history.put("new", listOf(storedShot(2, sessionId = "new")), startedAtEpochMillis = 2L)
+            val viewModel = makeViewModel()
+
+            viewModel.uiState.test {
+                viewModel.onEvent(DrivingRangeEvent.ShowTable(open = true))
+                assertThat(awaitUntil { it.table != null }.table?.sessionId).isEqualTo("new")
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
     fun theViewTransformIsKeptAndResetRestoresTheFollowCamera() =
         runTest(scheduler) {
             val viewModel = makeViewModel()

@@ -109,6 +109,14 @@ struct DrivingRangeContent: View {
                     Divider()
                 }
                 stage
+                // Tester request 2026-09-30: on an iPad the shot table sits beside the scene, so
+                // shots keep flying while it's open; it never takes more than 45% of the width.
+                if horizontalSizeClass == .regular, let table = state.table {
+                    Divider()
+                    RangeShotTableView(table: table, isPanel: true, send: send)
+                        .frame(width: min(Self.tableWidth, geometry.size.width * 0.45))
+                        .transition(.move(edge: .trailing))
+                }
                 // Plan F8f: on an iPad the quick settings sit beside the scene (and the shot list).
                 if showsQuickSettingsPanel {
                     Divider()
@@ -130,10 +138,29 @@ struct DrivingRangeContent: View {
                 .presentationDragIndicator(.visible)
                 .presentationBackground(Theme.bgCard)
         }
+        // On an iPhone the shot table is a sheet; a tapped row closes it and opens the shot.
+        .sheet(isPresented: tableSheet) {
+            if let table = state.table {
+                RangeShotTableView(table: table, isPanel: false, send: send)
+                    .presentationDetents([.fraction(0.7), .large])
+                    .presentationDragIndicator(.visible)
+                    .presentationBackground(Theme.bgCard)
+            }
+        }
     }
 
     /// The quick settings width beside the scene on an iPad.
     private static let quickSettingsWidth: CGFloat = 340
+
+    /// The shot table's width beside the scene on an iPad, at most.
+    private static let tableWidth: CGFloat = 560
+
+    private var tableSheet: Binding<Bool> {
+        Binding(
+            get: { state.table != nil && horizontalSizeClass != .regular },
+            set: { if !$0 { send(DrivingRangeEventShowTable(open: false)) } }
+        )
+    }
 
     private var showsQuickSettingsPanel: Bool {
         showsQuickSettings && horizontalSizeClass == .regular
@@ -340,6 +367,11 @@ struct DrivingRangeContent: View {
             } label: {
                 Label("History", systemImage: "clock.arrow.circlepath")
             }
+            Button {
+                send(DrivingRangeEventShowTable(open: state.table == nil))
+            } label: {
+                Label("Shot table", systemImage: "tablecells")
+            }
             if DrivingRangeUiStateKt.canReplay(state) {
                 Button {
                     send(DrivingRangeEventReplay.shared)
@@ -390,9 +422,26 @@ struct DrivingRangeContent: View {
                 replayButton
             }
 
+            tableButton
+
             quickSettingsButton
         }
         .fixedSize()
+    }
+
+    /// Tester request 2026-09-30: opens (or closes) the current session's shot table.
+    private var tableButton: some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                send(DrivingRangeEventShowTable(open: state.table == nil))
+            }
+        } label: {
+            circleIcon("tablecells")
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Shot table")
+        .accessibilityHint("Every shot of this session, with all its numbers")
+        .accessibilityIdentifier(RangeTestTags.shared.TABLE_BUTTON)
     }
 
     /// Plan F8f: the gear that opens (or, on an iPad, closes) the range quick settings.
