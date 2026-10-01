@@ -348,11 +348,11 @@ class DrivingRangeViewModel(
             }
 
             DrivingRangeEvent.NextShot -> {
-                stepReplay(1)
+                stepShot(1)
             }
 
             DrivingRangeEvent.PreviousShot -> {
-                stepReplay(-1)
+                stepShot(-1)
             }
 
             is DrivingRangeEvent.SetSpeed -> {
@@ -778,10 +778,24 @@ class DrivingRangeViewModel(
         prepare(shot)
     }
 
-    private fun stepReplay(delta: Int) {
-        val mode = browse.value.mode as? RangeMode.Replay ?: return
-        val target = (mode.index + delta).coerceIn(0, (replayShots.size - 1).coerceAtLeast(0))
-        if (target != mode.index) showReplayShot(target)
+    /** Replay moves through the session in order; the overlay moves the selection through its list. */
+    private fun stepShot(delta: Int) {
+        when (val mode = browse.value.mode) {
+            is RangeMode.Replay -> {
+                val target = (mode.index + delta).coerceIn(0, (replayShots.size - 1).coerceAtLeast(0))
+                if (target != mode.index) showReplayShot(target)
+            }
+
+            // See RangeBrowseState.canSelectPreviousShot: from no selection, Next picks #1.
+            is RangeMode.Overlay -> {
+                val browse = browse.value
+                browse.shots.getOrNull(browse.selectedIndex + delta)?.let { selectShot(it.id) }
+            }
+
+            RangeMode.Live -> {
+                Unit
+            }
+        }
     }
 
     /** Pause stops the auto-advance; play continues with the next shot (from the start after the last). */

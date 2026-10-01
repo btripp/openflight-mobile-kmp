@@ -4,7 +4,8 @@ import SwiftUI
 
 /// Plan F8b: the replay transport or the overlay's bar at the bottom of the scene, Android's
 /// `RangeBrowseBar`. Replay: Live, Prev, Play/Pause, Next, the position and the 0.5×/1×/2× speeds.
-/// Overlay: Live, "Replay session" (one session's overlay), and the club filter. Every button
+/// Overlay: Live, Prev, the selected shot's position, Next, "Replay session" (one session's
+/// overlay), and the club filter. Every button
 /// sends one of the shared `DrivingRangeEvent`s; the view model owns the logic.
 struct RangeBrowseBar: View {
     let browse: RangeBrowseState
@@ -71,6 +72,23 @@ struct RangeBrowseBar: View {
 
     @ViewBuilder
     private func overlayControls(_ mode: RangeModeOverlay) -> some View {
+        let count = browse.shots.count
+        let selected = Int(browse.selectedIndex)
+        RangeBarButton(
+            title: "Prev",
+            identifier: RangeTestTags.shared.PREVIOUS,
+            isEnabled: browse.canSelectPreviousShot
+        ) {
+            send(DrivingRangeEventPreviousShot.shared)
+        }
+        Text(selected >= 0 ? "\(selected + 1) / \(count)" : "– / \(count)")
+            .font(.of(.subheadline, weight: .semibold).monospacedDigit())
+            .foregroundStyle(Theme.cream)
+            .fixedSize()
+            .accessibilityIdentifier(RangeTestTags.shared.POSITION)
+        RangeBarButton(title: "Next", identifier: RangeTestTags.shared.NEXT, isEnabled: browse.canSelectNextShot) {
+            send(DrivingRangeEventNextShot.shared)
+        }
         if let sessionId = mode.sessionId {
             RangeBarButton(title: "Replay session", identifier: RangeTestTags.shared.REPLAY_SESSION) {
                 send(DrivingRangeEventStartReplay(sessionId: sessionId, index: 0))
