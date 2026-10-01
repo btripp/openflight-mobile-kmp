@@ -105,6 +105,20 @@ object RangeTestTags {
     /** The gear button in the controls row. */
     const val QUICK_SETTINGS = "range.quickSettings"
 
+    /** The shot table's button in the controls row (tester request 2026-09-30). */
+    const val TABLE_BUTTON = "range.table"
+
+    /** The shot table: a sheet over the scene on compact windows, a side panel on expanded ones. */
+    const val TABLE_PANEL = "range.table.panel"
+
+    /** The shot table's close button. */
+    const val TABLE_CLOSE = "range.table.close"
+
+    /** The shot table's Avg row. */
+    const val TABLE_AVERAGE = "range.table.average"
+
+    fun tableRow(id: String): String = "range.table.row.$id"
+
     /** The panel: a sheet over the scene on compact windows, a side panel on expanded ones. */
     const val QUICK_SETTINGS_PANEL = "range.quickSettings.panel"
 
