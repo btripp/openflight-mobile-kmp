@@ -24,6 +24,12 @@ tag, to test Bluetooth against a schema-2-only Pi; the next tagged release is `v
 
 ### Fixed
 
+- **A short break no longer splits a practice session.** Every reconnect to the Pi started a new
+  stored session, so switching apps, locking the screen or a Wi-Fi blip split one practice into
+  several. A reconnect to the same Pi over the same connection within 30 minutes of the last shot
+  now continues the session. If the Pi restarted during the gap and numbers its shots from 1
+  again, the app starts a new session instead of overwriting stored shots. (A session still ends
+  if the system closes the app.)
 - Settings › Audio call-outs: unchecking every field now keeps them off, instead of switching
   Carry and Ball speed back on (#75).
 - Practice no longer drops a new shot or brings back a deleted one when both happen at the same

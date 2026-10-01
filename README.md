@@ -157,9 +157,6 @@ Next:
 - [ ] Range: previous and next buttons in the overlay to step through its shots, as Replay has
 - [ ] Range: a shot table pane (every measured field, one row per shot) for the current session,
       without leaving the range
-- [ ] Find out why going from the range to another screen and back can start a new stored
-      session (each reconnect of the Pi link starts one), and keep one session while the app
-      stays connected
 - [ ] Estimated total and roll on Practice, Sessions, history and CSV, plus a "show total" toggle
 - [ ] Automatic conditions from location and Open-Meteo weather in the UI (the engine is done;
       the Bag screen only offers manual conditions so far)
