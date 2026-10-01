@@ -154,7 +154,6 @@ Done and on `main`:
 
 Next:
 
-- [ ] Range: previous and next buttons in the overlay to step through its shots, as Replay has
 - [ ] Range: a shot table pane (every measured field, one row per shot) for the current session,
       without leaving the range
 - [ ] Find out why going from the range to another screen and back can start a new stored
