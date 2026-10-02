@@ -38,7 +38,7 @@ ktor = "3.6.0"
 # Invariant 4 (module graph) as a build check: com.jraska.module.graph.assertion, plugin portal.
 module-graph-assert = "2.9.1"
 okio = "3.18.2"
-spotless = "8.10.2"
+spotless = "8.10.3"
 turbine = "1.2.1"
 androidx-compose-bom = "2026.09.00"
 androidx-lifecycle = "2.11.0"
