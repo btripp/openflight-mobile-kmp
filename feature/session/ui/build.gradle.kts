@@ -7,6 +7,7 @@ dependencies {
     // Its own shared feature module plus core modules only, never another feature.
     implementation(projects.feature.session)
     implementation(projects.core.designsystem)
+    implementation(projects.core.ui)
     implementation(projects.core.insights)
     implementation(projects.core.model)
     implementation(libs.androidx.lifecycle.runtime.compose)

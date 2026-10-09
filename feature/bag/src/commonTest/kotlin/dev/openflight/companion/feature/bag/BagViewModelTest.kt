@@ -80,6 +80,7 @@ class BagViewModelTest {
                 assertThat(sevenIron.avgCarryYards!!).isCloseTo(160.0, 1e-6)
                 assertThat(sevenIron.carryLabel).isEqualTo("160 yds")
                 assertThat(sevenIron.shotCountLabel).isEqualTo("5 shots")
+                assertThat(sevenIron.shapeLabel).isEqualTo("Mostly straight")
                 assertThat(sevenIron.gap?.flag).isEqualTo(GapFlag.TOO_TIGHT)
                 assertThat(sevenIron.gap?.label).isEqualTo("5 yds gap · tight")
                 assertThat(row(state, GolfClub.IRON_8)!!.gap).isNull()

@@ -3,12 +3,14 @@ package dev.openflight.companion.feature.session
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import dev.openflight.companion.core.data.ConditionsRepository
 import dev.openflight.companion.core.data.PiSessionRepository
 import dev.openflight.companion.core.data.SettingsRepository
 import dev.openflight.companion.core.data.ShotRepository
 import dev.openflight.companion.core.data.TransportType
 import dev.openflight.companion.core.insights.ClubChip
 import dev.openflight.companion.core.insights.ExportShot
+import dev.openflight.companion.core.insights.ShotDetailBuilder
 import dev.openflight.companion.core.insights.buildExportCsv
 import dev.openflight.companion.core.insights.buildShotsCsvFilename
 import dev.openflight.companion.core.insights.computeClubChips
@@ -28,6 +30,8 @@ import dev.openflight.companion.core.model.pi.ProfilesState
 import dev.openflight.companion.core.model.pi.ShotDetail
 import dev.openflight.companion.core.model.pi.TriggerStatus
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
@@ -39,6 +43,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -57,6 +62,9 @@ import kotlin.time.ExperimentalTime
  *
  * Plan R8f: delete and clear ask for confirmation, then show pending, done or failed
  * ([SessionUiState.action], a [SessionActionState]); the club tabs follow the server's club.
+ *
+ * A tapped shot opens its detail sheet ([SessionUiState.shotDetail]): its flight in the current
+ * [conditions], its shape and every metric.
  */
 @Suppress("TooManyFunctions") // One screen's intents; split by region below.
 @OptIn(ExperimentalTime::class)
@@ -64,11 +72,15 @@ class SessionViewModel(
     private val shots: ShotRepository,
     private val settings: SettingsRepository,
     private val piSession: PiSessionRepository,
+    conditions: ConditionsRepository,
     private val now: () -> String = { Clock.System.now().toString() },
+    computeDispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) : ViewModel() {
     /** The club tab and the selected shot change together, so one state never mixes old and new. */
     private val selection = MutableStateFlow(Selection(club = null, shotId = null, following = true))
     private val dispersion = DispersionCalculator()
+    private val detailId = MutableStateFlow<String?>(null)
+    private val detailBuilder = ShotDetailBuilder()
 
     /** The delete or clear in progress (plan R8f), and whether its request went to the Pi. */
     private val action = MutableStateFlow(ActionRecord())
@@ -90,7 +102,27 @@ class SessionViewModel(
 
     private val controls = combine(selection, action, serverClub, shots.connectionState, ::Controls)
 
-    val uiState: StateFlow<SessionUiState> =
+    private val shotDetailInput =
+        combine(detailId, shots.history, piView) { id, history, pi ->
+            when {
+                id == null -> null
+                pi.connected -> piDetailInput(id, pi.activeSession)
+                else -> localDetailInput(id, history, pi.details)
+            }
+        }.distinctUntilChanged()
+
+    /** The open sheet, flown off the main thread (a few simulations per shot). */
+    private val shotDetail =
+        combine(shotDetailInput, conditions.conditions, conditions.targetBearing, settings.units) {
+            input,
+            air,
+            bearing,
+            units,
+            ->
+            input?.let { detailBuilder.build(it, air, bearing, units) }
+        }.flowOn(computeDispatcher)
+
+    private val baseState =
         combine(shots.history, settings.units, controls, piView, piFlags) { history, units, control, pi, flags ->
             val picked = control.selection
             val base =
@@ -108,6 +140,7 @@ class SessionViewModel(
             val chart = dispersionState(points, base.selectedClub, units)
             base.copy(
                 units = units,
+                shots = base.shots.withShapes(points),
                 dispersion = chart,
                 selectedShot = selectedShotCard(picked.shotId, chart, base.shots),
                 showSimulateShot = flags.mockMode == true,
@@ -131,7 +164,10 @@ class SessionViewModel(
                         !pi.connected && control.connection != ConnectionState.Connected && base.hasShots
                     },
             )
-        }.stateIn(
+        }
+
+    val uiState: StateFlow<SessionUiState> =
+        combine(baseState, shotDetail) { state, detail -> state.copy(shotDetail = detail) }.stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
             initialValue = SessionUiState(),
@@ -163,6 +199,8 @@ class SessionViewModel(
         when (event) {
             is SessionEvent.SelectClub -> selectClub(event.club)
             is SessionEvent.SelectShot -> selectShot(event.id)
+            is SessionEvent.OpenShotDetail -> openShotDetail(event.id)
+            SessionEvent.CloseShotDetail -> detailId.value = null
             is SessionEvent.DeleteShot -> ifEditable { confirmDelete(event.id) }
             SessionEvent.ClearHistory -> ifEditable { confirmClear() }
             SessionEvent.ConfirmAction -> confirmAction()
@@ -187,6 +225,11 @@ class SessionViewModel(
     /** A tapped tab stops following the server's club until the club or the profile changes. */
     private fun selectClub(club: String?) {
         selection.value = Selection(club = club, shotId = null, following = false)
+    }
+
+    private fun openShotDetail(id: String) {
+        selectShot(id)
+        detailId.value = id
     }
 
     /** A shot from another club than the selected tab switches back to "All", so its dot shows. */

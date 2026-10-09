@@ -21,14 +21,15 @@ details from memory.
   and pure helpers. Their `commonMain` must not mention Compose; `verifyNoComposeInCommonMain`
   (run by `allTests`/`check`) enforces it.
 - `feature:<name>:ui` modules are Android-only Jetpack Compose (screens, routes, device UI
-  tests). `core:designsystem` is Android-only too.
+  tests). `core:designsystem` is Android-only too, and so is `core:ui`: domain-aware Compose
+  shared by several `feature:*:ui` modules (the shot detail sheet), built from `Of*` wrappers.
 
 ## Module graph (arrows point from a module to its dependencies; core never depends on feature/app)
 ```
 androidApp (Jetpack NavHost, permissions, launch extras, Koin start, app icon)
     ├──> feature:dashboard:ui | feature:calibration:ui | feature:range:ui
     │        feature:session:ui | feature:training:ui | feature:camera:ui | feature:settings:ui | feature:bag:ui
-    │        └──> its own feature:<name> + core:designsystem + core:* (never another feature)
+    │        └──> its own feature:<name> + core:designsystem (+ core:ui) + core:* (never another feature)
     └──> shared (KMP: initKoin, LaunchOptions, PreviewShotRepository)
 iosApp (SwiftUI, Xcode) ──> Shared.framework = shared, exporting core:model/data/insights/flight
                              + feature:* + KoinHelper/NativeViewModels bridge; AppIcon asset catalog
@@ -44,7 +45,7 @@ core:testing → fake repositories shared by VM tests (test-only, no app depends
 ```
 
 Current leaf `core:*` modules: `model`, `protocol`, `ble`, `network`, `socketio`, `data`,
-`database`, `flight`, `sensors`, `insights`, `designsystem`, `speech`, `location`, `geodata`,
+`database`, `flight`, `sensors`, `insights`, `designsystem`, `ui`, `speech`, `location`, `geodata`,
 `testing`. Current `feature:*` modules:
 `dashboard`, `calibration`, `range`, `session`, `training`, `camera`, `settings`, `bag` (each with a
 matching Android-only `feature:<name>:ui`).

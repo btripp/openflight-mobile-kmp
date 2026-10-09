@@ -233,7 +233,7 @@ class SessionHistoryScreenTest {
     }
 
     @Test
-    fun givenAPendingDelete_whenARowIsSwiped_thenNothingIsSent() {
+    fun givenAPendingDelete_whenARowIsSwiped_thenNoDeleteIsSent() {
         val delete = SessionAction.DeleteShot(previewRows.first().id, 2, "7-Iron")
         showDetail(twoProfiles.copy(action = SessionActionState.Pending(delete, SessionActionCopy.pending(delete))))
         composeRule.onNodeWithText("Deleting shot #2…").assertIsDisplayed()
@@ -243,6 +243,8 @@ class SessionHistoryScreenTest {
         composeRule.onNodeWithTag(row).performTouchInput { swipeLeft() }
         composeRule.waitForIdle()
 
-        assertEquals(emptyList(), detailEvents)
+        // The row is a plain tappable row while a delete is pending: a swipe may read as a tap
+        // (opening the shot's detail), but never as another delete.
+        assertEquals(emptyList(), detailEvents.filterIsInstance<SessionHistoryDetailEvent.DeleteShot>())
     }
 }

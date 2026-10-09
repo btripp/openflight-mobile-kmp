@@ -28,6 +28,7 @@ import dev.openflight.companion.core.model.pi.Profile
 import dev.openflight.companion.core.model.pi.ProfilesState
 import dev.openflight.companion.core.model.pi.SessionStats
 import dev.openflight.companion.core.model.pi.TriggerStatus
+import dev.openflight.companion.core.testing.FakeConditionsRepository
 import dev.openflight.companion.core.testing.FakePiSessionRepository
 import dev.openflight.companion.core.testing.FakeSettingsRepository
 import dev.openflight.companion.core.testing.FakeShotRepository
@@ -54,7 +55,15 @@ class SessionStatsViewModelTest {
     @BeforeTest
     fun setUp() {
         Dispatchers.setMain(UnconfinedTestDispatcher())
-        viewModel = SessionViewModel(shots, settings, piSession, now = { "2026-09-24T18:30:05.123Z" })
+        viewModel =
+            SessionViewModel(
+                shots,
+                settings,
+                piSession,
+                FakeConditionsRepository(),
+                now = { "2026-09-24T18:30:05.123Z" },
+                computeDispatcher = Dispatchers.Main,
+            )
     }
 
     @AfterTest

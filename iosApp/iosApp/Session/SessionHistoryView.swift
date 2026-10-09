@@ -256,6 +256,10 @@ struct SessionHistoryDetailContent: View {
                     ForEach(session.shots, id: \.id) { row in
                         HStack(spacing: 4) {
                             SessionShotRowView(row: row, units: session.units)
+                                .contentShape(Rectangle())
+                                .onTapGesture { send(SessionHistoryDetailEventOpenShotDetail(id: row.id)) }
+                                .accessibilityAddTraits(.isButton)
+                                .accessibilityHint("Shows this shot's flight and details")
                             // Plan F8d-B: fly this stored shot on the range, paused on it.
                             if let openRange, let sessionId, row.canFly {
                                 ViewOnRangeButton(iconOnly: true, identifier: RangeEntryTags.sessionShot(row.id)) {
@@ -292,6 +296,13 @@ struct SessionHistoryDetailContent: View {
             state.action,
             onConfirm: { send(SessionHistoryDetailEventConfirmAction.shared) },
             onCancel: { send(SessionHistoryDetailEventCancelAction.shared) }
+        )
+        .shotDetailSheet(
+            session.shotDetail,
+            onClose: { send(SessionHistoryDetailEventCloseShotDetail.shared) },
+            onViewOnRange: openRange.flatMap { open in
+                sessionId.map { id in { open(RangeTarget(sessionId: id, shotId: $0.id)) } }
+            }
         )
     }
 

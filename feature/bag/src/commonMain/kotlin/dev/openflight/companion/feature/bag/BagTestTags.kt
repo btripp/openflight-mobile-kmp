@@ -34,6 +34,8 @@ object BagTestTags {
     const val DETAIL_EMPTY = "bag.detail.empty"
     const val HISTOGRAM = "bag.detail.histogram"
     const val DISPERSION = "bag.detail.dispersion"
+    const val SHAPE_PATTERN = "bag.detail.shapePattern"
+    const val ROW_SHAPE = "bag.row.shape"
     const val RECENT = "bag.detail.recent"
     const val ESTIMATED = "bag.estimated"
 

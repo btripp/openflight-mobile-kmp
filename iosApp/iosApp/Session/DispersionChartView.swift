@@ -207,6 +207,8 @@ struct SelectedShotCardView: View {
     let onDelete: () -> Void
     /// Plan F8d-B: flies this shot on the range, paused on it; hidden if nil.
     var onViewOnRange: (() -> Void)?
+    /// Opens this shot's detail sheet (flight, shape and every metric); hidden if nil.
+    var onOpenDetail: (() -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -215,6 +217,13 @@ struct SelectedShotCardView: View {
                     .font(.of(.headline, weight: .semibold))
                     .lineLimit(2)
                 Spacer()
+                if let onOpenDetail {
+                    Button(action: onOpenDetail) { targetLabel("Details") }
+                        .font(.of(.subheadline, weight: .semibold))
+                        .tint(Theme.gold)
+                        .buttonStyle(.borderless)
+                        .accessibilityIdentifier("session.selected.details")
+                }
                 if let onViewOnRange {
                     ViewOnRangeButton(iconOnly: true, identifier: RangeEntryTags.selectedShot, action: onViewOnRange)
                 }

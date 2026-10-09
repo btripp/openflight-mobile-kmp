@@ -13,12 +13,14 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import dev.openflight.companion.core.data.ConditionsRepository
 import dev.openflight.companion.core.data.HistoryShot
 import dev.openflight.companion.core.data.SettingsRepository
 import dev.openflight.companion.core.data.ShotHistoryRepository
 import dev.openflight.companion.core.designsystem.OfTheme
 import dev.openflight.companion.core.designsystem.OfWindowClass
 import dev.openflight.companion.core.model.pi.ShotDetail
+import dev.openflight.companion.core.testing.FakeConditionsRepository
 import dev.openflight.companion.core.testing.FakeSettingsRepository
 import dev.openflight.companion.core.testing.FakeShotHistoryRepository
 import org.junit.After
@@ -80,6 +82,7 @@ class SessionHistoryTabletLayoutTest {
                     module {
                         single<ShotHistoryRepository> { history }
                         single<SettingsRepository> { settings }
+                        single<ConditionsRepository> { FakeConditionsRepository() }
                     },
                 )
             }.koin

@@ -42,7 +42,7 @@ private const val CLOCK_LENGTH = 8
 /**
  * One `ShotList.tsx` row, deleted by an end-to-start swipe (or TalkBack's "Delete" action). Without
  * [deletable] (over Bluetooth, plan R8e) it is a plain row with no delete gesture. With [onSelect]
- * (the live session screen, not the stored-session detail) a tap selects it on the dispersion chart
+ * a tap opens the shot's detail sheet (and, on the live screen, selects it on the dispersion chart)
  * either way; the [selected] row gets a gold outline.
  */
 @Composable
@@ -86,7 +86,7 @@ private fun ShotRowContent(
                 .then(
                     if (onSelect != null) {
                         Modifier
-                            .clickable(onClickLabel = "Show on chart", onClick = onSelect)
+                            .clickable(onClickLabel = "Show details", onClick = onSelect)
                             .semantics { this.selected = selected }
                     } else {
                         // One TalkBack stop per row, like the selectable rows.
@@ -101,7 +101,7 @@ private fun ShotRowContent(
             // Two lines, so large text wraps instead of cutting the club or the time off.
             OfText(text = shot.implementLabel ?: clubLabel(shot.club), role = OfTextRole.TitleSmall, maxLines = 2)
             OfText(
-                text = listOfNotNull(clockTime(shot.timestamp), shot.profileName).joinToString(" · "),
+                text = listOfNotNull(clockTime(shot.timestamp), shot.profileName, shot.shapeLabel).joinToString(" · "),
                 role = OfTextRole.BodySmall,
                 color = OfColorTokens.CreamDim,
                 maxLines = 2,

@@ -16,6 +16,7 @@ internal fun historyShot(
     carry: Double,
     sessionId: String = "s1",
     horizontal: Double? = 0.0,
+    spinAxis: Double? = 0.0,
     timestamp: String = "2026-09-25T10:00:${(nextShotId % 60).toString().padStart(2, '0')}",
 ): HistoryShot {
     val id = ++nextShotId
@@ -32,7 +33,7 @@ internal fun historyShot(
                 launchAngleVertical = 16.0,
                 launchAngleHorizontal = horizontal,
                 spinRpm = 6500.0,
-                spinAxisDeg = 0.0,
+                spinAxisDeg = spinAxis,
             ),
     )
 }

@@ -11,6 +11,20 @@ tag. Plain `v0.1.0` waits on the hardware test matrix on a real Raspberry Pi.
 
 ## [Unreleased]
 
+### Added
+
+- **Tap any shot to see all of it.** In the session list, a stored session and a club's recent
+  shots, tapping a shot opens a detail sheet with a mini ball flight you can play with: watch it
+  fly from behind the golfer (drag to orbit), from the top or from the side, and tap to replay.
+  The sheet names the shape (draw, fade, hook, slice, push, pull) and shows every number: carry,
+  total, offline, apex, descent, hang time, ball and club speed, smash, launch, direction, spin,
+  spin axis and club path. Anything estimated rather than measured is marked "est." and explained.
+  The selected-shot card on the session chart has a Details button for the same sheet.
+- **Shot shape at a glance.** Each club in the bag shows its typical shape ("Mostly fade",
+  "Leans left", "Mixed"), and a club's detail adds a Shot shape card: how many shots drew, faded or
+  went straight, with its last ten flights drawn over each other from above. Shot rows in the bag
+  and in sessions name each shot's shape too, so you don't have to open them one by one.
+
 ## [0.1.0-beta.4] - 2026-10-01
 
 iOS 0.1.0 (build 5) for TestFlight, and the signed Android APK 0.1.0 (versionCode 5). Covers the

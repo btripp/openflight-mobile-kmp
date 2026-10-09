@@ -102,13 +102,13 @@ class SessionTabletLayoutTest {
     }
 
     @Test
-    fun givenAnExpandedWindow_whenAShotRowIsTapped_thenSelectShotIsSent() {
+    fun givenAnExpandedWindow_whenAShotRowIsTapped_thenOpenShotDetailIsSent() {
         show(withShots, OfWindowClass.EXPANDED)
         val row = SessionTestTags.shot(previewRows[1].id)
         composeRule.onNode(hasScrollToNodeAction()).performScrollToNode(hasTestTag(row))
 
         composeRule.onNodeWithTag(row).performClick()
 
-        assertEquals(listOf<SessionEvent>(SessionEvent.SelectShot(previewRows[1].id)), events)
+        assertEquals(listOf<SessionEvent>(SessionEvent.OpenShotDetail(previewRows[1].id)), events)
     }
 }

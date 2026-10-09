@@ -320,6 +320,14 @@ private fun ClubRow(
                         role = OfTextRole.Label,
                         color = OfColorTokens.CreamMuted,
                     )
+                    row.shapeLabel?.let {
+                        OfText(
+                            text = it,
+                            role = OfTextRole.Label,
+                            color = OfColorTokens.CreamDim,
+                            modifier = Modifier.testTag(BagTestTags.ROW_SHAPE),
+                        )
+                    }
                 }
             }
             if (editMode) {

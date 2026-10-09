@@ -3,11 +3,13 @@ package dev.openflight.companion.feature.session
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import dev.openflight.companion.core.data.ConditionsRepository
 import dev.openflight.companion.core.data.HistorySession
 import dev.openflight.companion.core.data.HistoryShot
 import dev.openflight.companion.core.data.SettingsRepository
 import dev.openflight.companion.core.data.ShotHistoryRepository
 import dev.openflight.companion.core.insights.ExportShot
+import dev.openflight.companion.core.insights.ShotDetailBuilder
 import dev.openflight.companion.core.insights.buildExportCsv
 import dev.openflight.companion.core.insights.buildShotsCsvFilename
 import dev.openflight.companion.core.insights.computeDetailClubChips
@@ -15,6 +17,8 @@ import dev.openflight.companion.core.insights.computeDetailStats
 import dev.openflight.companion.core.insights.computeSwingSpeedStats
 import dev.openflight.companion.core.model.GolfClub
 import dev.openflight.companion.core.model.pi.ShotDetail
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
@@ -22,7 +26,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
@@ -44,7 +50,9 @@ class SessionHistoryDetailViewModel(
     private val sessionId: String,
     private val history: ShotHistoryRepository,
     settings: SettingsRepository,
+    conditions: ConditionsRepository,
     private val now: () -> String = { Clock.System.now().toString() },
+    computeDispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) : ViewModel() {
     private val filter = MutableStateFlow(Filter(profileId = null, club = null))
     private val action = MutableStateFlow<SessionActionState>(SessionActionState.Idle)
@@ -52,12 +60,37 @@ class SessionHistoryDetailViewModel(
     private val shots = history.shots(sessionId)
     private val session = history.sessions().map { sessions -> sessions.firstOrNull { it.id == sessionId } }
     private val heading = combine(session, history.currentSessionId, ::Heading)
+    private val detailId = MutableStateFlow<String?>(null)
+    private val detailBuilder = ShotDetailBuilder()
 
-    val uiState: StateFlow<SessionHistoryDetailUiState> =
+    /** The open shot detail sheet, flown off the main thread (a few simulations per shot). */
+    private val shotDetail =
+        combine(
+            combine(detailId, shots) { id, stored -> id?.let { piDetailInput(it, stored.map(HistoryShot::detail)) } }
+                .distinctUntilChanged(),
+            conditions.conditions,
+            conditions.targetBearing,
+            settings.units,
+        ) { input, air, bearing, units -> input?.let { detailBuilder.build(it, air, bearing, units) } }
+            .flowOn(computeDispatcher)
+
+    private val shapes = DispersionCalculator()
+
+    /** Off the main thread: naming each row's shape flies every stored shot (once; it's cached). */
+    private val baseState =
         combine(shots, settings.units, filter, heading, action) { stored, units, picked, head, action ->
             detailState(stored, picked, head).let {
-                it.copy(session = it.session.copy(units = units), action = action)
+                val points = shapes.piPoints(stored.map(HistoryShot::detail))
+                it.copy(
+                    session = it.session.copy(units = units, shots = it.session.shots.withShapes(points)),
+                    action = action,
+                )
             }
+        }.flowOn(computeDispatcher)
+
+    val uiState: StateFlow<SessionHistoryDetailUiState> =
+        combine(baseState, shotDetail) { state, detail ->
+            state.copy(session = state.session.copy(shotDetail = detail))
         }.stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
@@ -67,6 +100,7 @@ class SessionHistoryDetailViewModel(
     private val detailEffects = Channel<SessionEffect>(Channel.BUFFERED)
     val effects: Flow<SessionEffect> = detailEffects.receiveAsFlow()
 
+    @Suppress("CyclomaticComplexMethod") // A flat dispatch over the screen's intents, one line each.
     fun onEvent(event: SessionHistoryDetailEvent) {
         when (event) {
             is SessionHistoryDetailEvent.SelectClub -> {
@@ -81,6 +115,14 @@ class SessionHistoryDetailViewModel(
 
             is SessionHistoryDetailEvent.DeleteShot -> {
                 confirmDelete(event.id)
+            }
+
+            is SessionHistoryDetailEvent.OpenShotDetail -> {
+                detailId.value = event.id
+            }
+
+            SessionHistoryDetailEvent.CloseShotDetail -> {
+                detailId.value = null
             }
 
             SessionHistoryDetailEvent.ExportCsv -> {
