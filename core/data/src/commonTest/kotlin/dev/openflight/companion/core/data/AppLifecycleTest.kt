@@ -45,7 +45,7 @@ class AppLifecycleTest {
                 piControl = fakePiControlClient(),
                 piSession = piSession,
             )
-        val policy = LifecycleConnectionPolicy(lifecycle, shots, scope.backgroundScope)
+        val policy = LifecycleConnectionPolicy(lifecycle, settings.transport, shots, scope.backgroundScope)
 
         val socket: FakePiSocket get() = sockets.last()
     }
@@ -102,6 +102,26 @@ class AppLifecycleTest {
             assertThat(h.events.last()).isEqualTo("wifi(pi.local:8080).start")
             assertThat(h.sockets.map { it.host }).containsExactly("pi.local:8080", "pi.local:8080")
             assertThat(h.socket.connectCount).isEqualTo(1)
+        }
+
+    /** Tester report 2026-10-09: locking the phone dropped Bluetooth, and shots taken meanwhile were lost. */
+    @Test
+    fun aBluetoothConnectionStaysUpInTheBackground() =
+        runLifecycleTest { h ->
+            h.settings.transportState.value = TransportType.BLUETOOTH
+            h.lifecycle.value = AppLifecycleState.FOREGROUND
+            h.lifecycle.value = AppLifecycleState.BACKGROUND
+            h.lifecycle.value = AppLifecycleState.FOREGROUND
+
+            assertThat(h.events).containsExactly("ble.start")
+        }
+
+    @Test
+    fun bluetoothDoesNotConnectBeforeTheAppWasInTheForeground() =
+        runLifecycleTest { h ->
+            h.settings.transportState.value = TransportType.BLUETOOTH
+
+            assertThat(h.events).isEqualTo(emptyList<String>())
         }
 
     @Test

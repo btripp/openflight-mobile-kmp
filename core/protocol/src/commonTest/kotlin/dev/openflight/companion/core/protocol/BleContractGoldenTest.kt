@@ -197,6 +197,12 @@ class BleContractGoldenTest {
     fun theV2HelloAndSelectCommandsAreSortedV2Envelopes() {
         assertThat(SchemaV2Codec.encodeHello("r").decodeToString())
             .isEqualTo("""{"payload":{"client_schema_max":2},"request_id":"r","schema_version":2,"type":"hello"}""")
+        // Backend docs/ios-ble.md "Catch-up after a reconnect" (open-flight/openflight#297).
+        assertThat(SchemaV2Codec.encodeHello("r", "05dd37ec-49ed-596b-b1a4-953d54e4f239").decodeToString())
+            .isEqualTo(
+                """{"payload":{"client_schema_max":2,"last_event_id":"05dd37ec-49ed-596b-b1a4-953d54e4f239"},""" +
+                    """"request_id":"r","schema_version":2,"type":"hello"}""",
+            )
         assertThat(SchemaV2Codec.encodeSetActiveProfile("p1", "r").decodeToString())
             .isEqualTo(
                 """{"payload":{"profile_id":"p1"},"request_id":"r","schema_version":2,"type":"set_active_profile"}""",

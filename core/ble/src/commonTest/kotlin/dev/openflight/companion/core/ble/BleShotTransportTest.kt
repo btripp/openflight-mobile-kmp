@@ -237,6 +237,32 @@ class BleShotTransportTest {
             }
         }
 
+    /** Tester report 2026-10-09: shots taken while the phone was away were never caught up. */
+    @Test
+    fun aReconnectsHelloNamesTheLastShotSoTheCatchUpPiResendsWhatWasMissed() =
+        runTest {
+            val transport = transport()
+            val first = connect(transport)
+            first.notifyShot(makeBleFrames(shotJson("11111111-1111-1111-1111-111111111111"), sequence = 1))
+            runCurrent()
+
+            first.dropConnection()
+            val second = handshakeOnlyLink()
+            central.advertise(second)
+            advanceTimeBy(1.seconds)
+            runCurrent()
+
+            val hello = second.commandsWrittenTo(CONTROL_CHARACTERISTIC_UUID).single().jsonObject
+            assertThat(hello["payload"]).isEqualTo(
+                JsonObject(
+                    mapOf(
+                        "client_schema_max" to JsonPrimitive(2),
+                        "last_event_id" to JsonPrimitive("11111111-1111-1111-1111-111111111111"),
+                    ),
+                ),
+            )
+        }
+
     @Test
     fun explicitDisconnectGoesIdleAndDoesNotReconnect() =
         runTest {

@@ -200,7 +200,11 @@ class WifiShotTransport(
         try {
             httpClient
                 .prepareRequest(url) {
-                    headers { append(HttpHeaders.Accept, "text/event-stream") }
+                    headers {
+                        append(HttpHeaders.Accept, "text/event-stream")
+                        // A catch-up Pi (open-flight/openflight#297) resends this shot and the later ones.
+                        decoder.lastEventId?.let { append(LAST_EVENT_ID_HEADER, it) }
+                    }
                     timeout {
                         // An infinite request timeout: the request "completes" only when the stream
                         // ends, which can be much later than any fixed deadline. socketTimeoutMillis
@@ -328,6 +332,9 @@ class WifiShotTransport(
         const val STREAM_PATH_V2 = "/api/shots/stream?schema=2"
         const val CLUB_PATH = "/api/club"
         const val CALIBRATION_PATH = "/api/calibration/iwr6843/orientation"
+
+        /** The SSE reconnect header: names the newest shot this phone has. */
+        const val LAST_EVENT_ID_HEADER = "Last-Event-ID"
 
         private const val SHOT_REPLAY_BUFFER = 8
         private const val IDLE_TIMEOUT_MILLIS = 45_000L

@@ -149,9 +149,20 @@ object SchemaV2Codec {
         return OpenFlightJson.encodeToString(JsonElement.serializer(), sortKeys(envelope)).encodeToByteArray()
     }
 
-    /** `hello {client_schema_max: 2}`, the first write on the BLE control characteristic. */
-    fun encodeHello(requestId: String): ByteArray =
-        encodeCommand(TYPE_HELLO, requestId, JsonObject(mapOf("client_schema_max" to JsonPrimitive(SCHEMA_VERSION))))
+    /**
+     * `hello {client_schema_max: 2}`, the first write on the BLE control characteristic. With
+     * [lastEventId] (the newest shot the app has) a [FEATURE_SHOT_CATCH_UP] Pi resends that shot and
+     * every later one it holds (up to 20); a Pi without the feature ignores the key and replays its
+     * latest shot only.
+     */
+    fun encodeHello(
+        requestId: String,
+        lastEventId: String? = null,
+    ): ByteArray {
+        val payload = mutableMapOf<String, JsonElement>("client_schema_max" to JsonPrimitive(SCHEMA_VERSION))
+        if (lastEventId != null) payload["last_event_id"] = JsonPrimitive(lastEventId)
+        return encodeCommand(TYPE_HELLO, requestId, JsonObject(payload))
+    }
 
     fun encodeGetProfiles(requestId: String): ByteArray = encodeCommand(TYPE_GET_PROFILES, requestId)
 

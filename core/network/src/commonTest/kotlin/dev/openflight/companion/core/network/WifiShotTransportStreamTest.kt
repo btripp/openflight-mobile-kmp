@@ -106,6 +106,27 @@ class WifiShotTransportStreamTest {
             transport.disconnect()
         }
 
+    /** Tester report 2026-10-09: a reconnect names the last shot so a catch-up Pi resends the missed ones. */
+    @Test
+    fun aReconnectNamesTheLastShotInLastEventIdAndTheFirstConnectNamesNone() =
+        runTest {
+            val engine = streamEngine { sseShotChunk(EVENT_ID_1) }
+            val transport = wifiShotTransport(engine, testScheduler)
+
+            transport.shots.test {
+                transport.start()
+                awaitItem()
+                advanceTimeBy(1_100)
+                runCurrent()
+                cancelAndIgnoreRemainingEvents()
+            }
+            transport.disconnect()
+
+            val sent = engine.requestHistory.map { it.headers[WifiShotTransport.LAST_EVENT_ID_HEADER] }
+            assertThat(sent.first()).isNull()
+            assertThat(sent[1]).isEqualTo(EVENT_ID_1)
+        }
+
     @Test
     fun aMalformedShotPayloadSetsStateToARetryableError() =
         runTest {

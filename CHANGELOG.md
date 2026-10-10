@@ -25,6 +25,18 @@ tag. Plain `v0.1.0` waits on the hardware test matrix on a real Raspberry Pi.
   went straight, with its last ten flights drawn over each other from above. Shot rows in the bag
   and in sessions name each shot's shape too, so you don't have to open them one by one.
 
+### Fixed
+
+- **Shots taken while the phone was locked were lost over Bluetooth** (tester report 2026-10-09).
+  A Bluetooth connection now stays up while the app is in the background or the phone is locked, so
+  shots and deletions keep arriving. iOS uses the `bluetooth-central` background mode.
+- **Catch-up after a reconnect.** On reconnecting, the app names the last shot it has (Bluetooth
+  `hello`, and `Last-Event-ID` on the network stream). A Pi with reconnect catch-up
+  (open-flight/openflight#297) then resends the shots the phone missed, up to 20. An older Pi still
+  resends only its latest shot.
+- **A shot resent after a reconnect no longer appears in two History sessions.** It updates the copy
+  the phone already stored.
+
 ## [0.1.0-beta.4] - 2026-10-01
 
 iOS 0.1.0 (build 5) for TestFlight, and the signed Android APK 0.1.0 (versionCode 5). Covers the

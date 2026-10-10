@@ -187,6 +187,34 @@ class ShotHistoryRepositoryTest {
             assertThat(shots.size).isEqualTo(2)
         }
 
+    /**
+     * Tester report 2026-10-09: the Pi resends its latest shot on every reconnect (and a catch-up
+     * Pi resends up to 20), so after a new session started the phone filed shot #81 in both.
+     */
+    @Test
+    fun aReplayOfAShotStoredInAnEarlierSessionUpdatesThatCopyInsteadOfFilingASecond() =
+        runHistoryTest { h ->
+            val later = "2026-08-05T23:59:00"
+            h.nowMillis = 1_000L
+            h.repository.startSession(null, TransportType.BLUETOOTH)
+            h.repository.record(shot(81), null)
+            h.nowMillis = 1_000L + IDLE_GAP + 1_000L
+            h.repository.startSession(null, TransportType.BLUETOOTH)
+            h.repository.record(shot(81).copy(spinRpm = 4_614.0), null)
+            h.repository.record(shot(82).copy(timestamp = later), null)
+            h.repository.awaitWrites()
+
+            val first = h.repository.shots("session-1").first()
+            assertThat(first.map { it.eventId }).containsExactly(shotId(81))
+            assertThat(first.single().detail.spinRpm).isEqualTo(4_614.0)
+            assertThat(
+                h.repository
+                    .shots("session-2")
+                    .first()
+                    .map { it.eventId },
+            ).containsExactly(shotId(82))
+        }
+
     // endregion
 
     @Test

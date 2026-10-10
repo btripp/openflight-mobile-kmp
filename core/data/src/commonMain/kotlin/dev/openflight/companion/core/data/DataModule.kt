@@ -60,10 +60,16 @@ val dataModule: Module =
         }
         // Plan F14: the default the app uses; `shared` binds its Demo-mode switch in its place.
         single<ShotRepository> { get(DataBindings.Real) }
-        // R8d: foreground-only transports. The shell reports the lifecycle; the policy follows it.
+        // R8d: foreground-only transports, except a connected Bluetooth link. The shell reports the
+        // lifecycle; the policy follows it.
         single { AppLifecycle() }
         single {
-            LifecycleConnectionPolicy(get<AppLifecycle>().state, get(), CoroutineScope(Dispatchers.Unconfined))
+            LifecycleConnectionPolicy(
+                get<AppLifecycle>().state,
+                get<SettingsRepository>().transport,
+                get(),
+                CoroutineScope(Dispatchers.Unconfined),
+            )
         }
         // R6a: the Wi-Fi-only Socket.IO session API, sharing the HttpClient's engine.
         single<PiSessionRepository>(DataBindings.Real) {
