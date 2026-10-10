@@ -197,7 +197,8 @@ struct ShotFlightView: View {
             width: Float(size.width),
             height: Float(size.height),
             orbitDegrees: orbit,
-            padding: 20
+            padding: 20,
+            minMarkerGap: FlightPathProjector.shared.DEFAULT_MIN_MARKER_GAP
         )
         for guide in projected.guides {
             context.stroke(line(guide), with: .color(Theme.bgHover), lineWidth: 1)

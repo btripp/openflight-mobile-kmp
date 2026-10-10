@@ -99,23 +99,34 @@ struct ClubDetailContent: View {
                 if !state.recentShots.isEmpty {
                     Section("Recent shots") {
                         ForEach(state.recentShots, id: \.id) { shot in
+                            // Two lines (when and its shape, then the numbers), so nothing wraps
+                            // or truncates on an iPhone (matches Android's RecentShot).
                             HStack(spacing: 8) {
-                                Text(shot.timeLabel).font(.of(.caption)).foregroundStyle(Theme.creamDim)
-                                Spacer()
-                                Text(shot.carryLabel).foregroundStyle(Theme.gold).monospacedDigit()
-                                if let total = shot.totalLabel {
-                                    Text(total).font(.of(.caption)).monospacedDigit()
-                                    EstimatedBadge()
+                                VStack(alignment: .leading, spacing: 4) {
+                                    HStack(spacing: 8) {
+                                        Text(shot.timeLabel).font(.of(.caption)).foregroundStyle(Theme.creamDim)
+                                        if let shape = shot.shapeLabel {
+                                            Text(shape).font(.of(.caption, weight: .semibold)).foregroundStyle(Theme.cream)
+                                        }
+                                    }
+                                    .lineLimit(1)
+                                    HStack(spacing: 8) {
+                                        Text(shot.carryLabel).foregroundStyle(Theme.gold).monospacedDigit()
+                                        if let total = shot.totalLabel {
+                                            Text(total).font(.of(.caption)).monospacedDigit()
+                                            EstimatedBadge()
+                                        }
+                                        if let side = shot.sideLabel {
+                                            Text(side).font(.of(.caption)).foregroundStyle(Theme.creamDim)
+                                        }
+                                        if shot.possibleBadRead {
+                                            StatusPill(text: "Bad read?", color: Theme.danger)
+                                        }
+                                    }
+                                    .lineLimit(1)
+                                    .fixedSize(horizontal: false, vertical: true)
                                 }
-                                if let side = shot.sideLabel {
-                                    Text(side).font(.of(.caption)).foregroundStyle(Theme.creamDim)
-                                }
-                                if let shape = shot.shapeLabel {
-                                    Text(shape).font(.of(.caption)).foregroundStyle(Theme.cream)
-                                }
-                                if shot.possibleBadRead {
-                                    StatusPill(text: "Bad read?", color: Theme.danger)
-                                }
+                                Spacer(minLength: 0)
                                 if let openRange {
                                     ViewOnRangeButton(
                                         iconOnly: true,

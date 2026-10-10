@@ -270,6 +270,7 @@ private fun RecentShot(
     onOpen: () -> Unit,
     onViewOnRange: (() -> Unit)?,
 ) {
+    // Two lines (when and its shape, then the numbers), so the time never wraps on a phone.
     Row(
         modifier =
             Modifier
@@ -279,20 +280,24 @@ private fun RecentShot(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(OfSpacing.Sm),
     ) {
-        OfText(
-            text = row.timeLabel,
-            role = OfTextRole.BodySmall,
-            color = OfColorTokens.CreamDim,
-            modifier = Modifier.weight(1f),
-        )
-        OfText(text = row.carryLabel, role = OfTextRole.Body, color = OfColorTokens.Gold)
-        row.totalLabel?.let {
-            OfText(text = it, role = OfTextRole.BodySmall)
-            EstimatedBadge()
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(OfSpacing.Sm)) {
+                OfText(text = row.timeLabel, role = OfTextRole.BodySmall, color = OfColorTokens.CreamDim, maxLines = 1)
+                row.shapeLabel?.let { OfText(text = it, role = OfTextRole.BodySmall, color = OfColorTokens.Cream) }
+            }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(OfSpacing.Sm),
+            ) {
+                OfText(text = row.carryLabel, role = OfTextRole.Body, color = OfColorTokens.Gold)
+                row.totalLabel?.let {
+                    OfText(text = it, role = OfTextRole.BodySmall)
+                    EstimatedBadge()
+                }
+                row.sideLabel?.let { OfText(text = it, role = OfTextRole.BodySmall, color = OfColorTokens.CreamDim) }
+                if (row.possibleBadRead) OfPill(label = "Bad read?", tone = StatusTone.Negative)
+            }
         }
-        row.sideLabel?.let { OfText(text = it, role = OfTextRole.BodySmall, color = OfColorTokens.CreamDim) }
-        row.shapeLabel?.let { OfText(text = it, role = OfTextRole.BodySmall, color = OfColorTokens.Cream) }
-        if (row.possibleBadRead) OfPill(label = "Bad read?", tone = StatusTone.Negative)
         if (onViewOnRange != null) {
             OfTextButton(
                 text = "Range",

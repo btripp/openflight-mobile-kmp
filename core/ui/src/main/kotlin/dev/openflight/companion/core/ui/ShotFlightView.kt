@@ -142,7 +142,16 @@ private fun FlightCanvas(
                     }
                 }.pointerInput(Unit) { detectTapGestures(onTap = { onReplay() }) },
     ) {
-        val projected = FlightPathProjector.project(flight, view, size.width, size.height, orbit, PADDING.dp.toPx())
+        val projected =
+            FlightPathProjector.project(
+                flight,
+                view,
+                size.width,
+                size.height,
+                orbit,
+                PADDING.dp.toPx(),
+                minMarkerGap = MARKER_GAP.dp.toPx(),
+            )
         drawGround(projected)
         val labelStyle = TextStyle(color = OfColorTokens.CreamMuted, fontSize = 10.sp)
         projected.markers.forEach { marker ->
@@ -212,6 +221,9 @@ private fun ScreenPoint.offset(): Offset = Offset(x, y)
 private const val CANVAS_ASPECT = 1.6f
 private const val PADDING = 20
 private const val BALL_RADIUS = 5
+
+/** Distance markers closer than this are dropped, so their labels never overlap. */
+private const val MARKER_GAP = 22
 private const val ORBIT_DEGREES_PER_PX = 0.25f
 
 /** Plays the flight about three times faster than real time, kept between 1.2 and 2.5 s. */

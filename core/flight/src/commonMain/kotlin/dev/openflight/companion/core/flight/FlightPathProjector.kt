@@ -97,9 +97,10 @@ object FlightPathProjector {
         height: Float,
         orbitDegrees: Float = 0f,
         padding: Float = DEFAULT_PADDING,
+        minMarkerGap: Float = DEFAULT_MIN_MARKER_GAP,
     ): ProjectedFlight {
         val world = World.of(path)
-        val box = Box(width, height, padding)
+        val box = Box(width, height, padding, minMarkerGap)
         return when (view) {
             // From behind, the guides' near ends and the side view's ceiling sit beside or above the
             // low camera and would shrink the flight to a speck; they're drawn, clipped, not framed.
@@ -149,10 +150,12 @@ object FlightPathProjector {
         )
     }
 
+    /** [minMarkerGap] is in the same units as the box: pass a density-scaled value on Android. */
     private class Box(
         val width: Float,
         val height: Float,
         val padding: Float,
+        val minMarkerGap: Float = DEFAULT_MIN_MARKER_GAP,
     )
 
     /** The 3D scene in yards: the flight plus its ground references. */
@@ -182,7 +185,13 @@ object FlightPathProjector {
                 roll = roll.map(toScreen),
                 targetLine = targetLine.map(toScreen),
                 guides = guides.map { it.map(toScreen) },
-                markers = spaced(markers.map { (point, yards) -> FlightMarker(toScreen(point), yards) }),
+                markers =
+                    spaced(
+                        markers.map { (point, yards) ->
+                            FlightMarker(toScreen(point), yards)
+                        },
+                        box.minMarkerGap,
+                    ),
             )
         }
 
@@ -218,12 +227,15 @@ object FlightPathProjector {
         }
 
         /** Drops markers that would crowd the last one kept (perspective bunches them at the horizon). */
-        private fun spaced(markers: List<FlightMarker>): List<FlightMarker> {
+        private fun spaced(
+            markers: List<FlightMarker>,
+            minGap: Float,
+        ): List<FlightMarker> {
             val kept = mutableListOf<FlightMarker>()
             markers.forEach { marker ->
                 val last = kept.lastOrNull()?.position
                 val gap = last?.let { hypot(marker.position.x - it.x, marker.position.y - it.y) }
-                if (gap == null || gap >= MIN_MARKER_GAP) kept += marker
+                if (gap == null || gap >= minGap) kept += marker
             }
             return kept
         }
@@ -286,7 +298,9 @@ object FlightPathProjector {
     private fun normalized(vector: Vec3): Vec3 = vector / max(vector.length(), EPSILON)
 
     private const val DEFAULT_PADDING = 16f
-    private const val MIN_MARKER_GAP = 18f
+
+    /** Points on iOS; Android passes its own dp-scaled gap. */
+    const val DEFAULT_MIN_MARKER_GAP = 18f
     private const val EPSILON = 1e-6
     private const val HALF_TURN_DEGREES = 180.0
     private const val TARGET_LINE_OVERSHOOT = 1.08
