@@ -34,6 +34,8 @@ struct ShotCard: View {
     var onViewOnRange: (() -> Void)?
     /// Plan F14: a Demo mode shot, tagged "Demo" so it's never taken for a measurement.
     var demo = false
+    /// Opens the shot detail sheet (flight, shape and every metric); hidden if nil.
+    var onOpenDetail: (() -> Void)?
 
     private static let spinAdjusted = "spin-adjusted"
 
@@ -60,13 +62,22 @@ struct ShotCard: View {
                     }
                 }
             } actions: {
-                if let onViewOnRange {
-                    ViewOnRangeButton(identifier: DashboardTestTags.shared.VIEW_ON_RANGE, action: onViewOnRange)
-                } else {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.title2)
-                        .foregroundStyle(Theme.gold)
-                        .accessibilityHidden(true)
+                VStack(alignment: .trailing, spacing: 6) {
+                    if let onViewOnRange {
+                        ViewOnRangeButton(identifier: DashboardTestTags.shared.VIEW_ON_RANGE, action: onViewOnRange)
+                    } else {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.title2)
+                            .foregroundStyle(Theme.gold)
+                            .accessibilityHidden(true)
+                    }
+                    if let onOpenDetail {
+                        Button("Details", action: onOpenDetail)
+                            .font(.of(.subheadline, weight: .semibold))
+                            .tint(Theme.gold)
+                            .frame(minHeight: 44)
+                            .accessibilityIdentifier(DashboardTestTags.shared.OPEN_SHOT_DETAIL)
+                    }
                 }
             }
 
@@ -183,6 +194,8 @@ struct ClubChipsCard: View {
 struct ShotHistoryCard: View {
     let shots: [ShotEvent]
     var units: UnitSystem = .imperial
+    /// Opens a shot's detail sheet by its event id; rows aren't tappable if nil.
+    var onOpen: ((String) -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -199,6 +212,10 @@ struct ShotHistoryCard: View {
             LazyVStack(spacing: 0) {
                 ForEach(Array(shots.enumerated()), id: \.element.eventId) { index, shot in
                     PreviousShotRow(shot: shot, units: units)
+                        .contentShape(Rectangle())
+                        .onTapGesture { onOpen?(shot.eventId) }
+                        .accessibilityAddTraits(onOpen == nil ? [] : .isButton)
+                        .accessibilityIdentifier(DashboardTestTags.shared.previousShot(eventId: shot.eventId))
                         .transition(.opacity)
 
                     if index < shots.count - 1 {
@@ -356,7 +373,6 @@ private struct PreviousShotRow: View {
         }
         .padding(.vertical, 12)
         .accessibilityElement(children: .combine)
-        .accessibilityIdentifier("dashboard.previousShot")
     }
 }
 

@@ -46,6 +46,14 @@ sealed interface DashboardEvent {
         val granted: Boolean,
     ) : DashboardEvent
 
+    /** Opens the shot detail sheet (flight, shape, every metric) for one shot, by [ShotEvent.eventId]. */
+    data class OpenShotDetail(
+        val eventId: String,
+    ) : DashboardEvent
+
+    /** Closes the shot detail sheet. */
+    data object CloseShotDetail : DashboardEvent
+
     /** Plan F14: "Try without a Pi": turns Demo mode on, which connects a pretend Pi. */
     data object TryDemo : DashboardEvent
 
