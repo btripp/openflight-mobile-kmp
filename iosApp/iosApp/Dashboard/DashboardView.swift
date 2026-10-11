@@ -56,6 +56,11 @@ struct DashboardContent: View {
             }
         }
         .foregroundStyle(Theme.cream)
+        .shotDetailSheet(
+            live?.shotDetail,
+            onClose: { send(DashboardEventCloseShotDetail.shared) },
+            onViewOnRange: openRange.map { open in { open(.liveShot($0.id)) } }
+        )
     }
 
     // Plain `VStack`s (plan F8d-B): a handful of cards gain nothing from laziness, and scrolling a
@@ -154,7 +159,8 @@ struct DashboardContent: View {
                 units: live.units,
                 enrichment: live.latestEnrichment,
                 onViewOnRange: openRange.map { open in { open(.liveShot(live.latest.eventId)) } },
-                demo: connection.demo
+                demo: connection.demo,
+                onOpenDetail: { send(DashboardEventOpenShotDetail(eventId: live.latest.eventId)) }
             )
                 .id(live.latest.eventId)
                 .overlay { ShotFlash(trigger: shotFlashes) }
@@ -165,7 +171,7 @@ struct DashboardContent: View {
             }
 
             if !live.previous.isEmpty {
-                ShotHistoryCard(shots: live.previous, units: live.units)
+                ShotHistoryCard(shots: live.previous, units: live.units) { send(DashboardEventOpenShotDetail(eventId: $0)) }
                     .transition(.opacity)
             }
         } else {

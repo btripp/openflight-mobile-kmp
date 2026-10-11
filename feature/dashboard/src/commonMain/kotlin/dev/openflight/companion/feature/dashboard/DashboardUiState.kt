@@ -5,6 +5,7 @@ import dev.openflight.companion.core.data.SettingsRepository
 import dev.openflight.companion.core.data.TransportType
 import dev.openflight.companion.core.insights.ClubChip
 import dev.openflight.companion.core.insights.ClubStats
+import dev.openflight.companion.core.insights.ShotDetailState
 import dev.openflight.companion.core.insights.ShotEnrichment
 import dev.openflight.companion.core.insights.UnitSystem
 import dev.openflight.companion.core.model.ClubMenu
@@ -59,6 +60,8 @@ sealed interface DashboardUiState {
      *   by [ShotEvent.eventId]: confidence badges, carry range, spin-adjusted carry, spin source and
      *   player. A shot without one (Bluetooth, no Socket.IO link, or a shot the Pi never reported)
      *   has no entry; read it with [enrichmentFor] or [latestEnrichment].
+     * @property shotDetail the open shot detail sheet (the latest or a previous shot); `null` when
+     *   it's closed.
      */
     data class Live(
         override val connection: ConnectionPanelState,
@@ -70,6 +73,7 @@ sealed interface DashboardUiState {
         val enrichments: Map<String, ShotEnrichment> = emptyMap(),
         override val processing: ProcessingIndicator? = null,
         override val batteryWarning: PiBatteryWarning? = null,
+        val shotDetail: ShotDetailState? = null,
         override val piUpdate: PiUpdateNotice? = null,
     ) : DashboardUiState {
         val latestEnrichment: ShotEnrichment? get() = enrichments[latest.eventId]

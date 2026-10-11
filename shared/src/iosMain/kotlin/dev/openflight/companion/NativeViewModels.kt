@@ -87,10 +87,15 @@ val SessionViewModel.state: StateFlow<SessionUiState>
 val SessionViewModel.sideEffects: Flow<SessionEffect>
     get() = effects
 
-/** Plan R8h: the stored session list has no one-shot effects. */
+/** Plan R8h: the stored session list. */
 @NativeCoroutinesState
 val SessionHistoryViewModel.state: StateFlow<SessionHistoryUiState>
     get() = uiState
+
+/** The multi-session export's CSV ([SessionEffect.CsvReady]). */
+@NativeCoroutines
+val SessionHistoryViewModel.sideEffects: Flow<SessionEffect>
+    get() = effects
 
 @NativeCoroutinesState
 val SessionHistoryDetailViewModel.state: StateFlow<SessionHistoryDetailUiState>

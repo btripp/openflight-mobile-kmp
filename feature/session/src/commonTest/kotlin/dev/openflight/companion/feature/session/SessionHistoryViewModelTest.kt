@@ -53,6 +53,65 @@ class SessionHistoryViewModelTest {
     }
 
     @Test
+    fun pickedSessionsExportAsOneCsvOldestSessionFirst() =
+        runTest {
+            history.put("s1", listOf(stored(2, "2026-09-25T10:05:00"), stored(1, "2026-09-25T10:00:00")))
+            history.put("s2", listOf(stored(1, "2026-09-27T18:30:00", club = "7-iron")))
+            history.put("s3", listOf(stored(1, "2026-09-28T09:00:00")))
+            val viewModel = SessionHistoryViewModel(history, now = { "2026-10-11T09:30:00Z" })
+
+            viewModel.uiState.test {
+                awaitUntil { it.sessions.size == 3 }
+                viewModel.onEvent(SessionHistoryEvent.StartSelecting)
+                viewModel.onEvent(SessionHistoryEvent.ToggleSelected("s2"))
+                viewModel.onEvent(SessionHistoryEvent.ToggleSelected("s1"))
+                val picked = awaitUntil { it.selectedIds.size == 2 }
+                assertThat(picked.selecting).isTrue()
+                assertThat(picked.exportLabel).isEqualTo("Export 2 sessions · 3 shots")
+
+                viewModel.effects.test {
+                    viewModel.onEvent(SessionHistoryEvent.ExportSelected)
+                    val export = awaitItem() as SessionEffect.CsvReady
+                    assertThat(export.filename).isEqualTo("openflight-sessions-2026-10-11T09-30-00Z.csv")
+                    val rows = export.csv.lines().map { it.split(",").take(2) }
+                    assertThat(rows).isEqualTo(
+                        listOf(
+                            listOf("session", "shot_number"),
+                            listOf("2026-09-25 10:00", "1"),
+                            listOf("2026-09-25 10:00", "2"),
+                            listOf("2026-09-27 18:30", "1"),
+                        ),
+                    )
+                }
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
+    fun selectAllPicksEverySessionThenNoneAndStoppingDropsTheSelection() =
+        runTest {
+            history.put("s1", listOf(stored(1, "2026-09-25T10:00:00")))
+            history.put("s2", listOf(stored(1, "2026-09-27T18:30:00")))
+            val viewModel = SessionHistoryViewModel(history)
+
+            viewModel.uiState.testIgnoringRest {
+                awaitUntil { it.sessions.size == 2 }
+                viewModel.onEvent(SessionHistoryEvent.StartSelecting)
+                viewModel.onEvent(SessionHistoryEvent.ToggleSelectAll)
+                assertThat(awaitUntil { it.selectedIds.size == 2 }.allSelected).isTrue()
+
+                viewModel.onEvent(SessionHistoryEvent.ToggleSelectAll)
+                assertThat(awaitUntil { it.selectedIds.isEmpty() }.exportLabel).isEqualTo("Select sessions to export")
+
+                viewModel.onEvent(SessionHistoryEvent.ToggleSelected("s1"))
+                awaitUntil { it.selectedIds.size == 1 }
+                viewModel.onEvent(SessionHistoryEvent.StopSelecting)
+                val stopped = awaitUntil { !it.selecting }
+                assertThat(stopped.selectedIds).isEmpty()
+            }
+        }
+
+    @Test
     fun withNoStoredSessionsTheListIsEmptyButLoaded() =
         runTest {
             SessionHistoryViewModel(history).uiState.testIgnoringRest {

@@ -508,8 +508,9 @@ class SessionViewModelTest {
                 viewModel.onEvent(SessionEvent.OpenShotDetail(shotId(1)))
 
                 val opened = awaitUntil { it.shotDetail != null }
-                assertThat(opened.shotDetail!!.title).isEqualTo("Shot 1 · 7-Iron")
-                assertThat(opened.shotDetail!!.flight).isNotNull()
+                val detail = opened.shotDetail!!
+                assertThat(detail.title).isEqualTo("Shot 1 · 7-Iron")
+                assertThat(detail.flight).isNotNull()
                 assertThat(opened.selectedShot?.id).isEqualTo(shotId(1))
 
                 viewModel.onEvent(SessionEvent.CloseShotDetail)
