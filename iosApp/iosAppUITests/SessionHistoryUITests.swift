@@ -96,6 +96,32 @@ final class SessionHistoryUITests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any)[Self.current].exists)
     }
 
+    /// Select mode picks sessions for one CSV: Export names them, and is ready once one is ticked.
+    func testSelectModePicksSessionsToExportTogether() {
+        let app = Self.openHistory()
+        let select = app.buttons["session.history.select"]
+        XCTAssertTrue(select.waitForExistence(timeout: 5))
+        select.tap()
+
+        let export = app.descendants(matching: .any)["session.history.exportSelected"]
+        XCTAssertTrue(export.waitForExistence(timeout: 5))
+        XCTAssertTrue(export.label.contains("Select sessions to export"), "export: \(export.label)")
+        XCTAssertFalse(app.buttons["session.history.clearAll"].exists)
+
+        app.descendants(matching: .any)[Self.older].tap()
+        XCTAssertTrue(
+            export.waitForLabel(containing: "Export 1 session · 1 shot"),
+            "export: \(export.label)"
+        )
+        XCTAssertTrue(export.isEnabled)
+
+        app.buttons["session.history.selectAll"].tap()
+        XCTAssertTrue(export.waitForLabel(containing: "Export 2 sessions · 4 shots"), "export: \(export.label)")
+
+        select.tap()
+        XCTAssertTrue(export.waitForNonExistence(timeout: 5))
+    }
+
     static func openHistory(stuck: Bool = false) -> XCUIApplication {
         let app = SessionUITests.openSession(extraArguments: [stuck ? "--preview-history-stuck" : "--preview-history"])
         let open = app.buttons["session.history.open"]
@@ -121,5 +147,13 @@ final class SessionHistoryUITests: XCTestCase {
     private func waitForValue(_ element: XCUIElement, _ value: String) -> Bool {
         let expectation = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", value), object: element)
         return XCTWaiter.wait(for: [expectation], timeout: 5) == .completed
+    }
+}
+
+private extension XCUIElement {
+    /// Waits until this element's label contains [text].
+    func waitForLabel(containing text: String, timeout: TimeInterval = 5) -> Bool {
+        let predicate = NSPredicate(format: "label CONTAINS %@", text)
+        return XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: predicate, object: self)], timeout: timeout) == .completed
     }
 }

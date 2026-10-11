@@ -110,6 +110,43 @@ class SessionHistoryScreenTest {
     }
 
     @Test
+    fun whenSelectIsTapped_thenSelectModeStarts() {
+        showList(twoSessions)
+
+        composeRule.onNodeWithTag(SessionHistoryTestTags.SELECT).performClick()
+
+        assertEquals(listOf<SessionHistoryEvent>(SessionHistoryEvent.StartSelecting), events)
+    }
+
+    @Test
+    fun givenSelectMode_whenARowIsTapped_thenItTogglesInsteadOfOpening() {
+        showList(twoSessions.copy(selecting = true))
+
+        composeRule.onNodeWithTag(SessionHistoryTestTags.session("older")).performClick()
+
+        assertEquals(listOf<SessionHistoryEvent>(SessionHistoryEvent.ToggleSelected("older")), events)
+        assertEquals(emptyList(), opened)
+        composeRule.onNodeWithTag(SessionHistoryTestTags.CLEAR_ALL).assertDoesNotExist()
+    }
+
+    @Test
+    fun givenPickedSessions_whenExportIsTapped_thenOneExportIsAskedFor() {
+        showList(twoSessions.copy(selecting = true, selectedIds = setOf("newer", "older")))
+
+        composeRule.onNodeWithText("Export 2 sessions · 25 shots").assertIsDisplayed()
+        composeRule.onNodeWithTag(SessionHistoryTestTags.EXPORT_SELECTED).performClick()
+
+        assertEquals(listOf<SessionHistoryEvent>(SessionHistoryEvent.ExportSelected), events)
+    }
+
+    @Test
+    fun givenNothingPicked_whenShown_thenExportIsDisabled() {
+        showList(twoSessions.copy(selecting = true))
+
+        composeRule.onNodeWithTag(SessionHistoryTestTags.EXPORT_SELECTED).assertIsNotEnabled()
+    }
+
+    @Test
     fun whenClearAllIsTapped_thenTheViewModelIsAskedToConfirm() {
         showList(twoSessions)
 

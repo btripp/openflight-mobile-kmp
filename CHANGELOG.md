@@ -26,6 +26,9 @@ tag. Plain `v0.1.0` waits on the hardware test matrix on a real Raspberry Pi.
   and in sessions name each shot's shape too, so you don't have to open them one by one.
 - **Practice opens shots too.** The latest shot card has a Details button, and every previous
   shot on Practice opens the same detail sheet.
+- **Export several sessions at once.** History has a Select mode: tick the sessions you want (or
+  Select all) and export them as one CSV. A leading `session` column says which session each shot
+  came from, and shots are numbered from 1 within each session.
 
 ## [0.1.0-beta.4] - 2026-10-01
 
