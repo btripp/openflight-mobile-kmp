@@ -27,6 +27,11 @@ tag. Plain `v0.1.0` waits on the hardware test matrix on a real Raspberry Pi.
 - **Practice opens shots too.** The latest shot card has a Details button, and every previous
   shot on Practice opens the same detail sheet.
 
+### Fixed
+
+- Leaving a screen while a weather lookup is in flight now stops it, instead of letting it carry on
+  and report a "network error" after the screen is gone (#91).
+
 ## [0.1.0-beta.4] - 2026-10-01
 
 iOS 0.1.0 (build 5) for TestFlight, and the signed Android APK 0.1.0 (versionCode 5). Covers the

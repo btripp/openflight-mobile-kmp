@@ -369,4 +369,13 @@ private fun Throwable.toConnectionError(): ConnectionState.Error =
     }
 
 private suspend fun serverErrorMessage(response: HttpResponse): String? =
-    runCatching { response.body<ServerErrorBody>().error }.getOrNull()
+    try {
+        response.body<ServerErrorBody>().error
+    } catch (cancellation: CancellationException) {
+        throw cancellation
+    } catch (
+        // An unreadable error body only loses the server's message; the status still throws.
+        @Suppress("TooGenericExceptionCaught", "SwallowedException") unreadable: Exception,
+    ) {
+        null
+    }

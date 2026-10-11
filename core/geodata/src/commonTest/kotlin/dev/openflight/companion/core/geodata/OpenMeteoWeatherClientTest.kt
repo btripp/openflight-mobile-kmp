@@ -3,6 +3,7 @@ package dev.openflight.companion.core.geodata
 
 import assertk.assertThat
 import assertk.assertions.isEqualTo
+import assertk.assertions.isFalse
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isTrue
 import io.ktor.client.HttpClient
@@ -15,7 +16,11 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
 import io.ktor.serialization.kotlinx.json.json
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import okio.FileSystem
 import okio.Path
@@ -178,6 +183,26 @@ class OpenMeteoWeatherClientTest {
             val result = client.current(WeatherFixtures.DENVER_LAT, WeatherFixtures.DENVER_LON)
 
             assertThat(result).isEqualTo(WeatherResult.Failure(WeatherFailure.Timeout))
+        }
+
+    @Test
+    fun aCancelledRequestStopsTheCallerInsteadOfReportingAFailure() =
+        runTest {
+            // Issue #91: runCatching turned the cancellation into WeatherFailure.Network, so the
+            // cancelled caller carried on and could publish conditions after its scope was gone.
+            val engine = MockEngine { awaitCancellation() }
+            val client = clientWith(engine)
+            var carriedOnAfterCancel = false
+            val call =
+                launch {
+                    client.current(WeatherFixtures.DENVER_LAT, WeatherFixtures.DENVER_LON)
+                    carriedOnAfterCancel = true
+                }
+            runCurrent()
+
+            call.cancelAndJoin()
+
+            assertThat(carriedOnAfterCancel).isFalse()
         }
 
     @Test

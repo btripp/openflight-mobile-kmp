@@ -8,6 +8,7 @@ import io.ktor.client.request.request
 import io.ktor.client.statement.HttpResponse
 import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
+import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.Serializable
 
 /** `POST /api/shutdown`'s body (plan R5a, `src/openflight/server.py:1167`: `{"status":"shutting_down"}`). */
@@ -51,4 +52,13 @@ private data class PiControlErrorBody(
 )
 
 private suspend fun serverErrorMessage(response: HttpResponse): String? =
-    runCatching { response.body<PiControlErrorBody>().error }.getOrNull()
+    try {
+        response.body<PiControlErrorBody>().error
+    } catch (cancellation: CancellationException) {
+        throw cancellation
+    } catch (
+        // An unreadable error body only loses the server's message; the status still throws.
+        @Suppress("TooGenericExceptionCaught", "SwallowedException") unreadable: Exception,
+    ) {
+        null
+    }

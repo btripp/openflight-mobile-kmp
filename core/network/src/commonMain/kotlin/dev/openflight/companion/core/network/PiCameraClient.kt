@@ -11,6 +11,7 @@ import io.ktor.client.request.post
 import io.ktor.client.statement.bodyAsBytes
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
+import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.Serializable
 
 /**
@@ -71,7 +72,17 @@ class PiCameraClient(
         val url = EndpointUrl.require(host, "$REPLAYS_PATH/$replayId/prepare")
         val response = httpClient.post(url) { timeout { requestTimeoutMillis = PREPARE_TIMEOUT_MILLIS } }
         if (response.status != HttpStatusCode.OK) {
-            val message = runCatching { response.body<CameraErrorBody>().error }.getOrNull()
+            val message =
+                try {
+                    response.body<CameraErrorBody>().error
+                } catch (cancellation: CancellationException) {
+                    throw cancellation
+                } catch (
+                    // An unreadable error body only loses the server's message; the status still throws.
+                    @Suppress("TooGenericExceptionCaught", "SwallowedException") unreadable: Exception,
+                ) {
+                    null
+                }
             throw OpenFlightHttpError.UnexpectedStatus(response.status.value, message)
         }
         return response.body()
