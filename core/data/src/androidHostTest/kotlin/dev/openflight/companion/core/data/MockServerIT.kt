@@ -150,6 +150,7 @@ class MockServerIT {
                 deleteShot()
                 clearSession()
                 kioskDeleteAndClear()
+                missedWhileAway()
                 deviceCommands()
                 reconnect()
                 shutdown()
@@ -205,8 +206,14 @@ class MockServerIT {
             val observed =
                 routes.map { (method, path) ->
                     val status = checkNotNull(server.status(path, method)) { "$method $path: no answer" }
-                    assertThat(OpenFlightHttpError.UnexpectedStatus(status).isRouteAbsent, "$method $path -> $status")
-                        .isEqualTo(!hasSse)
+                    val absent = OpenFlightHttpError.UnexpectedStatus(status).isRouteAbsent
+                    // The calibration route ships in its own PR (open-flight/openflight#298), so a
+                    // fork backend may lack it; then it must read as absent (405), like on stock.
+                    if (path == WifiShotTransport.CALIBRATION_PATH && hasSse) {
+                        assertThat(absent, "$method $path -> $status").isEqualTo(status == HTTP_METHOD_NOT_ALLOWED)
+                    } else {
+                        assertThat(absent, "$method $path -> $status").isEqualTo(!hasSse)
+                    }
                     "$method $path $status"
                 }
             steps.pass("route contract (${if (hasSse) "fork: present" else "stock: absent"})", observed.joinToString())
@@ -451,6 +458,80 @@ class MockServerIT {
             }
         }
 
+        /**
+         * Tester report 2026-10-09: the app stops (the phone is away) while the kiosk takes a shot
+         * and deletes one the phone has. Every backend reports the deletion over Wi-Fi (Socket.IO's
+         * `session_state`). Only a Pi with catch-up (open-flight/openflight#297) resends the shot;
+         * on an older one the update notice must say that shots are missed.
+         */
+        private suspend fun missedWhileAway() {
+            repeat(KIOSK_SHOTS) {
+                val total = pi.sessionShots.value.size
+                pi.simulateShot()
+                await("a shot before leaving") { pi.sessionShots.value.size == total + 1 }
+            }
+            val had = pi.sessionShots.value.map { it.timestamp }
+            await("the phone has them") { storedTimestamps().containsAll(had) }
+            val toDelete = had.last()
+
+            shots.stop()
+            await("phone away") {
+                pi.linkState.value == PiLinkState.Idle && shots.connectionState.value == ConnectionState.Idle
+            }
+            kioskShotAndDelete(toDelete)
+
+            shots.start()
+            await("back") { shots.connectionState.value == ConnectionState.Connected }
+            await("the Pi's session after the kiosk") {
+                pi.sessionShots.value.none { it.timestamp == toDelete } &&
+                    pi.sessionShots.value.any { it.timestamp !in had }
+            }
+            val missed =
+                pi.sessionShots.value
+                    .first { it.timestamp !in had }
+                    .timestamp
+            // Over Wi-Fi every backend reports the deletion (Socket.IO `session_state`, or catch-up).
+            await("missed deletion leaves local history") { shots.history.value.none { it.timestamp == toDelete } }
+            await("missed deletion leaves stored history") { toDelete !in storedTimestamps() }
+            steps.pass("missed deletion arrives on reconnect", "timestamp=$toDelete")
+
+            val notice = shots.piUpdateNotice.value
+            assertThat(notice?.missesDeletions ?: false).isEqualTo(false)
+            if (notice?.missesShots == true) {
+                steps.skip("missed shot arrives on reconnect", "older Pi: the update notice says so ($notice)")
+            } else {
+                await("missed shot in local history") { shots.history.value.any { it.timestamp == missed } }
+                await("missed shot stored") { missed in storedTimestamps() }
+                steps.pass("missed shot arrives on reconnect", "timestamp=$missed")
+            }
+            steps.pass("update notice", notice?.toString() ?: "none: this Pi catches up")
+        }
+
+        /** Another client (the kiosk) takes a shot and deletes [timestamp] while the phone is away. */
+        private suspend fun kioskShotAndDelete(timestamp: String) {
+            val kiosk =
+                checkNotNull(socketIoPiSocketFactory(KtorWebSocketTransport(httpClient)).create(server.host, scope))
+            val heard = mutableListOf<String>()
+            val listening = kiosk.events.onEach { synchronized(heard) { heard += it.name } }.launchIn(scope)
+
+            fun heardCount(name: String) = synchronized(heard) { heard.count { it == name } }
+            try {
+                kiosk.connect()
+                await("kiosk connected") { kiosk.state.value is SocketConnectionState.Connected }
+                // Wait for the server's answer to each before going on: disconnecting drops an
+                // emit the server hasn't read yet.
+                val shotsBefore = heardCount("shot")
+                kiosk.emit("simulate_shot")
+                await("the kiosk's shot") { heardCount("shot") > shotsBefore }
+                val statesBefore = heardCount("session_state")
+                kiosk.emit("delete_shot", buildJsonObject { put("timestamp", timestamp) })
+                await("the kiosk's delete") { heardCount("session_state") > statesBefore }
+            } finally {
+                listening.cancel()
+                kiosk.disconnect()
+            }
+        }
+
         /** Every stored shot's timestamp, in every session. */
         private suspend fun storedTimestamps(): List<String> =
             history
@@ -569,6 +650,7 @@ class MockServerIT {
     private companion object {
         const val HTTP_OK = 200
         const val HTTP_NOT_FOUND = 404
+        const val HTTP_METHOD_NOT_ALLOWED = 405
         const val READY_TIMEOUT_MILLIS = 120_000L
         const val RUN_TIMEOUT_MILLIS = 240_000L
         const val STEP_TIMEOUT_MILLIS = 15_000L

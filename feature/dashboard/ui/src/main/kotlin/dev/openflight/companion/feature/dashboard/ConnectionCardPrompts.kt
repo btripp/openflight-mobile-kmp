@@ -31,6 +31,7 @@ import dev.openflight.companion.core.model.ConnectionProblem
 import dev.openflight.companion.core.model.GolfClub
 import dev.openflight.companion.core.model.pi.PiBatteryLevel
 import dev.openflight.companion.core.model.pi.PiBatteryWarning
+import dev.openflight.companion.core.model.pi.PiUpdateNotice
 
 // Plan R8d's additions to the dashboard's connection card.
 
@@ -87,6 +88,30 @@ internal fun BatteryWarningNotice(warning: PiBatteryWarning) {
         tone = if (warning.level == PiBatteryLevel.CRITICAL) StatusTone.Negative else StatusTone.InProgress,
         modifier = Modifier.testTag(DashboardTestTags.BATTERY_WARNING),
     )
+}
+
+/**
+ * Tester report 2026-10-09: the Pi's OpenFlight predates catch-up after a reconnect, so shots or
+ * deletions missed while the phone was away never arrive. Amber, like the low-battery notice: the
+ * app still works. Dismiss hides it for this launch.
+ */
+@Composable
+internal fun PiUpdateBanner(
+    notice: PiUpdateNotice,
+    onDismiss: () -> Unit,
+) {
+    OfNotice(
+        title = notice.title,
+        detail = notice.detail,
+        tone = StatusTone.InProgress,
+        modifier = Modifier.testTag(DashboardTestTags.PI_UPDATE),
+    ) {
+        OfTextButton(
+            text = "Dismiss",
+            onClick = onDismiss,
+            modifier = Modifier.testTag(DashboardTestTags.PI_UPDATE_DISMISS),
+        )
+    }
 }
 
 /** Plan R8d: tap-to-fill host suggestions; they fill the field, Go still connects. */

@@ -242,6 +242,37 @@ abstract class ShotHistoryDao {
     protected abstract suspend fun updateShot(shot: ShotEntity)
 
     /**
+     * Updates the stored copy of [shot] (the same `event_id`) when it sits in another of [world]'s
+     * sessions than [sessionId], and returns `true`; `false` when there is none, so the caller files
+     * [shot] itself. The Pi resends shots on reconnect (its latest one, or a catch-up of several),
+     * and a reconnect that started a new session must not file a second copy of a stored shot.
+     */
+    @Transaction
+    open suspend fun updateCopyInAnotherSession(
+        sessionId: String,
+        shot: ShotEntity,
+        world: String,
+    ): Boolean {
+        val stored =
+            shot.eventId
+                ?.let { findByEventIdIn(it, world) }
+                ?.takeIf { it.sessionId != sessionId }
+        stored?.let { updateShot(it.mergedWith(shot)) }
+        return stored != null
+    }
+
+    @Query(
+        """
+        SELECT shots.* FROM shots JOIN sessions ON sessions.id = shots.session_id
+        WHERE shots.event_id = :eventId AND sessions.source = :world ORDER BY shots.id LIMIT 1
+        """,
+    )
+    protected abstract suspend fun findByEventIdIn(
+        eventId: String,
+        world: String,
+    ): ShotEntity?
+
+    /**
      * A different shot (another timestamp) already holds [shot]'s number in [sessionId]: the Pi
      * numbers its shots afresh (it restarted). An update or replay of a stored shot keeps its timestamp.
      */

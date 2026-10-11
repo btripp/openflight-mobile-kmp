@@ -22,6 +22,7 @@ import dev.openflight.companion.core.model.ConnectionState
 import dev.openflight.companion.core.model.GolfClub
 import dev.openflight.companion.core.model.PhoneOrientationMeasurement
 import dev.openflight.companion.core.model.ShotEvent
+import dev.openflight.companion.core.model.pi.PiUpdateNotice
 import kotlinx.coroutines.flow.MutableStateFlow
 
 /** A [SettingsRepository] over plain state flows. */
@@ -155,6 +156,7 @@ class FakeShotRepository : ShotRepository {
     override val latestShot = MutableStateFlow<ShotEvent?>(null)
     override val activeClub = MutableStateFlow<GolfClub?>(null)
     override val supportsControls = MutableStateFlow(false)
+    override val piUpdateNotice = MutableStateFlow<PiUpdateNotice?>(null)
 
     val deleteShotCalls = mutableListOf<String>()
     val deleteShotByTimestampCalls = mutableListOf<String>()

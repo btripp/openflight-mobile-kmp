@@ -26,6 +26,34 @@ tag. Plain `v0.1.0` waits on the hardware test matrix on a real Raspberry Pi.
   and in sessions name each shot's shape too, so you don't have to open them one by one.
 - **Practice opens shots too.** The latest shot card has a Details button, and every previous
   shot on Practice opens the same detail sheet.
+- **Export several sessions at once.** History has a Select mode: tick the sessions you want (or
+  Select all) and export them as one CSV. A leading `session` column says which session each shot
+  came from, and shots are numbered from 1 within each session.
+- **The Dashboard says when the Pi needs an update.** A Pi without reconnect catch-up can't resend
+  what the phone missed while it was away. The Dashboard names what's lost (shots, deletions or
+  both) and suggests updating OpenFlight on the Pi. Dismiss hides the notice until the next launch.
+  The app keeps working with an older Pi either way.
+
+### Fixed
+
+- **Shots taken while the phone was locked were lost over Bluetooth** (tester report 2026-10-09).
+  A Bluetooth connection now stays up while the app is in the background or the phone is locked, so
+  shots and deletions keep arriving. iOS uses the `bluetooth-central` background mode.
+- **Catch-up after a reconnect.** On reconnecting, the app names the last shot it has (Bluetooth
+  `hello`, and `Last-Event-ID` on the network stream). A Pi with reconnect catch-up
+  (open-flight/openflight#297) then resends the shots the phone missed, up to 100, and the shots
+  deleted on the kiosk meanwhile. An older Pi still resends only its latest shot.
+- **A shot resent after a reconnect no longer appears in two History sessions.** It updates the copy
+  the phone already stored.
+
+### Fixed
+
+- **The range at the largest text sizes.** Prev, Play and Next (replay and overlay) no longer
+  slide off the bottom of the screen or get squeezed out of a narrow landscape scene; the metrics
+  scroll above them when they don't fit. On iOS, Ball speed and Carry now grow with your text size
+  instead of shrinking to the smallest numbers on screen, the "Driving Range Ready" card no longer
+  covers the metrics, and in landscape the controls share one row so the metrics stay clear. The
+  shot table shows one card per shot instead of cutting clubs and numbers short ("Dri…", "1…").
 
 ### Fixed
 

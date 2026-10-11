@@ -72,6 +72,7 @@ struct DashboardContent: View {
                 header
                 processingNotice
                 batteryNotice
+                piUpdateNotice
                 connectionCard
                 liveMetrics
             }
@@ -87,6 +88,7 @@ struct DashboardContent: View {
                     header
                     processingNotice
                     batteryNotice
+                    piUpdateNotice
                     liveMetrics
                 }
                 .padding(20)
@@ -129,6 +131,23 @@ struct DashboardContent: View {
                 tone: warning.level == .critical ? .problem : .warning
             )
             .accessibilityIdentifier(DashboardTestTags.shared.BATTERY_WARNING)
+        }
+    }
+
+    @ViewBuilder
+    private var piUpdateNotice: some View {
+        if let update = state.piUpdate {
+            // Tester report 2026-10-09: the Pi's OpenFlight predates catch-up after a reconnect.
+            // Amber like the battery notice (the app still works); Dismiss hides it for this launch.
+            VStack(alignment: .trailing, spacing: 4) {
+                NoticeRow(title: update.title, detail: update.detail, tone: .warning)
+                Button("Dismiss") { send(DashboardEventDismissPiUpdate.shared) }
+                    .buttonStyle(.bordered)
+                    .tint(Theme.gold)
+                    .accessibilityIdentifier(DashboardTestTags.shared.PI_UPDATE_DISMISS)
+            }
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier(DashboardTestTags.shared.PI_UPDATE)
         }
     }
 

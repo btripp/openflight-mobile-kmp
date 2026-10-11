@@ -54,6 +54,8 @@ private val DETAIL_HEADERS =
 /**
  * One exported row: an SSE/BLE shot, a Pi session row, or both joined on the timestamp.
  * [eventId] is `null` for a Pi session row the phone never received over SSE/BLE.
+ * [session] names the stored session the row came from in a multi-session export
+ * ([buildExportCsv] then adds a leading `session` column); `null` for a single-session export.
  */
 data class ExportShot(
     val eventId: String?,
@@ -69,6 +71,7 @@ data class ExportShot(
     val clubPathDeg: Double?,
     val spinAxisDeg: Double?,
     val detail: ShotDetail?,
+    val session: String? = null,
 ) {
     companion object {
         /** An SSE/BLE shot, with the Pi's detail for it when known. */
@@ -118,15 +121,23 @@ data class ExportShot(
 /** Builds the CSV document's full text for SSE/BLE shots only, including the header row, `\n`-joined. */
 fun buildShotsCsv(shots: List<ShotEvent>): String = buildExportCsv(shots.map { ExportShot.of(it, null) })
 
-/** Builds the CSV document's full text, including the header row, `\n`-joined. */
+/**
+ * Builds the CSV document's full text, including the header row, `\n`-joined. When any row names
+ * its [ExportShot.session] (a multi-session export), a leading `session` column is added and
+ * `shot_number` restarts at 1 for each session; otherwise the document is unchanged.
+ */
 fun buildExportCsv(shots: List<ExportShot>): String {
     val withDetail = shots.any { it.detail != null }
-    val headers = if (withDetail) CSV_HEADERS + DETAIL_HEADERS else CSV_HEADERS
+    val withSession = shots.any { it.session != null }
+    val headers =
+        (if (withSession) listOf(SESSION_HEADER) else emptyList()) +
+            (if (withDetail) CSV_HEADERS + DETAIL_HEADERS else CSV_HEADERS)
+    val numbers = shotNumbers(shots, withSession)
     val rows =
         shots.mapIndexed { index, shot ->
             val base =
                 listOf(
-                    (index + 1).toString(),
+                    numbers[index].toString(),
                     shot.eventId.orEmpty(),
                     shot.timestamp,
                     shot.club,
@@ -140,10 +151,29 @@ fun buildExportCsv(shots: List<ExportShot>): String {
                     shot.clubPathDeg.cell(),
                     shot.spinAxisDeg.cell(),
                 )
-            if (withDetail) base + detailCells(shot) else base
+            val cells = if (withDetail) base + detailCells(shot) else base
+            if (withSession) listOf(shot.session.orEmpty()) + cells else cells
         }
     return (listOf(headers) + rows).joinToString("\n") { row -> row.joinToString(",", transform = ::csvField) }
 }
+
+/** 1, 2, 3… down the list, or restarting at 1 whenever the session changes. */
+private fun shotNumbers(
+    shots: List<ExportShot>,
+    perSession: Boolean,
+): List<Int> {
+    var number = 0
+    var session: String? = null
+    return shots.map { shot ->
+        if (perSession && shot.session != session) {
+            session = shot.session
+            number = 0
+        }
+        ++number
+    }
+}
+
+private const val SESSION_HEADER = "session"
 
 /** The web export's session cells for one row, or empty cells without a detail. */
 private fun detailCells(shot: ExportShot): List<String> {
@@ -172,6 +202,12 @@ private fun Double?.cell(): String = this?.toString().orEmpty()
 fun buildShotsCsvFilename(nowIso: String): String {
     val stamp = nowIso.replace(Regex("[:.]"), "-")
     return "openflight-shots-$stamp.csv"
+}
+
+/** `openflight-sessions-<stamp>.csv`: several stored sessions in one export, like [buildShotsCsvFilename]. */
+fun buildSessionsCsvFilename(nowIso: String): String {
+    val stamp = nowIso.replace(Regex("[:.]"), "-")
+    return "openflight-sessions-$stamp.csv"
 }
 
 /** Mirrors the web UI's `csvValue` (`ShotList.tsx`): quotes and escapes only when a field needs it. */

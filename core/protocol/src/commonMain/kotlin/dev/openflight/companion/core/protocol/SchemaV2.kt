@@ -53,8 +53,9 @@ sealed interface SchemaV2Event {
 
 /**
  * The `hello` result: the negotiated schema, the Pi's features and its characteristic pair.
- * Features are detected, never required: `shot_catch_up` (and `last_event_id` catch-up) arrive in a
- * later Pi build, so a Pi without them is still a complete schema 2 Pi.
+ * Features are detected, never required: `shot_catch_up` (and `last_event_id` catch-up) and
+ * `deletion_catch_up` arrive in a later Pi build, so a Pi without them is still a complete schema 2
+ * Pi; the app only suggests updating it (`PiUpdateNotice`).
  */
 @Serializable
 data class HelloResult(
@@ -110,6 +111,9 @@ object SchemaV2Codec {
     /** An optional `hello` feature: the Pi can replay shots missed while disconnected (later Pi builds). */
     const val FEATURE_SHOT_CATCH_UP = "shot_catch_up"
 
+    /** An optional `hello` feature: catch-up also replays the `shot_deleted` events missed while disconnected. */
+    const val FEATURE_DELETION_CATCH_UP = "deletion_catch_up"
+
     const val EVENT_PROFILES = "profiles"
     const val EVENT_SESSION_CLEARED = "session_cleared"
     const val EVENT_SHOT_DELETED = "shot_deleted"
@@ -149,9 +153,20 @@ object SchemaV2Codec {
         return OpenFlightJson.encodeToString(JsonElement.serializer(), sortKeys(envelope)).encodeToByteArray()
     }
 
-    /** `hello {client_schema_max: 2}`, the first write on the BLE control characteristic. */
-    fun encodeHello(requestId: String): ByteArray =
-        encodeCommand(TYPE_HELLO, requestId, JsonObject(mapOf("client_schema_max" to JsonPrimitive(SCHEMA_VERSION))))
+    /**
+     * `hello {client_schema_max: 2}`, the first write on the BLE control characteristic. With
+     * [lastEventId] (the newest shot the app has) a [FEATURE_SHOT_CATCH_UP] Pi resends that shot and
+     * every later one it holds (up to 20); a Pi without the feature ignores the key and replays its
+     * latest shot only.
+     */
+    fun encodeHello(
+        requestId: String,
+        lastEventId: String? = null,
+    ): ByteArray {
+        val payload = mutableMapOf<String, JsonElement>("client_schema_max" to JsonPrimitive(SCHEMA_VERSION))
+        if (lastEventId != null) payload["last_event_id"] = JsonPrimitive(lastEventId)
+        return encodeCommand(TYPE_HELLO, requestId, JsonObject(payload))
+    }
 
     fun encodeGetProfiles(requestId: String): ByteArray = encodeCommand(TYPE_GET_PROFILES, requestId)
 

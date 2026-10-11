@@ -51,15 +51,42 @@ struct RangeMetricsOverlay: View {
         }
     }
 
+    /// Tester report (build 5, largest text): when the metrics don't fit above the transport (the
+    /// range's bottom stack is laid out first), they scroll instead of pushing Prev/Next off the
+    /// screen. At other sizes the first layout always fits, so nothing changes.
     private var spanningLayout: some View {
-        VStack(spacing: 12) {
-            primaryMetrics
-            Spacer(minLength: 20)
-            secondaryMetrics
+        ViewThatFits(in: .vertical) {
+            VStack(spacing: 12) {
+                primaryMetrics
+                Spacer(minLength: 20)
+                secondaryMetrics
+            }
+            .padding(spanningInsets)
+
+            ScrollView(.vertical) {
+                VStack(spacing: 12) {
+                    primaryMetrics
+                    secondaryMetrics
+                }
+                .padding(spanningInsets)
+            }
+            .scrollBounceBehavior(.basedOnSize)
+            .accessibilityIdentifier(RangeTestTags.shared.METRICS_SCROLL)
         }
-        .padding(.horizontal, isLandscape ? 28 : 16)
-        .padding(.top, isLandscape ? 16 : max(72, topInset))
-        .padding(.bottom, 14)
+    }
+
+    /// Clear of the range controls. In landscape they're one row beside the centered cards, except
+    /// at accessibility sizes, where they span the width and need the portrait inset too.
+    private var spanningInsets: EdgeInsets {
+        let top: CGFloat = if !isLandscape {
+            max(72, topInset)
+        } else if dynamicTypeSize.isAccessibilitySize {
+            topInset
+        } else {
+            16
+        }
+        let horizontal: CGFloat = isLandscape ? 28 : 16
+        return EdgeInsets(top: top, leading: horizontal, bottom: 14, trailing: horizontal)
     }
 
     /// A side panel on the trailing edge, so the tee-to-landing area in the middle stays clear.
@@ -308,6 +335,15 @@ private struct RangePrimaryMetric: View {
     let accessibilityIdentifier: String
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    /// Tester report (build 5): the value scales with Dynamic Type (it used to stay at 28/38 pt and
+    /// then shrink to fit beside its unit, so Ball speed and Carry were the smallest numbers on the
+    /// screen at AX5). It stops at twice its default size.
+    @ScaledMetric(relativeTo: .title) private var compactValueSize: CGFloat = 28
+    @ScaledMetric(relativeTo: .title) private var valueSize: CGFloat = 38
+
+    private var valueFontSize: CGFloat {
+        compact ? min(compactValueSize, 56) : min(valueSize, 76)
+    }
 
     var body: some View {
         VStack(spacing: 2) {
@@ -319,17 +355,20 @@ private struct RangePrimaryMetric: View {
                 .foregroundStyle(.white.opacity(0.72))
                 .lineLimit(dynamicTypeSize.isAccessibilitySize ? 1 : nil)
                 .minimumScaleFactor(dynamicTypeSize.isAccessibilitySize ? 0.5 : 1)
-            HStack(alignment: .firstTextBaseline, spacing: 4) {
-                Text(value)
-                    .font(.system(size: compact ? 28 : 38, weight: .heavy, design: .rounded))
-                    .monospacedDigit()
-                    .minimumScaleFactor(0.65)
-                    .lineLimit(1)
-                Text(unit)
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(.white.opacity(0.72))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.5)
+                // Tester report (build 5): the label stops growing at AX1, so "CARRY" (short
+                // enough not to shrink) doesn't make its card taller than Ball speed's.
+                .dynamicTypeSize(...DynamicTypeSize.accessibility1)
+            // At accessibility sizes the unit goes under the value, which keeps the card's width.
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(spacing: 0) {
+                    valueText
+                    unitText
+                }
+            } else {
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    valueText
+                    unitText
+                }
             }
         }
         // A zero minimum width lets Ball speed and Carry share the row equally at any text size.
@@ -343,6 +382,23 @@ private struct RangePrimaryMetric: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier(accessibilityIdentifier)
+    }
+
+    private var valueText: some View {
+        Text(value)
+            .font(.system(size: valueFontSize, weight: .heavy, design: .rounded))
+            .monospacedDigit()
+            .minimumScaleFactor(0.65)
+            .lineLimit(1)
+    }
+
+    private var unitText: some View {
+        Text(unit)
+            .font(.caption.weight(.bold))
+            .dynamicTypeSize(...DynamicTypeSize.accessibility1)
+            .foregroundStyle(.white.opacity(0.72))
+            .lineLimit(1)
+            .minimumScaleFactor(0.5)
     }
 }
 

@@ -19,6 +19,40 @@ class ShotCsvTest {
     }
 
     @Test
+    fun aMultiSessionExportLeadsWithTheSessionAndNumbersEachSessionFromOne() {
+        val first = ExportShot.of(shot(eventId = "00000000-0000-4000-8000-000000000001"), null)
+        val second = ExportShot.of(shot(eventId = "00000000-0000-4000-8000-000000000002"), null)
+        val third = ExportShot.of(shot(eventId = "00000000-0000-4000-8000-000000000003"), null)
+        val csv =
+            buildExportCsv(
+                listOf(
+                    first.copy(session = "2026-09-25 10:00"),
+                    second.copy(session = "2026-09-25 10:00"),
+                    third.copy(session = "2026-09-27 18:30"),
+                ),
+            )
+
+        val rows = csv.lines().map { it.split(",") }
+        assertThat(rows[0].take(2)).isEqualTo(listOf("session", "shot_number"))
+        assertThat(rows.drop(1).map { it.take(2) }).isEqualTo(
+            listOf(listOf("2026-09-25 10:00", "1"), listOf("2026-09-25 10:00", "2"), listOf("2026-09-27 18:30", "1")),
+        )
+    }
+
+    @Test
+    fun aSingleSessionExportHasNoSessionColumn() {
+        val csv = buildExportCsv(listOf(ExportShot.of(shot(eventId = "00000000-0000-4000-8000-000000000001"), null)))
+
+        assertThat(csv.lines().first().startsWith("shot_number,")).isEqualTo(true)
+    }
+
+    @Test
+    fun theSessionsFilenameIsFilesystemSafe() {
+        assertThat(buildSessionsCsvFilename("2026-10-11T09:30:00.123Z"))
+            .isEqualTo("openflight-sessions-2026-10-11T09-30-00-123Z.csv")
+    }
+
+    @Test
     fun oneRowPerShotNumberedFromOne() {
         val csv =
             buildShotsCsv(

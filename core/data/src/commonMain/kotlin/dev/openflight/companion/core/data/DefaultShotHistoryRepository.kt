@@ -275,6 +275,7 @@ internal class DefaultShotHistoryRepository(
         shot: ShotEntity,
     ) {
         val target = rolledOver[filed.session.id] ?: filed
+        if (dao.updateCopyInAnotherSession(target.session.id, shot, world)) return
         if (!target.continued || !dao.isNumberHeldByAnotherShot(target.session.id, shot)) {
             dao.upsert(target.session, shot)
             return

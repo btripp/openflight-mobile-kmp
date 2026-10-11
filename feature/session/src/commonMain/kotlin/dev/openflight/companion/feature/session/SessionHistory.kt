@@ -11,13 +11,32 @@ import dev.openflight.companion.core.data.TransportType
  * @property isPersistent `false` when the database couldn't be opened and history lasts only until
  *   the app quits; the screen says so.
  * @property action "Clear all history", from its confirmation to its outcome (plan R8f).
+ * @property selecting the list is picking sessions to export together; a row tap toggles it.
+ * @property selectedIds the sessions picked for the export (only ones still listed).
  */
 data class SessionHistoryUiState(
     val loaded: Boolean = false,
     val sessions: List<SessionHistoryRow> = emptyList(),
     val isPersistent: Boolean = true,
     val action: SessionActionState = SessionActionState.Idle,
-)
+    val selecting: Boolean = false,
+    val selectedIds: Set<String> = emptySet(),
+) {
+    val selectedShotCount: Int get() = sessions.filter { it.id in selectedIds }.sumOf { it.shotCount }
+
+    val allSelected: Boolean get() = sessions.isNotEmpty() && sessions.all { it.id in selectedIds }
+
+    /** Export's label: "Export 3 sessions · 42 shots"; "Select sessions to export" with none picked. */
+    val exportLabel: String
+        get() =
+            when (val count = selectedIds.size) {
+                0 -> "Select sessions to export"
+                1 -> "Export 1 session · ${shotsLabel(selectedShotCount)}"
+                else -> "Export $count sessions · ${shotsLabel(selectedShotCount)}"
+            }
+
+    private fun shotsLabel(count: Int) = if (count == 1) "1 shot" else "$count shots"
+}
 
 /**
  * One past session.
@@ -63,6 +82,9 @@ data class SessionHistoryRow(
     }
 }
 
+/** The history list's select-mode intents (picking sessions to export together). */
+sealed interface SessionHistorySelectionEvent : SessionHistoryEvent
+
 /** Intents from the history list. */
 sealed interface SessionHistoryEvent {
     /** Asks to delete every stored session: [SessionHistoryUiState.action] becomes a confirmation. */
@@ -75,6 +97,27 @@ sealed interface SessionHistoryEvent {
     data object RetryAction : SessionHistoryEvent
 
     data object DismissAction : SessionHistoryEvent
+
+    /** Starts picking sessions to export together. */
+    data object StartSelecting : SessionHistorySelectionEvent
+
+    /** Stops picking, dropping the selection. */
+    data object StopSelecting : SessionHistorySelectionEvent
+
+    /** Adds or removes one session from the export. */
+    data class ToggleSelected(
+        val sessionId: String,
+    ) : SessionHistorySelectionEvent
+
+    /** Picks every listed session, or none when they all are already. */
+    data object ToggleSelectAll : SessionHistorySelectionEvent
+
+    /**
+     * Builds one CSV of the picked sessions' shots, oldest session first, with a leading
+     * `session` column; the result arrives as [SessionEffect.CsvReady]. The selection is kept, so
+     * iOS can prepare its share link ahead of the tap.
+     */
+    data object ExportSelected : SessionHistorySelectionEvent
 }
 
 /** One profile's chip on a stored session's detail: its id, name and shot count. */

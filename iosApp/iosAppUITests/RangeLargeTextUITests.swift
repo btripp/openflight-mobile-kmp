@@ -57,14 +57,54 @@ final class RangeLargeTextUITests: XCTestCase {
         }
     }
 
+    /// Tester report (build 5, "Largest text size: layout issues appeared primarily in Range"): at
+    /// AX5 the replay transport was pushed below the screen, so Prev and Next couldn't be reached,
+    /// in portrait and in landscape. It now stays on screen, with Ball speed and Carry above it.
+    func testReplayTransportStaysOnScreenAtAccessibilityText() {
+        let app = launchRange(size: "UICTContentSizeCategoryAccessibilityXXXL", extra: ["--preview-history"])
+        app.buttons["range.moreControls"].tap()
+        XCTAssertTrue(app.buttons["History"].waitForExistence(timeout: 5))
+        app.buttons["History"].tap()
+        let replay = app.buttons["range.session.preview-current.replay"]
+        XCTAssertTrue(replay.waitForExistence(timeout: 5))
+        replay.tap()
+        XCTAssertTrue(app.buttons["range.previous"].waitForExistence(timeout: 10))
+        attachScreenshot(named: "range-ax5-replay", of: app)
+        assertTransportOnScreen(in: app)
+
+        XCUIDevice.shared.orientation = .landscapeLeft
+        defer { XCUIDevice.shared.orientation = .portrait }
+        sleep(2)
+        attachScreenshot(named: "range-ax5-replay-landscape", of: app)
+        assertTransportOnScreen(in: app)
+    }
+
     // MARK: Helpers
 
-    private func launchRange(size: String) -> XCUIApplication {
+    private func assertTransportOnScreen(in app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line) {
+        let screen = app.windows.firstMatch.frame
+        for identifier in ["range.live", "range.previous", "range.playPause", "range.next"] {
+            let control = app.buttons[identifier]
+            XCTAssertTrue(control.isHittable, "\(identifier) not tappable", file: file, line: line)
+            XCTAssertTrue(
+                screen.contains(control.frame),
+                "\(identifier) off screen: \(control.frame) in \(screen)",
+                file: file,
+                line: line
+            )
+        }
+        for identifier in ["range.ballSpeed", "range.carry"] {
+            let frame = element(identifier, in: app).frame
+            XCTAssertTrue(screen.contains(frame), "\(identifier) cut off: \(frame) in \(screen)", file: file, line: line)
+        }
+    }
+
+    private func launchRange(size: String, extra: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = [
             "--ui-testing", "--preview-shot", "--range-mode",
             "-UIPreferredContentSizeCategoryName", size,
-        ]
+        ] + extra
         app.launch()
         XCTAssertTrue(app.buttons["range.exit"].waitForExistence(timeout: 15), size)
         return app

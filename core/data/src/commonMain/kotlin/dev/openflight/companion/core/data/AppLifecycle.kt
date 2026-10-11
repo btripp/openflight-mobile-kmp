@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
@@ -37,32 +38,38 @@ class AppLifecycle {
 }
 
 /**
- * The shared connection policy (plan R8d): every transport runs only while the app is in the
- * foreground. On [AppLifecycleState.BACKGROUND] it stops [shots], which disconnects the SSE/BLE
- * transport and the Pi's Socket.IO session (and with it the camera's host); any delete or clear
- * still waiting for the Pi fails with its "connection dropped" outcome. On
- * [AppLifecycleState.FOREGROUND] it starts them again, reconnecting to the same settings.
+ * The shared connection policy (plan R8d): transports run while the app is in the foreground. On
+ * [AppLifecycleState.BACKGROUND] it stops [shots], which disconnects the SSE transport and the Pi's
+ * Socket.IO session (and with it the camera's host); any delete or clear still waiting for the Pi
+ * fails with its "connection dropped" outcome. On [AppLifecycleState.FOREGROUND] it starts them
+ * again, reconnecting to the same settings.
+ *
+ * Bluetooth is the exception (tester report 2026-10-09): once connected in the foreground it stays
+ * up in the background (iOS `bluetooth-central` mode), so a locked phone keeps receiving shots and
+ * deletes instead of reconnecting to the Pi's latest shot only. It still never starts in the background.
  *
  * [scope] should run on the thread the lifecycle is reported on (production: an unconfined scope,
  * so [ShotRepository.start]/[ShotRepository.stop] run on the main thread that reported the change).
  */
 class LifecycleConnectionPolicy(
     private val lifecycle: Flow<AppLifecycleState>,
+    private val transport: Flow<TransportType>,
     private val shots: ShotRepository,
     private val scope: CoroutineScope,
 ) {
     private var job: Job? = null
 
-    /** Starts following [lifecycle]. Idempotent. */
+    /** Starts following [lifecycle] and [transport]. Idempotent. */
     fun start() {
         if (job?.isActive == true) return
         job =
             scope.launch(start = CoroutineStart.UNDISPATCHED) {
-                lifecycle.distinctUntilChanged().collect { state ->
-                    when (state) {
-                        AppLifecycleState.FOREGROUND -> shots.start()
-                        AppLifecycleState.BACKGROUND -> shots.stop()
-                    }
+                var running = false
+                combine(lifecycle, transport, ::Pair).distinctUntilChanged().collect { (state, type) ->
+                    val run = state == AppLifecycleState.FOREGROUND || (running && type == TransportType.BLUETOOTH)
+                    if (run && !running) shots.start()
+                    if (!run && running) shots.stop()
+                    running = run
                 }
             }
     }

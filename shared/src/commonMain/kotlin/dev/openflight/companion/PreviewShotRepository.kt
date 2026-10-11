@@ -9,6 +9,7 @@ import dev.openflight.companion.core.model.ConnectionState
 import dev.openflight.companion.core.model.GolfClub
 import dev.openflight.companion.core.model.PhoneOrientationMeasurement
 import dev.openflight.companion.core.model.ShotEvent
+import dev.openflight.companion.core.model.pi.PiUpdateNotice
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -31,6 +32,7 @@ internal class PreviewShotRepository(
     override val latestShot: StateFlow<ShotEvent?> = MutableStateFlow(shots.firstOrNull())
     override val activeClub: StateFlow<GolfClub?> = MutableStateFlow(null)
     override val supportsControls: StateFlow<Boolean> = MutableStateFlow(true)
+    override val piUpdateNotice: StateFlow<PiUpdateNotice?> = MutableStateFlow(null)
 
     override fun start() = Unit
 

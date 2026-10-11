@@ -9,6 +9,7 @@ import assertk.assertions.hasSize
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
+import assertk.assertions.isNotNull
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
 import dev.openflight.companion.core.model.ClubSelection
@@ -17,6 +18,8 @@ import dev.openflight.companion.core.model.GolfClub
 import dev.openflight.companion.core.model.ShotEvent
 import dev.openflight.companion.core.model.pi.DeletionState
 import dev.openflight.companion.core.model.pi.PiLinkState
+import dev.openflight.companion.core.model.pi.PiUpdateNotice
+import dev.openflight.companion.core.protocol.SchemaV2Codec
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
@@ -232,6 +235,57 @@ class ShotRepositoryTest {
 
             assertThat(h.repository.supportsControls.value).isTrue()
             assertThat(h.repository.activeClub.value).isEqualTo(GolfClub.IRON_7)
+        }
+
+    // endregion
+
+    // region Pi update notice (tester report 2026-10-09)
+
+    @Test
+    fun aPiThatReportsNoCatchUpIsSuggestedAnUpdate() =
+        runRepositoryTest { h ->
+            assertThat(h.repository.piUpdateNotice.value).isNull()
+
+            // A Pi from before open-flight/openflight#297 (the tester's): hello lists neither.
+            h.ble.piFeatures.value = setOf("provisional_shots", "shot_deleted", "club")
+
+            assertThat(h.repository.piUpdateNotice.value)
+                .isEqualTo(PiUpdateNotice(missesShots = true, missesDeletions = true))
+        }
+
+    @Test
+    fun aPiWithShotCatchUpButNotDeletionCatchUpIsSuggestedAnUpdateForDeletions() =
+        runRepositoryTest { h ->
+            h.ble.piFeatures.value = setOf(SchemaV2Codec.FEATURE_SHOT_CATCH_UP)
+
+            assertThat(h.repository.piUpdateNotice.value)
+                .isEqualTo(PiUpdateNotice(missesShots = false, missesDeletions = true))
+        }
+
+    @Test
+    fun anUpToDatePiGetsNoNotice() =
+        runRepositoryTest { h ->
+            h.ble.piFeatures.value = setOf(SchemaV2Codec.FEATURE_SHOT_CATCH_UP, SchemaV2Codec.FEATURE_DELETION_CATCH_UP)
+
+            assertThat(h.repository.piUpdateNotice.value).isNull()
+        }
+
+    @Test
+    fun theNoticeBelongsToTheConnectedPiAndGoesWithIt() =
+        runRepositoryTest { h ->
+            h.ble.piFeatures.value = emptySet()
+            assertThat(h.repository.piUpdateNotice.value).isNotNull()
+
+            // Another transport is another Pi, unknown until it reports its features.
+            h.settings.setTransport(TransportType.WIFI)
+            assertThat(h.repository.piUpdateNotice.value).isNull()
+
+            // Over Wi-Fi the Pi's Socket.IO session reports deletions; only shots can be missed.
+            h.wifi.piFeatures.value = emptySet()
+            assertThat(h.repository.piUpdateNotice.value)
+                .isEqualTo(PiUpdateNotice(missesShots = true, missesDeletions = false))
+            h.repository.stop()
+            assertThat(h.repository.piUpdateNotice.value).isNull()
         }
 
     // endregion

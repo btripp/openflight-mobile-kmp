@@ -87,9 +87,10 @@ private fun lowercaseUuid(): String = Uuid.random().toString().lowercase()
  * single-threaded (the reference is `@MainActor`). The platform factories supply one.
  *
  * Platform notes:
- * - Foreground-only like the reference: no CoreBluetooth state restoration and no
- *   `bluetooth-central` background mode (Kable's `CentralManager.configure { stateRestoration }`
- *   stays off).
+ * - A link made in the foreground stays up in the background (the app's `bluetooth-central` mode and
+ *   core:data's `LifecycleConnectionPolicy`), but
+ *   there is no CoreBluetooth state restoration (Kable's `CentralManager.configure { stateRestoration }`
+ *   stays off): a terminated app doesn't relaunch for the Pi.
  * - Frames are at most 20 bytes, which fits Android's default 23-byte ATT MTU (20-byte payload),
  *   so no larger MTU is requested.
  * - The transport never requests runtime permissions; it reports
@@ -133,9 +134,9 @@ class BleShotTransport internal constructor(
     private val control =
         ControlChannel(config.requestIds, config.controlTimeout, config.initialControlSequence)
 
-    /** The features the Pi listed in its `hello` result; empty until negotiated. */
-    private val mutablePiFeatures = MutableStateFlow<Set<String>>(emptySet())
-    internal val piFeatures: StateFlow<Set<String>> = mutablePiFeatures.asStateFlow()
+    /** The features the Pi listed in its `hello` result; `null` until negotiated. */
+    private val mutablePiFeatures = MutableStateFlow<Set<String>?>(null)
+    override val piFeatures: StateFlow<Set<String>?> = mutablePiFeatures.asStateFlow()
 
     private var adapterWatcher: Job? = null
     private var sessionJob: Job? = null
@@ -273,7 +274,7 @@ class BleShotTransport internal constructor(
         controlReady = false
         mutableSupportsControls.value = false
         mutableSchemaV2Active.value = false
-        mutablePiFeatures.value = emptySet()
+        mutablePiFeatures.value = null
         mutableActiveClub.value = null
         shotReassembler.reset()
         // The control reassembler is reset by fail() when a request was pending; reset it
@@ -417,7 +418,8 @@ class BleShotTransport internal constructor(
     private suspend fun sendHello(peripheral: BlePeripheralLink): Negotiation =
         try {
             val response =
-                control.send({ requestId -> SchemaV2Codec.encodeHello(requestId) }) { frame ->
+                // Naming the last shot catches this phone up on what it missed while disconnected.
+                control.send({ requestId -> SchemaV2Codec.encodeHello(requestId, decoder.lastEventId) }) { frame ->
                     peripheral.writeWithResponse(SERVICE_UUID, CONTROL_CHARACTERISTIC_UUID, frame)
                 }
             val result = SchemaV2Codec.decodeHelloResult(response)

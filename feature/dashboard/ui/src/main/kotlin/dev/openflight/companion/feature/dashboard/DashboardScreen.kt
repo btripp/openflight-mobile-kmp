@@ -128,6 +128,12 @@ fun DashboardScreen(
                     BatteryWarningNotice(it)
                 }
             }
+            // An older Pi can't resend what was missed while disconnected: suggest updating it.
+            uiState.piUpdate?.let {
+                Box(modifier = Modifier.padding(horizontal = OfSpacing.Xl, vertical = OfSpacing.Sm)) {
+                    PiUpdateBanner(it, onDismiss = { onEvent(DashboardEvent.DismissPiUpdate) })
+                }
+            }
             // hasSelection is always false: there's no selection here, only whether the window is
             // wide enough for two panes. On COMPACT/MEDIUM that's a single LIST pane holding
             // everything stacked, same as before F1b; DETAIL is only ever composed on EXPANDED.

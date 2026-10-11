@@ -24,6 +24,7 @@ import dev.openflight.companion.core.model.pi.DebugState
 import dev.openflight.companion.core.model.pi.DeletionState
 import dev.openflight.companion.core.model.pi.PiLinkState
 import dev.openflight.companion.core.model.pi.PiNotice
+import dev.openflight.companion.core.model.pi.PiUpdateNotice
 import dev.openflight.companion.core.model.pi.PowerStatus
 import dev.openflight.companion.core.model.pi.ProfilesState
 import dev.openflight.companion.core.model.pi.RadarConfig
@@ -86,6 +87,7 @@ internal class DemoSwitchingShotRepository(
     override val latestShot: StateFlow<ShotEvent?> = switched { it.latestShot }
     override val activeClub: StateFlow<GolfClub?> = switched { it.activeClub }
     override val supportsControls: StateFlow<Boolean> = switched { it.supportsControls }
+    override val piUpdateNotice: StateFlow<PiUpdateNotice?> = switched { it.piUpdateNotice }
 
     override fun start() {
         started = true

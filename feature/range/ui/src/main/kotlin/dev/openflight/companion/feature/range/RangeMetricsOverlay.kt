@@ -3,8 +3,11 @@ package dev.openflight.companion.feature.range
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -14,8 +17,14 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -51,10 +60,11 @@ import dev.openflight.companion.core.model.pi.PiBatteryLevel
  * keep the scene's yardage labels and far markers clear of it.
  *
  * @param expandToFill true (the phone overlay, full screen height) pushes the bottom content down
- *   with a growing spacer, so it sits at the bottom of the scene regardless of how tall the top
- *   metrics are. false (the docked side panel, plan F1b, a fixed but possibly short height) uses a
- *   small fixed gap instead: a growing spacer needs the parent's height to be bounded, which a
- *   scrollable dock (for a panel shorter than its content) can't guarantee.
+ *   to the bottom of the scene regardless of how tall the top metrics are, and scrolls when the
+ *   metrics are taller than the overlay (large text). false (the docked side panel, plan F1b, a
+ *   fixed but possibly short height) uses a small fixed gap instead: a growing spacer needs the
+ *   parent's height to be bounded, which a scrollable dock (for a panel shorter than its content)
+ *   can't guarantee.
  */
 @Composable
 internal fun RangeMetricsOverlay(
@@ -65,103 +75,157 @@ internal fun RangeMetricsOverlay(
     expandToFill: Boolean = true,
     obstructions: RangeObstructionTracker? = null,
 ) {
-    val shot = uiState.displayedShot
-    val numbers = uiState.camera.numbers
     // Issue #80: at 150% text and above the grids take half the columns, so values fit whole.
     val largeText = LocalDensity.current.fontScale >= LARGE_FONT_SCALE
     val layout = uiState.detailLayout(landscape = isLandscape, docked = !expandToFill, largeText = largeText)
-    Column(
-        modifier =
-            modifier
-                .fillMaxSize()
-                .padding(
-                    start = if (isLandscape) 28.dp else 16.dp,
-                    end = if (isLandscape) 28.dp else 16.dp,
-                    // Controls (Exit/status/Replay) is now a Column sibling above this overlay
-                    // (DrivingRangeScreen.kt), so it already reserves whatever height it needs;
-                    // this only needs a small gap, not a fixed offset sized for one line of text.
-                    top = OfSpacing.Sm,
-                    bottom = 14.dp,
-                ),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(OfSpacing.Md),
-    ) {
-        Row(
-            modifier = Modifier.widthIn(max = if (isLandscape) 540.dp else Dp.Unspecified).fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(OfSpacing.Md),
+    val padding =
+        PaddingValues(
+            start = if (isLandscape) 28.dp else 16.dp,
+            end = if (isLandscape) 28.dp else 16.dp,
+            // Controls (Exit/status/Replay) is now a Column sibling above this overlay
+            // (DrivingRangeScreen.kt), so it already reserves whatever height it needs;
+            // this only needs a small gap, not a fixed offset sized for one line of text.
+            top = OfSpacing.Sm,
+            bottom = 14.dp,
+        )
+    if (!expandToFill) {
+        Column(
+            modifier = modifier.fillMaxSize().padding(padding),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(OfSpacing.Md),
         ) {
-            OfMetricPrimary(
-                title = "BALL SPEED",
-                value = numbers.speed(shot?.ballSpeedMph),
-                unit = numbers.speedUnit.uppercase(),
-                compact = expandToFill,
-                modifier =
-                    Modifier
-                        .weight(1f)
-                        .rangeObstruction("ballSpeed", obstructions)
-                        .testTag(RangeTestTags.BALL_SPEED),
-            )
-            OfMetricPrimary(
-                title = "CARRY",
-                value = numbers.distance(uiState.displayedCarryYards),
-                unit = numbers.distanceUnit.uppercase(),
-                compact = expandToFill,
-                modifier =
-                    Modifier
-                        .weight(1f)
-                        .rangeObstruction("carry", obstructions)
-                        .testTag(RangeTestTags.CARRY),
-            )
-        }
-        if (expandToFill) {
-            Spacer(modifier = Modifier.weight(1f))
-        } else {
+            PrimaryMetrics(uiState, isLandscape, compact = false, obstructions)
             Spacer(modifier = Modifier.height(OfSpacing.Md))
+            BottomMetrics(uiState, layout, onSelectClub, obstructions)
         }
-        uiState.batteryWarning?.let { warning ->
-            // Issue #48: one line with the bottom pills, never over the flight. The detail is for
-            // the screen reader; the Dashboard's notice spells it out on screen.
-            Pill(
-                text = "⚠ ${warning.title}",
-                color = if (warning.level == PiBatteryLevel.CRITICAL) OfColorTokens.Danger else OfColorTokens.Warning,
-                modifier =
-                    Modifier
-                        .rangeObstruction("battery", obstructions)
-                        .semantics { contentDescription = "${warning.title}. ${warning.detail}" }
-                        .testTag(RangeTestTags.BATTERY_WARNING),
-            )
+        return
+    }
+    // Over the scene: ball speed and carry at the top, the rest at the bottom. Tester report
+    // (build 5, largest text): when they don't both fit (the replay bar and controls are laid out
+    // first) the metrics scroll instead of clipping the detail grid. The column is at least the
+    // overlay's height, so when everything fits, SpaceBetween keeps the old top/bottom placement.
+    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
+        val minHeight = maxHeight
+        val viewport = constraints.maxHeight
+        // Scrolls only when the metrics overflow ([reportOverflow]): a scroll container over the
+        // scene, even a disabled one, would swallow its pan, pinch and tap-to-select gestures.
+        var overflows by remember { mutableStateOf(false) }
+        Column(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .then(if (overflows) Modifier.verticalScroll(rememberScrollState()) else Modifier)
+                    .reportOverflow(viewport) { overflows = it }
+                    .heightIn(min = minHeight)
+                    .padding(padding)
+                    .testTag(RangeTestTags.METRICS_SCROLL),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.SpaceBetween,
+        ) {
+            PrimaryMetrics(uiState, isLandscape, compact = true, obstructions)
+            Column(
+                modifier = Modifier.padding(top = OfSpacing.Md * 2),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(OfSpacing.Md),
+            ) {
+                BottomMetrics(uiState, layout, onSelectClub, obstructions)
+            }
         }
-        uiState.club.error?.let { error ->
-            Pill(
-                text = "⚠ $error",
-                color = OfColorTokens.Danger,
-                modifier = Modifier.rangeObstruction("clubError", obstructions).testTag(RangeTestTags.CLUB_ERROR),
-            )
-        }
-        if (uiState.usesEstimatedFlight) {
-            Pill(
-                text = "Estimated flight uses club defaults",
-                color = OfColorTokens.Cream,
-                modifier = Modifier.rangeObstruction("estimated", obstructions).testTag(RangeTestTags.ESTIMATED),
-            )
-        }
-        if (layout == RangeDetailLayout.STRIP) {
-            // Plan R7b: one strip while the ball flies and lands, so the landing area stays visible.
-            Pill(
-                text = uiState.compactMetricsSummary,
-                color = OfColorTokens.Cream,
-                modifier = Modifier.rangeObstruction("details", obstructions).testTag(RangeTestTags.METRICS_COMPACT),
-            )
-        } else {
-            DetailMetrics(
-                shot,
-                uiState.club,
-                layout,
-                onSelectClub,
-                Modifier.rangeObstruction("details", obstructions),
-                numbers,
-            )
-        }
+    }
+}
+
+/** Ball speed and carry, side by side. */
+@Composable
+private fun PrimaryMetrics(
+    uiState: DrivingRangeUiState,
+    isLandscape: Boolean,
+    compact: Boolean,
+    obstructions: RangeObstructionTracker?,
+) {
+    val shot = uiState.displayedShot
+    val numbers = uiState.camera.numbers
+    Row(
+        modifier = Modifier.widthIn(max = if (isLandscape) 540.dp else Dp.Unspecified).fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(OfSpacing.Md),
+    ) {
+        OfMetricPrimary(
+            title = "BALL SPEED",
+            value = numbers.speed(shot?.ballSpeedMph),
+            unit = numbers.speedUnit.uppercase(),
+            compact = compact,
+            modifier =
+                Modifier
+                    .weight(1f)
+                    .rangeObstruction("ballSpeed", obstructions)
+                    .testTag(RangeTestTags.BALL_SPEED),
+        )
+        OfMetricPrimary(
+            title = "CARRY",
+            value = numbers.distance(uiState.displayedCarryYards),
+            unit = numbers.distanceUnit.uppercase(),
+            compact = compact,
+            modifier =
+                Modifier
+                    .weight(1f)
+                    .rangeObstruction("carry", obstructions)
+                    .testTag(RangeTestTags.CARRY),
+        )
+    }
+}
+
+/** The battery, club-error and estimated-flight pills, then the detail metrics (or their strip). */
+@Composable
+private fun ColumnScope.BottomMetrics(
+    uiState: DrivingRangeUiState,
+    layout: RangeDetailLayout,
+    onSelectClub: (GolfClub) -> Unit,
+    obstructions: RangeObstructionTracker?,
+) {
+    val shot = uiState.displayedShot
+    val numbers = uiState.camera.numbers
+    uiState.batteryWarning?.let { warning ->
+        // Issue #48: one line with the bottom pills, never over the flight. The detail is for
+        // the screen reader; the Dashboard's notice spells it out on screen.
+        Pill(
+            text = "⚠ ${warning.title}",
+            color = if (warning.level == PiBatteryLevel.CRITICAL) OfColorTokens.Danger else OfColorTokens.Warning,
+            modifier =
+                Modifier
+                    .rangeObstruction("battery", obstructions)
+                    .semantics { contentDescription = "${warning.title}. ${warning.detail}" }
+                    .testTag(RangeTestTags.BATTERY_WARNING),
+        )
+    }
+    uiState.club.error?.let { error ->
+        Pill(
+            text = "⚠ $error",
+            color = OfColorTokens.Danger,
+            modifier = Modifier.rangeObstruction("clubError", obstructions).testTag(RangeTestTags.CLUB_ERROR),
+        )
+    }
+    if (uiState.usesEstimatedFlight) {
+        Pill(
+            text = "Estimated flight uses club defaults",
+            color = OfColorTokens.Cream,
+            modifier = Modifier.rangeObstruction("estimated", obstructions).testTag(RangeTestTags.ESTIMATED),
+        )
+    }
+    if (layout == RangeDetailLayout.STRIP) {
+        // Plan R7b: one strip while the ball flies and lands, so the landing area stays visible.
+        Pill(
+            text = uiState.compactMetricsSummary,
+            color = OfColorTokens.Cream,
+            modifier = Modifier.rangeObstruction("details", obstructions).testTag(RangeTestTags.METRICS_COMPACT),
+        )
+    } else {
+        DetailMetrics(
+            shot,
+            uiState.club,
+            layout,
+            onSelectClub,
+            Modifier.rangeObstruction("details", obstructions),
+            numbers,
+        )
     }
 }
 
