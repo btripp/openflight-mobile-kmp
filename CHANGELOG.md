@@ -55,6 +55,11 @@ tag. Plain `v0.1.0` waits on the hardware test matrix on a real Raspberry Pi.
   covers the metrics, and in landscape the controls share one row so the metrics stay clear. The
   shot table shows one card per shot instead of cutting clubs and numbers short ("Dri…", "1…").
 
+### Fixed
+
+- Leaving a screen while a weather lookup is in flight now stops it, instead of letting it carry on
+  and report a "network error" after the screen is gone (#91).
+
 ## [0.1.0-beta.4] - 2026-10-01
 
 iOS 0.1.0 (build 5) for TestFlight, and the signed Android APK 0.1.0 (versionCode 5). Covers the

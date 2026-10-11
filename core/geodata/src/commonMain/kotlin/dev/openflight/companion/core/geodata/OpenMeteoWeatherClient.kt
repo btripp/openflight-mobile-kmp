@@ -11,6 +11,7 @@ import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.isSuccess
+import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlin.math.round
@@ -37,7 +38,7 @@ internal class OpenMeteoWeatherClient(
         cache.read(key)?.let { cached -> parse(cached)?.let { return WeatherResult.Success(it) } }
 
         val response =
-            runCatching {
+            try {
                 httpClient.get(FORECAST_URL) {
                     parameter("latitude", lat)
                     parameter("longitude", lon)
@@ -46,14 +47,17 @@ internal class OpenMeteoWeatherClient(
                     parameter("timezone", "UTC")
                     timeout { requestTimeoutMillis = TIMEOUT_MILLIS }
                 }
-            }.getOrElse { error ->
-                val failure =
-                    if (error is HttpRequestTimeoutException) {
-                        WeatherFailure.Timeout
-                    } else {
-                        WeatherFailure.Network(error.message ?: "Unknown network error")
-                    }
-                return WeatherResult.Failure(failure)
+            } catch (
+                @Suppress("SwallowedException") timeout: HttpRequestTimeoutException,
+            ) {
+                return WeatherResult.Failure(WeatherFailure.Timeout)
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (
+                // Any transport failure becomes a reported WeatherFailure, never a crash.
+                @Suppress("TooGenericExceptionCaught") failure: Exception,
+            ) {
+                return WeatherResult.Failure(WeatherFailure.Network(failure.message ?: "Unknown network error"))
             }
 
         return handle(response, key)
@@ -71,12 +75,16 @@ internal class OpenMeteoWeatherClient(
             return WeatherResult.Failure(WeatherFailure.UnexpectedStatus(response.status.value))
         }
         val body =
-            runCatching { response.bodyAsText() }
-                .getOrElse {
-                    return WeatherResult.Failure(
-                        WeatherFailure.MalformedResponse(it.message ?: "Empty body"),
-                    )
-                }
+            try {
+                response.bodyAsText()
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (
+                // An unreadable body is reported as malformed, never a crash.
+                @Suppress("TooGenericExceptionCaught") failure: Exception,
+            ) {
+                return WeatherResult.Failure(WeatherFailure.MalformedResponse(failure.message ?: "Empty body"))
+            }
         val observation =
             parse(body) ?: return WeatherResult.Failure(WeatherFailure.MalformedResponse("Unexpected response shape"))
         cache.write(key, body)
