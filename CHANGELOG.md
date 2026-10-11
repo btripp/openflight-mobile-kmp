@@ -25,6 +25,15 @@ tag. Plain `v0.1.0` waits on the hardware test matrix on a real Raspberry Pi.
   went straight, with its last ten flights drawn over each other from above. Shot rows in the bag
   and in sessions name each shot's shape too, so you don't have to open them one by one.
 
+### Fixed
+
+- **The range at the largest text sizes.** Prev, Play and Next (replay and overlay) no longer
+  slide off the bottom of the screen or get squeezed out of a narrow landscape scene; the metrics
+  scroll above them when they don't fit. On iOS, Ball speed and Carry now grow with your text size
+  instead of shrinking to the smallest numbers on screen, the "Driving Range Ready" card no longer
+  covers the metrics, and in landscape the controls share one row so the metrics stay clear. The
+  shot table shows one card per shot instead of cutting clubs and numbers short ("Dri…", "1…").
+
 ## [0.1.0-beta.4] - 2026-10-01
 
 iOS 0.1.0 (build 5) for TestFlight, and the signed Android APK 0.1.0 (versionCode 5). Covers the

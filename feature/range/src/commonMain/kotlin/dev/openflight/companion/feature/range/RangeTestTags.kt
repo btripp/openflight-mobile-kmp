@@ -40,6 +40,13 @@ object RangeTestTags {
     /** The one-line strip the detail metrics fold into while a ball flies and lands (plan R7b). */
     const val METRICS_COMPACT = "range.metricsCompact"
 
+    /**
+     * Tester report (build 5, largest text): the overlaid metrics' scrolling container, which
+     * scrolls when they don't fit above the replay/overlay transport, so the transport stays on
+     * screen. (iOS only shows it then; Android always wraps the metrics in it.)
+     */
+    const val METRICS_SCROLL = "range.metricsScroll"
+
     // region Plan F8a1: replay, overlay and view controls.
 
     /** Opens the session picker. */

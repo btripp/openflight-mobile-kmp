@@ -86,6 +86,8 @@ struct DrivingRangeContent: View {
     var freezeProgress: Double?
 
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
     @State private var showsSessions = false
     /// Plan F8f: the range quick settings (a sheet on an iPhone, a side panel on an iPad).
     @State private var showsQuickSettings = false
@@ -202,7 +204,15 @@ struct DrivingRangeContent: View {
                     )
                     .frame(maxHeight: .infinity)
 
-                    Group {
+                    // Tester report (build 5, largest text): the transport and chips are laid out
+                    // first, so Prev/Next stay on screen; the metrics take what's left (and scroll
+                    // when that isn't enough). At accessibility sizes the ready card joins this
+                    // stack instead of floating over the metric tiles.
+                    VStack(spacing: 8) {
+                        if showsWaitingCard && dynamicTypeSize.isAccessibilitySize {
+                            waitingCard
+                                .rangeObstruction("ready")
+                        }
                         RangeBrowseChips(state: state, send: send)
                             .rangeObstruction("chips")
                         if !browse.isLive {
@@ -211,10 +221,12 @@ struct DrivingRangeContent: View {
                         }
                     }
                     .padding(.horizontal, 14)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .layoutPriority(1)
                 }
                 .padding(.bottom, browse.isLive ? 0 : 10)
 
-                if state is DrivingRangeUiStateReady && browse.isLive {
+                if showsWaitingCard && !dynamicTypeSize.isAccessibilitySize {
                     waitingCard
                         .rangeObstruction("ready")
                 }
@@ -292,6 +304,12 @@ struct DrivingRangeContent: View {
                 trailingButtons
                     .rangeObstruction("buttons")
             }
+            // Tester report (build 5): an iPhone in landscape at accessibility sizes has no height
+            // for two rows of controls over the metrics and the transport, so the icon-only
+            // controls share one row with the status pill.
+            if dynamicTypeSize.isAccessibilitySize && verticalSizeClass == .compact {
+                collapsedRowControls
+            }
             stackedControls(iconOnlyExit: false)
             stackedControls(iconOnlyExit: true)
             collapsedControls
@@ -345,6 +363,28 @@ struct DrivingRangeContent: View {
                 .lineLimit(3)
                 .fixedSize(horizontal: false, vertical: true)
                 .rangeObstruction("status")
+        }
+    }
+
+    /// `collapsedControls` in one row: Exit, the status pill, the overflow menu and the gear.
+    private var collapsedRowControls: some View {
+        HStack(spacing: 10) {
+            exitButton
+                .labelStyle(.iconOnly)
+                .accessibilityShowsLargeContentViewer()
+                .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+                .rangeObstruction("exit")
+            Spacer(minLength: 0)
+            statusPill
+                .fixedSize()
+                .rangeObstruction("status")
+            HStack(spacing: 10) {
+                moreControlsMenu
+                quickSettingsButton
+                    .accessibilityShowsLargeContentViewer()
+            }
+            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+            .rangeObstruction("buttons")
         }
     }
 
@@ -402,9 +442,17 @@ struct DrivingRangeContent: View {
             .contentShape(Rectangle())
     }
 
+    /// "Driving Range Ready" before the first live shot.
+    private var showsWaitingCard: Bool {
+        state is DrivingRangeUiStateReady && state.browse.isLive
+    }
+
     private var statusPill: some View {
         Label(state.phase.label, systemImage: statusSymbol)
             .font(.caption.weight(.semibold))
+            // Tester report (build 5): at AX5 the pill took a sixth of the screen. It stops
+            // growing at AX2; VoiceOver still reads the phase.
+            .dynamicTypeSize(...DynamicTypeSize.accessibility2)
             .padding(.horizontal, 12)
             .padding(.vertical, 9)
             .background(.black.opacity(0.58), in: Capsule())
@@ -547,10 +595,14 @@ struct DrivingRangeContent: View {
     }
 
     private var waitingCard: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "figure.golf")
-                .font(.system(size: 38, weight: .medium))
-                .foregroundStyle(Theme.success)
+        let isLarge = dynamicTypeSize.isAccessibilitySize
+        return VStack(spacing: isLarge ? 6 : 12) {
+            // At accessibility sizes the card sits in the bottom stack, so it drops its icon.
+            if !isLarge {
+                Image(systemName: "figure.golf")
+                    .font(.system(size: 38, weight: .medium))
+                    .foregroundStyle(Theme.success)
+            }
             Text("Driving Range Ready")
                 .font(.title2.bold())
             Text("Hit a shot and its flight will appear here.")
@@ -558,13 +610,18 @@ struct DrivingRangeContent: View {
                 .foregroundStyle(Theme.creamDim)
         }
         .multilineTextAlignment(.center)
-        .padding(24)
+        // Tester report (build 5): the card is a hint (the status pill says the same), so it
+        // stops growing at AX1 and leaves the metrics room.
+        .dynamicTypeSize(...DynamicTypeSize.accessibility1)
+        .fixedSize(horizontal: false, vertical: true)
+        .padding(isLarge ? 14 : 24)
+        .frame(maxWidth: isLarge ? .infinity : nil)
         .background(.black.opacity(0.62), in: RoundedRectangle(cornerRadius: 22))
         .overlay {
             RoundedRectangle(cornerRadius: 22)
                 .stroke(.white.opacity(0.16), lineWidth: 1)
         }
-        .padding(24)
+        .padding(isLarge ? 0 : 24)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier(RangeTestTags.shared.READY_CARD)
     }

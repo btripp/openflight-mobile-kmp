@@ -21,6 +21,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.selected
@@ -52,17 +53,32 @@ internal fun RangeBrowseBar(
                 .testTag(RangeTestTags.TRANSPORT),
         verticalArrangement = Arrangement.spacedBy(OfSpacing.Xs),
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(OfSpacing.Sm),
-        ) {
+        val controls: @Composable RowScope.() -> Unit = {
             SmallButton("Live", RangeTestTags.LIVE) { onEvent(DrivingRangeEvent.ReturnToLive) }
             when (val mode = browse.mode) {
                 is RangeMode.Replay -> ReplayTransport(browse, mode, onEvent)
                 is RangeMode.Overlay -> OverlayControls(browse, mode, onEvent)
                 RangeMode.Live -> Unit
             }
+        }
+        if (LocalDensity.current.fontScale >= WRAP_FONT_SCALE) {
+            // Tester report (build 5, largest text): the controls wrap instead of scrolling
+            // sideways, so Prev and Next stay on screen in a narrow scene (a landscape phone's
+            // docked layout). The scene lays this bar out first, so the extra rows always fit.
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                itemVerticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(OfSpacing.Sm),
+                verticalArrangement = Arrangement.spacedBy(OfSpacing.Xs),
+                content = controls,
+            )
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(OfSpacing.Sm),
+                content = controls,
+            )
         }
         if (browse.mode is RangeMode.Overlay && browse.overlayTruncated) {
             OfText(
@@ -343,3 +359,6 @@ private val BarShape = RoundedCornerShape(18.dp)
 private val RowShape = RoundedCornerShape(10.dp)
 private val ChipBackground = Color.Black.copy(alpha = 0.6f)
 private val PillShape = RoundedCornerShape(percent = 50)
+
+/** From this font scale the browse bar's controls wrap instead of scrolling sideways. */
+private const val WRAP_FONT_SCALE = 1.5f
