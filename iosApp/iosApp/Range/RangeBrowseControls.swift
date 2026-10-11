@@ -15,7 +15,7 @@ struct RangeBrowseBar: View {
         VStack(alignment: .leading, spacing: 6) {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    RangeBarButton(title: "Live", identifier: RangeTestTags.shared.LIVE) {
+                    RangeBarButton(title: "Live", identifier: RangeTestTags.shared.LIVE, systemImage: "dot.radiowaves.left.and.right") {
                         send(DrivingRangeEventReturnToLive.shared)
                     }
                     if let mode = browse.mode as? RangeModeReplay {
@@ -25,6 +25,10 @@ struct RangeBrowseBar: View {
                     }
                 }
                 .padding(.vertical, 2)
+                // Tester report (build 5, largest text): the position, speeds and club chips stop
+                // growing at AX2 (the transport buttons go icon-only), so the bar leaves the
+                // metrics room above it, in landscape too. The bar scrolls sideways for the rest.
+                .dynamicTypeSize(...DynamicTypeSize.accessibility2)
             }
             if browse.mode is RangeModeOverlay, browse.overlayTruncated {
                 Text("Showing the newest \(RangeBrowseState.companion.OVERLAY_CAP) shots")
@@ -44,17 +48,28 @@ struct RangeBrowseBar: View {
     private func replayTransport(_ mode: RangeModeReplay) -> some View {
         let count = browse.shots.count
         let index = Int(mode.index)
-        RangeBarButton(title: "Prev", identifier: RangeTestTags.shared.PREVIOUS, isEnabled: index > 0) {
+        RangeBarButton(
+            title: "Prev",
+            identifier: RangeTestTags.shared.PREVIOUS,
+            systemImage: "backward.end.fill",
+            isEnabled: index > 0
+        ) {
             send(DrivingRangeEventPreviousShot.shared)
         }
         RangeBarButton(
             title: browse.playing ? "Pause" : "Play",
             identifier: RangeTestTags.shared.PLAY_PAUSE,
+            systemImage: browse.playing ? "pause.fill" : "play.fill",
             isEnabled: count > 0
         ) {
             send(DrivingRangeEventPlayPause.shared)
         }
-        RangeBarButton(title: "Next", identifier: RangeTestTags.shared.NEXT, isEnabled: index + 1 < count) {
+        RangeBarButton(
+            title: "Next",
+            identifier: RangeTestTags.shared.NEXT,
+            systemImage: "forward.end.fill",
+            isEnabled: index + 1 < count
+        ) {
             send(DrivingRangeEventNextShot.shared)
         }
         Text(browse.loading ? "Loading…" : count == 0 ? "No shots" : "\(index + 1) / \(count)")
@@ -77,6 +92,7 @@ struct RangeBrowseBar: View {
         RangeBarButton(
             title: "Prev",
             identifier: RangeTestTags.shared.PREVIOUS,
+            systemImage: "backward.end.fill",
             isEnabled: browse.canSelectPreviousShot
         ) {
             send(DrivingRangeEventPreviousShot.shared)
@@ -86,7 +102,12 @@ struct RangeBrowseBar: View {
             .foregroundStyle(Theme.cream)
             .fixedSize()
             .accessibilityIdentifier(RangeTestTags.shared.POSITION)
-        RangeBarButton(title: "Next", identifier: RangeTestTags.shared.NEXT, isEnabled: browse.canSelectNextShot) {
+        RangeBarButton(
+            title: "Next",
+            identifier: RangeTestTags.shared.NEXT,
+            systemImage: "forward.end.fill",
+            isEnabled: browse.canSelectNextShot
+        ) {
             send(DrivingRangeEventNextShot.shared)
         }
         if let sessionId = mode.sessionId {
@@ -113,15 +134,39 @@ struct RangeBrowseBar: View {
 }
 
 /// A capsule button on the dark scene, like the range's Exit button.
+///
+/// Tester report (build 5, largest text): with a `systemImage`, at accessibility text sizes the
+/// button shows only its icon, which stops growing at XXXL and offers the Large Content Viewer
+/// (like the range's top controls, issue #80), so Live, Prev, Play and Next fit an iPhone's width
+/// together. VoiceOver still reads `title`.
 struct RangeBarButton: View {
     let title: String
     let identifier: String
+    var systemImage: String?
     var isEnabled = true
     let action: () -> Void
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     var body: some View {
+        if let systemImage, dynamicTypeSize.isAccessibilitySize {
+            button {
+                Image(systemName: systemImage)
+                    .frame(minWidth: 22)
+            }
+            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+            .accessibilityLabel(title)
+            .accessibilityShowsLargeContentViewer {
+                Label(title, systemImage: systemImage)
+            }
+        } else {
+            button { Text(title) }
+        }
+    }
+
+    private func button(@ViewBuilder label: () -> some View) -> some View {
         Button(action: action) {
-            Text(title)
+            label()
                 .font(.subheadline.weight(.bold))
                 .foregroundStyle(Theme.cream)
                 .padding(.horizontal, 12)

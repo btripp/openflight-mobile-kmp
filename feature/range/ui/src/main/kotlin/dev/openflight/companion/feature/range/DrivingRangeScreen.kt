@@ -7,10 +7,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -280,34 +280,40 @@ private fun SceneLayer(
             // wrap onto 2-3 lines, and a fixed top padding on RangeMetricsOverlay (sized for a
             // single line) would then overlap it. Stacking lets the metrics row push down by
             // however tall Controls actually measures.
+            //
+            // Tester report (build 5, largest text): the replay/overlay bar is the Column's only
+            // unweighted child, so it's measured first and always keeps its height; the controls,
+            // chips and metrics share what's left. Before, a narrow scene (a landscape phone's
+            // docked layout) let the wrapped controls squeeze the bar to nothing, hiding Prev/Next.
             Column(modifier = Modifier.fillMaxSize()) {
-                Controls(
-                    uiState = uiState,
-                    onReplay = { onEvent(DrivingRangeEvent.Replay) },
-                    onToggleCamera = { onEvent(DrivingRangeEvent.ToggleCameraMode) },
-                    onOpenSessions = onOpenSessions,
-                    onOpenQuickSettings = onOpenQuickSettings,
-                    onToggleTable = { onEvent(DrivingRangeEvent.ShowTable(open = uiState.table == null)) },
-                    onExit = onExit,
-                    obstructions = obstructions,
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                )
-                BrowseChips(
-                    uiState,
-                    onEvent,
-                    Modifier.padding(horizontal = 14.dp).rangeObstruction("chips", obstructions),
-                )
-                if (showMetrics) {
-                    RangeMetricsOverlay(
+                StageTop(scrolls = !showMetrics, modifier = Modifier.weight(1f)) {
+                    Controls(
                         uiState = uiState,
-                        isLandscape = isLandscape,
-                        onSelectClub = { onEvent(DrivingRangeEvent.ClubSelected(it)) },
+                        onReplay = { onEvent(DrivingRangeEvent.Replay) },
+                        onToggleCamera = { onEvent(DrivingRangeEvent.ToggleCameraMode) },
+                        onOpenSessions = onOpenSessions,
+                        onOpenQuickSettings = onOpenQuickSettings,
+                        onToggleTable = { onEvent(DrivingRangeEvent.ShowTable(open = uiState.table == null)) },
+                        onExit = onExit,
                         obstructions = obstructions,
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
                     )
-                } else {
-                    // Plan F1b: the metrics are docked beside the scene; keep the replay bar at the bottom.
-                    Spacer(modifier = Modifier.weight(1f))
+                    BrowseChips(
+                        uiState,
+                        onEvent,
+                        Modifier.padding(horizontal = 14.dp).rangeObstruction("chips", obstructions),
+                    )
+                    if (showMetrics) {
+                        RangeMetricsOverlay(
+                            uiState = uiState,
+                            isLandscape = isLandscape,
+                            onSelectClub = { onEvent(DrivingRangeEvent.ClubSelected(it)) },
+                            obstructions = obstructions,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                    // Plan F1b: otherwise the metrics are docked beside the scene and the replay bar
+                    // stays at the bottom.
                 }
                 if (!browse.isLive) {
                     RangeBrowseBar(
@@ -324,6 +330,37 @@ private fun SceneLayer(
                 ReadyCard(modifier = Modifier.align(Alignment.Center).rangeObstruction("ready", obstructions))
             }
         }
+    }
+}
+
+/**
+ * Everything above the replay/overlay bar. With the metrics overlaid it's a plain Column (the
+ * metrics take its remaining height and scroll themselves when that's too little); with them docked
+ * it holds only the controls and chips, and scrolls when they wrap taller than the scene.
+ */
+@Composable
+private fun StageTop(
+    scrolls: Boolean,
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    if (!scrolls) {
+        Column(modifier = modifier.fillMaxWidth(), content = content)
+        return
+    }
+    // Scrolls only when the controls overflow ([reportOverflow]), so the scene's gestures pass
+    // through otherwise.
+    BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
+        val viewport = constraints.maxHeight
+        var overflows by remember { mutableStateOf(false) }
+        Column(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .then(if (overflows) Modifier.verticalScroll(rememberScrollState()) else Modifier)
+                    .reportOverflow(viewport) { overflows = it },
+            content = content,
+        )
     }
 }
 

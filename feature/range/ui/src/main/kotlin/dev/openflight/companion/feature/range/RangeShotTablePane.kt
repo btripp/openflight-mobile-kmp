@@ -17,6 +17,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
@@ -132,6 +133,13 @@ private fun RangeShotTableGrid(
         )
         return
     }
+    // Tester report (build 5, largest text): at large font scales eleven columns can't share a
+    // phone's width (fixed widths truncated clubs and headers to "Dri…", "Ball…"), so each shot
+    // becomes a card of "header  value" lines with the same cells.
+    if (LocalDensity.current.fontScale >= TABLE_CARDS_FONT_SCALE) {
+        RangeShotTableCards(table, onOpen)
+        return
+    }
     Column(modifier = Modifier.horizontalScroll(rememberScrollState())) {
         TableLine(table.headers, header = true)
         for (row in table.rows) {
@@ -162,6 +170,9 @@ private fun TableLine(
     modifier: Modifier = Modifier,
     header: Boolean = false,
 ) {
+    // Below TABLE_CARDS_FONT_SCALE the columns widen with the font scale (the grid scrolls sideways),
+    // so 130% text doesn't truncate either.
+    val fontScale = LocalDensity.current.fontScale.coerceAtLeast(1f)
     Row(modifier = modifier.padding(vertical = OfSpacing.Xs)) {
         cells.forEachIndexed { index, text ->
             val column = RangeTableColumn.entries[index]
@@ -171,7 +182,7 @@ private fun TableLine(
                 color = if (header) OfColorTokens.CreamDim else Color.Unspecified,
                 textAlign = if (column == RangeTableColumn.CLUB) TextAlign.Start else TextAlign.End,
                 maxLines = 1,
-                modifier = Modifier.width(column.width()).padding(horizontal = OfSpacing.Xs),
+                modifier = Modifier.width(column.width() * fontScale).padding(horizontal = OfSpacing.Xs),
             )
         }
     }
@@ -191,6 +202,13 @@ private const val PREVIEW_SHOTS = 3
 @Preview(widthDp = 400, heightDp = 600)
 @Composable
 private fun RangeShotTablePanelPreview() {
+    OfTheme { RangeShotTablePanel(previewTable(), onEvent = {}) }
+}
+
+/** Tester report (build 5): at 200% text the table shows one card per shot. */
+@Preview(widthDp = 400, heightDp = 800, fontScale = 2f)
+@Composable
+private fun RangeShotTablePanelLargeTextPreview() {
     OfTheme { RangeShotTablePanel(previewTable(), onEvent = {}) }
 }
 
