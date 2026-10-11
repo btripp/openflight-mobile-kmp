@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 package dev.openflight.companion.feature.dashboard
 
+import dev.openflight.companion.core.data.ConditionsRepository
 import org.koin.core.module.Module
 import org.koin.core.module.dsl.viewModel
 import org.koin.dsl.module
@@ -20,6 +21,8 @@ val dashboardModule: Module =
                 demoMode = get(),
                 // Issue #15.
                 bags = get(),
+                // Lazy: see DashboardViewModel's `conditions`.
+                conditions = lazy { get<ConditionsRepository>() },
             )
         }
     }

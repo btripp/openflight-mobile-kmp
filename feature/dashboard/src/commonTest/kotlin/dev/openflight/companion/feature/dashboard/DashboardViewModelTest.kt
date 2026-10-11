@@ -9,6 +9,7 @@ import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isInstanceOf
+import assertk.assertions.isNotNull
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
 import dev.openflight.companion.core.data.TransportType
@@ -72,6 +73,26 @@ class DashboardViewModelTest {
                 val state = awaitUntil { it is DashboardUiState.Live } as DashboardUiState.Live
                 assertThat(state.latest).isEqualTo(shot(3))
                 assertThat(state.previous).containsExactly(shot(2), shot(1))
+            }
+        }
+
+    @Test
+    fun aShotOpensItsDetailSheetUntilClosed() =
+        runTest {
+            val detailViewModel = DashboardViewModel(shots, settings, piSession, computeDispatcher = Dispatchers.Main)
+            detailViewModel.uiState.testIgnoringRest {
+                shots.history.value = listOf(shot(3), shot(2, club = "7-iron"), shot(1))
+                awaitUntil { it is DashboardUiState.Live }
+
+                detailViewModel.onEvent(DashboardEvent.OpenShotDetail(shot(2).eventId))
+
+                val open = awaitUntil { (it as? DashboardUiState.Live)?.shotDetail != null } as DashboardUiState.Live
+                val detail = open.shotDetail!!
+                assertThat(detail.title).isEqualTo("Shot 2 · 7-Iron")
+                assertThat(detail.flight).isNotNull()
+
+                detailViewModel.onEvent(DashboardEvent.CloseShotDetail)
+                awaitUntil { (it as? DashboardUiState.Live)?.shotDetail == null }
             }
         }
 

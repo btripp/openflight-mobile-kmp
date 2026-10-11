@@ -34,4 +34,9 @@ object SessionHistoryTestTags {
     /** Android only (plan F1b): the expanded window's docked detail pane and its placeholder. */
     const val DETAIL_PANE = "session.history.detailPane"
     const val DETAIL_EMPTY = "session.history.detailPane.empty"
+
+    /** Select mode for exporting several sessions at once: its toggle, "Select all" and Export. */
+    const val SELECT = "session.history.select"
+    const val SELECT_ALL = "session.history.selectAll"
+    const val EXPORT_SELECTED = "session.history.exportSelected"
 }

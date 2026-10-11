@@ -44,6 +44,13 @@ final class SessionUITests: XCTestCase {
         XCTAssertTrue(Self.reveal(row, in: app))
         row.tap()
 
+        // A row tap opens the shot's detail sheet and selects it on the chart underneath.
+        let title = app.descendants(matching: .any)["shotDetail.title"]
+        XCTAssertTrue(title.waitForExistence(timeout: 5))
+        XCTAssertEqual(title.label, "Shot 1 · Driver")
+        app.buttons["shotDetail.close"].tap()
+        XCTAssertTrue(title.waitForNonExistence(timeout: 5))
+
         // The card sits under the club chips, above where the list has scrolled to.
         let card = app.descendants(matching: .any)["session.selected"]
         XCTAssertTrue(Self.reveal(card, in: app, scrollingUp: true))
@@ -76,6 +83,11 @@ final class SessionUITests: XCTestCase {
         let row = app.descendants(matching: .any)[Self.previewShotRow]
         XCTAssertTrue(Self.reveal(row, in: app))
         row.tap()
+        // The tap opens the shot's detail sheet over the selected card; close it to reach Delete.
+        let close = app.buttons["shotDetail.close"]
+        XCTAssertTrue(close.waitForExistence(timeout: 5))
+        close.tap()
+        XCTAssertTrue(close.waitForNonExistence(timeout: 5))
         let delete = app.buttons["session.selected.delete"]
         XCTAssertTrue(Self.reveal(delete, in: app, scrollingUp: true))
 

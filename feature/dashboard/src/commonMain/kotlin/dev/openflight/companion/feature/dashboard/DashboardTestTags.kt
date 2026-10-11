@@ -74,4 +74,10 @@ object DashboardTestTags {
 
     /** Plan F14: the "Demo" tag on the latest shot. */
     const val DEMO_SHOT_TAG = "dashboard.demoShotTag"
+
+    /** The latest shot card's "Details": opens the shot detail sheet. */
+    const val OPEN_SHOT_DETAIL = "dashboard.latest.details"
+
+    /** A previous shot's row, by its event id; a tap opens its detail sheet. */
+    fun previousShot(eventId: String): String = "dashboard.previous.$eventId"
 }
