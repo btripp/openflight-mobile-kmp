@@ -53,6 +53,7 @@ import dev.openflight.companion.core.insights.ClubChip
 import dev.openflight.companion.core.model.ClubMenu
 import dev.openflight.companion.core.model.ConnectionState
 import dev.openflight.companion.core.model.GolfClub
+import dev.openflight.companion.core.ui.ShotDetailSheet
 
 /**
  * The dashboard (ContentView.swift): header with the Range entry, the connection card, and either
@@ -141,10 +142,10 @@ fun DashboardScreen(
                         modifier = if (expanded) Modifier.testTag(DashboardTestTags.METRICS_COLUMN) else Modifier,
                     ) {
                         if (expanded) {
-                            MetricsContent(uiState, shotFlashes, onViewOnRange)
+                            MetricsContent(uiState, shotFlashes, onViewOnRange, onEvent)
                         } else {
                             ConnectionCard(uiState.connection, onEvent, onOpenCalibration)
-                            MetricsContent(uiState, shotFlashes, onViewOnRange)
+                            MetricsContent(uiState, shotFlashes, onViewOnRange, onEvent)
                         }
                     }
                 },
@@ -155,6 +156,13 @@ fun DashboardScreen(
                 },
             )
         }
+    }
+    (uiState as? DashboardUiState.Live)?.shotDetail?.let { detail ->
+        ShotDetailSheet(
+            state = detail,
+            onDismiss = { onEvent(DashboardEvent.CloseShotDetail) },
+            onViewOnRange = onViewOnRange?.let { view -> { view(detail.id) } },
+        )
     }
 }
 
@@ -181,6 +189,7 @@ private fun MetricsContent(
     uiState: DashboardUiState,
     shotFlashes: Int,
     onViewOnRange: ((eventId: String) -> Unit)?,
+    onEvent: (DashboardEvent) -> Unit,
 ) {
     when (uiState) {
         is DashboardUiState.Waiting -> {
@@ -195,11 +204,18 @@ private fun MetricsContent(
                     uiState.latestEnrichment,
                     onViewOnRange = onViewOnRange?.let { view -> { view(uiState.latest.eventId) } },
                     demo = uiState.connection.demo,
+                    onOpenDetail = { onEvent(DashboardEvent.OpenShotDetail(uiState.latest.eventId)) },
                 )
                 ShotFlash(trigger = shotFlashes, modifier = Modifier.matchParentSize())
             }
             if (uiState.clubChips.isNotEmpty()) ClubChipsCard(uiState.clubChips)
-            if (uiState.previous.isNotEmpty()) ShotHistoryCard(uiState.previous, uiState.units)
+            if (uiState.previous.isNotEmpty()) {
+                ShotHistoryCard(
+                    uiState.previous,
+                    uiState.units,
+                    onOpen = { onEvent(DashboardEvent.OpenShotDetail(it)) },
+                )
+            }
         }
     }
 }

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 package dev.openflight.companion.feature.dashboard
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -54,6 +55,7 @@ internal fun ShotCard(
     enrichment: ShotEnrichment? = null,
     onViewOnRange: (() -> Unit)? = null,
     demo: Boolean = false,
+    onOpenDetail: (() -> Unit)? = null,
 ) {
     OfCard(
         modifier = Modifier.fillMaxWidth().testTag(DashboardTestTags.LATEST_SHOT),
@@ -85,13 +87,23 @@ internal fun ShotCard(
                     )
                 }
             }
-            // Plan F8d: fly this shot on the range, paused on it.
-            if (onViewOnRange != null) {
-                OfTextButton(
-                    text = "View on range",
-                    onClick = onViewOnRange,
-                    modifier = Modifier.testTag(DashboardTestTags.VIEW_ON_RANGE),
-                )
+            Column(horizontalAlignment = Alignment.End) {
+                // Plan F8d: fly this shot on the range, paused on it.
+                if (onViewOnRange != null) {
+                    OfTextButton(
+                        text = "View on range",
+                        onClick = onViewOnRange,
+                        modifier = Modifier.testTag(DashboardTestTags.VIEW_ON_RANGE),
+                    )
+                }
+                // The shot's flight, shape and every metric.
+                if (onOpenDetail != null) {
+                    OfTextButton(
+                        text = "Details",
+                        onClick = onOpenDetail,
+                        modifier = Modifier.testTag(DashboardTestTags.OPEN_SHOT_DETAIL),
+                    )
+                }
             }
         }
         PrimaryMetrics(shot, units, enrichment)
@@ -237,6 +249,7 @@ internal fun clubLabel(wire: String): String = GolfClub.fromWireValue(wire)?.dis
 internal fun ShotHistoryCard(
     previous: List<ShotEvent>,
     units: UnitSystem = UnitSystem.IMPERIAL,
+    onOpen: ((eventId: String) -> Unit)? = null,
 ) {
     OfCard(
         modifier = Modifier.fillMaxWidth().testTag(DashboardTestTags.PREVIOUS_SHOTS),
@@ -252,7 +265,7 @@ internal fun ShotHistoryCard(
             OfText(text = previous.size.toString(), role = OfTextRole.Label, color = OfColorTokens.CreamDim)
         }
         previous.forEachIndexed { index, shot ->
-            PreviousShotRow(shot, units)
+            PreviousShotRow(shot, units, onOpen?.let { open -> { open(shot.eventId) } })
             if (index < previous.lastIndex) OfDivider()
         }
     }
@@ -262,6 +275,7 @@ internal fun ShotHistoryCard(
 private fun PreviousShotRow(
     shot: ShotEvent,
     units: UnitSystem,
+    onOpen: (() -> Unit)?,
 ) {
     val ballSpeed = ShotMetricFormatter.number(convertSpeedFromMph(shot.ballSpeedMph, units), decimals = 1)
     val carry = ShotMetricFormatter.number(convertDistanceFromYards(shot.estimatedCarryYards, units), decimals = 0)
@@ -271,7 +285,16 @@ private fun PreviousShotRow(
         modifier =
             Modifier
                 .fillMaxWidth()
-                .padding(vertical = OfSpacing.Md)
+                .testTag(DashboardTestTags.previousShot(shot.eventId))
+                .then(
+                    if (onOpen !=
+                        null
+                    ) {
+                        Modifier.clickable(onClickLabel = "Show details", onClick = onOpen)
+                    } else {
+                        Modifier
+                    },
+                ).padding(vertical = OfSpacing.Md)
                 .semantics(mergeDescendants = true) {
                     contentDescription =
                         "${shot.displayClub}, completed shot, " +
