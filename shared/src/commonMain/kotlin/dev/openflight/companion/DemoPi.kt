@@ -27,6 +27,7 @@ import dev.openflight.companion.core.model.pi.DebugState
 import dev.openflight.companion.core.model.pi.DeletionState
 import dev.openflight.companion.core.model.pi.PiLinkState
 import dev.openflight.companion.core.model.pi.PiNotice
+import dev.openflight.companion.core.model.pi.PiUpdateNotice
 import dev.openflight.companion.core.model.pi.Profile
 import dev.openflight.companion.core.model.pi.RadarConfig
 import dev.openflight.companion.core.model.pi.RadarConfigUpdate
@@ -309,6 +310,9 @@ internal class DemoShotRepository(
     override val latestShot: StateFlow<ShotEvent?> = latest
     override val activeClub: StateFlow<GolfClub?> = club
     override val supportsControls: StateFlow<Boolean> = MutableStateFlow(true)
+
+    // The pretend Pi is always current.
+    override val piUpdateNotice: StateFlow<PiUpdateNotice?> = MutableStateFlow(null)
 
     init {
         pi.onSimulate = { hit() }

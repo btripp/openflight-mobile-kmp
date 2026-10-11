@@ -12,6 +12,7 @@ import dev.openflight.companion.core.model.ShotHistory
 import dev.openflight.companion.core.model.pi.ClearState
 import dev.openflight.companion.core.model.pi.DeletionState
 import dev.openflight.companion.core.model.pi.PiLinkState
+import dev.openflight.companion.core.model.pi.PiUpdateNotice
 import dev.openflight.companion.core.network.OpenFlightHttpError
 import dev.openflight.companion.core.network.PiControlClient
 import dev.openflight.companion.core.protocol.SchemaV2Commands
@@ -115,12 +116,14 @@ internal class DefaultShotRepository(
     private val mutableLatestShot = MutableStateFlow<ShotEvent?>(null)
     private val mutableActiveClub = MutableStateFlow<GolfClub?>(null)
     private val mutableSupportsControls = MutableStateFlow(false)
+    private val mutablePiUpdateNotice = MutableStateFlow<PiUpdateNotice?>(null)
 
     override val connectionState: StateFlow<ConnectionState> = mutableConnectionState.asStateFlow()
     override val history: StateFlow<List<ShotEvent>> = mutableHistory.asStateFlow()
     override val latestShot: StateFlow<ShotEvent?> = mutableLatestShot.asStateFlow()
     override val activeClub: StateFlow<GolfClub?> = mutableActiveClub.asStateFlow()
     override val supportsControls: StateFlow<Boolean> = mutableSupportsControls.asStateFlow()
+    override val piUpdateNotice: StateFlow<PiUpdateNotice?> = mutablePiUpdateNotice.asStateFlow()
 
     /**
      * The session cache behind [history] and [latestShot]. The shot collector, local deletes and
@@ -465,6 +468,7 @@ internal class DefaultShotRepository(
                     launch(start = CoroutineStart.UNDISPATCHED) {
                         transport.supportsControls.collect { mutableSupportsControls.value = it }
                     }
+                    followPiUpdateNotice(transport, overWifi = pi != null)
                     launch(start = CoroutineStart.UNDISPATCHED) {
                         transport.activeClub.collect { club ->
                             mutableActiveClub.value = club
@@ -481,6 +485,7 @@ internal class DefaultShotRepository(
                 transportState.value = ConnectionState.Idle
                 mutableConnectionState.value = ConnectionState.Idle
                 mutableSupportsControls.value = false
+                mutablePiUpdateNotice.value = null
                 mutableActiveClub.value = null
             }
         }
@@ -539,6 +544,16 @@ internal class DefaultShotRepository(
                 streamMissing && link == PiLinkState.Connected -> LiveShotSource.SOCKET_IO
                 else -> LiveShotSource.NONE
             }
+    }
+
+    /** Whether the connected Pi should be updated, from its features (or a 404 stream: stock). */
+    private fun CoroutineScope.followPiUpdateNotice(
+        transport: ShotTransport,
+        overWifi: Boolean,
+    ) = launch(start = CoroutineStart.UNDISPATCHED) {
+        combine(transport.piFeatures, transport.state) { features, state ->
+            piUpdateNoticeFor(features, overWifi = overWifi, stockPi = overWifi && state.isStreamUnavailable())
+        }.collect { mutablePiUpdateNotice.value = it }
     }
 
     /**

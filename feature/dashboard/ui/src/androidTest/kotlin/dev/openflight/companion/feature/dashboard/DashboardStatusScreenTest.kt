@@ -11,6 +11,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import dev.openflight.companion.core.data.TransportType
@@ -21,12 +22,14 @@ import dev.openflight.companion.core.model.ConnectionState
 import dev.openflight.companion.core.model.ShotEvent
 import dev.openflight.companion.core.model.pi.PiBatteryWarning
 import dev.openflight.companion.core.model.pi.PiLinkState
+import dev.openflight.companion.core.model.pi.PiUpdateNotice
 import dev.openflight.companion.core.model.pi.PowerState
 import dev.openflight.companion.core.model.pi.PowerStatus
 import dev.openflight.companion.core.model.pi.ShotProcessingState
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import kotlin.test.assertEquals
 
 /** Plan R8f on the Android dashboard: the processing indicator and connection problems. */
 @RunWith(AndroidJUnit4::class)
@@ -113,6 +116,35 @@ class DashboardStatusScreenTest {
         show(DashboardUiState.Waiting(connected))
 
         composeRule.onAllNodes(hasTestTag(DashboardTestTags.BATTERY_WARNING)).assertCountEquals(0)
+    }
+
+    @Test
+    fun givenAnOlderPi_whenShown_thenTheUpdateNoticeSaysWhyAndDismissSendsTheEvent() {
+        val events = mutableListOf<DashboardEvent>()
+        val notice = PiUpdateNotice(missesShots = true, missesDeletions = true)
+        composeRule.setContent {
+            OfTheme {
+                DashboardScreen(
+                    uiState = DashboardUiState.Waiting(connected, piUpdate = notice),
+                    onEvent = { events += it },
+                    onOpenCalibration = {},
+                    onOpenRange = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag(DashboardTestTags.PI_UPDATE).assertIsDisplayed()
+        composeRule.onNodeWithText(PiUpdateNotice.TITLE, useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText(notice.detail, useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithTag(DashboardTestTags.PI_UPDATE_DISMISS).performClick()
+        assertEquals(listOf<DashboardEvent>(DashboardEvent.DismissPiUpdate), events)
+    }
+
+    @Test
+    fun givenAnUpToDatePi_whenShown_thenThereIsNoUpdateNotice() {
+        show(DashboardUiState.Waiting(connected))
+
+        composeRule.onAllNodes(hasTestTag(DashboardTestTags.PI_UPDATE)).assertCountEquals(0)
     }
 
     @Test

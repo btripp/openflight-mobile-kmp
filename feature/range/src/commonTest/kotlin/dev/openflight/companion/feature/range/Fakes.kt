@@ -31,6 +31,7 @@ import dev.openflight.companion.core.model.GolfClub
 import dev.openflight.companion.core.model.PhoneOrientationMeasurement
 import dev.openflight.companion.core.model.ShotEvent
 import dev.openflight.companion.core.model.TargetBearing
+import dev.openflight.companion.core.model.pi.PiUpdateNotice
 import kotlinx.coroutines.flow.MutableStateFlow
 
 internal class FakeSettingsRepository(
@@ -115,6 +116,7 @@ internal class FakeShotRepository(
     override val latestShot = MutableStateFlow(currentShot)
     override val activeClub = MutableStateFlow<GolfClub?>(null)
     override val supportsControls = MutableStateFlow(true)
+    override val piUpdateNotice = MutableStateFlow<PiUpdateNotice?>(null)
 
     /** Replaced by tests to suspend or fail. */
     var setClubResponse: suspend (GolfClub) -> ClubSelection = { ClubSelection(status = "ok", club = it) }

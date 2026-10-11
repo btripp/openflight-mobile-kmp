@@ -22,6 +22,10 @@ object DashboardTestTags {
 
     /** Issue #48: the Pi's low- or critical-battery notice. */
     const val BATTERY_WARNING = "dashboard.batteryWarning"
+
+    /** The "update OpenFlight on your Pi" notice and its Dismiss button. */
+    const val PI_UPDATE = "dashboard.piUpdate"
+    const val PI_UPDATE_DISMISS = "dashboard.piUpdate.dismiss"
     const val CONNECTION_PROBLEM = "dashboard.connectionProblem"
     const val PROFILE_BUTTON = "dashboard.profile"
     const val PROFILE_SHEET = "dashboard.profile.sheet"

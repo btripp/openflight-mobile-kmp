@@ -20,6 +20,7 @@ import dev.openflight.companion.core.model.ConnectionState
 import dev.openflight.companion.core.model.GolfClub
 import dev.openflight.companion.core.model.PhoneOrientationMeasurement
 import dev.openflight.companion.core.model.ShotEvent
+import dev.openflight.companion.core.model.pi.PiUpdateNotice
 import dev.openflight.companion.core.network.OpenFlightHttpError
 import dev.openflight.companion.core.socketio.SocketConnectionState
 import kotlinx.coroutines.CoroutineScope
@@ -143,6 +144,21 @@ class StockPiFallbackTest {
                     ?.timestamp,
             ).isEqualTo(PiFixtures.SECOND_SHOT_TIMESTAMP)
             assertThat(h.repository.liveShotSource.value).isEqualTo(LiveShotSource.SOCKET_IO)
+        }
+
+    /**
+     * A stock Pi has no catch-up: only live Socket.IO shots reach the app, so shots taken while the
+     * phone was away are lost. Its `session_state` does report deleted rows, so only shots are named.
+     */
+    @Test
+    fun stockPiIsSuggestedAnUpdateForMissedShotsOnly() =
+        runStockPiTest { h ->
+            assertThat(h.repository.piUpdateNotice.value).isNull()
+            h.sseMissing()
+            h.piConnected()
+
+            assertThat(h.repository.piUpdateNotice.value)
+                .isEqualTo(PiUpdateNotice(missesShots = true, missesDeletions = false))
         }
 
     @Test

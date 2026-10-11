@@ -8,6 +8,7 @@ import dev.openflight.companion.core.model.GolfClub
 import dev.openflight.companion.core.model.PhoneOrientationMeasurement
 import dev.openflight.companion.core.model.ShotEvent
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.emptyFlow
 
@@ -36,6 +37,14 @@ interface ShotTransport {
      */
     val schemaEvents: Flow<SchemaV2Event> get() = emptyFlow()
 
+    /**
+     * The optional features the connected Pi reports (BLE `hello`, the SSE `OpenFlight-Features`
+     * header; see [SchemaV2Codec.FEATURE_SHOT_CATCH_UP]), or `null` while that's unknown: not
+     * connected, or a link that can't tell (a stock Pi without the stream). An empty set is a Pi
+     * that reports none, i.e. one older than feature reporting.
+     */
+    val piFeatures: StateFlow<Set<String>?> get() = UNKNOWN_PI_FEATURES
+
     fun start()
 
     fun retry()
@@ -48,3 +57,5 @@ interface ShotTransport {
 
     suspend fun submitCalibration(measurement: PhoneOrientationMeasurement): CalibrationResult
 }
+
+private val UNKNOWN_PI_FEATURES: StateFlow<Set<String>?> = MutableStateFlow(null)

@@ -107,6 +107,14 @@ class WifiShotTransport(
     private val _schemaEvents = MutableSharedFlow<SchemaV2Event>(extraBufferCapacity = SHOT_REPLAY_BUFFER)
     override val schemaEvents: Flow<SchemaV2Event> = _schemaEvents.asSharedFlow()
 
+    /**
+     * What the stream's `OpenFlight-Features` header listed on the last `200`: empty for a stream
+     * without the header (a Pi older than catch-up), `null` before any `200` or for a Pi without
+     * the stream (`404`, stock upstream).
+     */
+    private val _piFeatures = MutableStateFlow<Set<String>?>(null)
+    override val piFeatures: StateFlow<Set<String>?> = _piFeatures.asStateFlow()
+
     /** `false` once this host answered `?schema=2` with `400`: it only serves the v1 stream. */
     private var requestSchemaV2 = true
 
@@ -152,6 +160,7 @@ class WifiShotTransport(
         parser.reset()
         decoder.reset()
         _activeClub.value = null
+        _piFeatures.value = null
         _state.value = ConnectionState.Idle
     }
 
@@ -200,7 +209,11 @@ class WifiShotTransport(
         try {
             httpClient
                 .prepareRequest(url) {
-                    headers { append(HttpHeaders.Accept, "text/event-stream") }
+                    headers {
+                        append(HttpHeaders.Accept, "text/event-stream")
+                        // A catch-up Pi (open-flight/openflight#297) resends this shot and the later ones.
+                        decoder.lastEventId?.let { append(LAST_EVENT_ID_HEADER, it) }
+                    }
                     timeout {
                         // An infinite request timeout: the request "completes" only when the stream
                         // ends, which can be much later than any fixed deadline. socketTimeoutMillis
@@ -210,6 +223,7 @@ class WifiShotTransport(
                     }
                 }.execute { response ->
                     streamFailure(response.status)?.let { throw it }
+                    _piFeatures.value = piFeaturesOf(response.headers[PI_FEATURES_HEADER])
                     responded = true
                     onResponded()
                     _state.value = ConnectionState.Connected
@@ -328,6 +342,21 @@ class WifiShotTransport(
         const val STREAM_PATH_V2 = "/api/shots/stream?schema=2"
         const val CLUB_PATH = "/api/club"
         const val CALIBRATION_PATH = "/api/calibration/iwr6843/orientation"
+
+        /** The SSE reconnect header: names the newest shot this phone has. */
+        const val LAST_EVENT_ID_HEADER = "Last-Event-ID"
+
+        /** open-flight/openflight#297: the stream's comma-separated feature list (BLE `hello`'s `features`). */
+        const val PI_FEATURES_HEADER = "OpenFlight-Features"
+
+        /** The features in a [PI_FEATURES_HEADER] value; none when the header is absent. */
+        internal fun piFeaturesOf(header: String?): Set<String> =
+            header
+                ?.split(',')
+                ?.map(String::trim)
+                ?.filter(String::isNotEmpty)
+                ?.toSet()
+                .orEmpty()
 
         private const val SHOT_REPLAY_BUFFER = 8
         private const val IDLE_TIMEOUT_MILLIS = 45_000L

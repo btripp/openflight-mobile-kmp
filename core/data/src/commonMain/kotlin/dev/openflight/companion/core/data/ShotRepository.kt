@@ -7,6 +7,7 @@ import dev.openflight.companion.core.model.ConnectionState
 import dev.openflight.companion.core.model.GolfClub
 import dev.openflight.companion.core.model.PhoneOrientationMeasurement
 import dev.openflight.companion.core.model.ShotEvent
+import dev.openflight.companion.core.model.pi.PiUpdateNotice
 import kotlinx.coroutines.flow.StateFlow
 
 /**
@@ -36,6 +37,13 @@ interface ShotRepository {
 
     /** Whether the active transport can send control commands (BLE: once the control characteristic is found). */
     val supportsControls: StateFlow<Boolean>
+
+    /**
+     * The connected Pi predates catch-up after a reconnect, so shots (or deletions) missed while
+     * the phone was away never arrive and the Pi should be updated; `null` while not connected or
+     * for an up-to-date Pi.
+     */
+    val piUpdateNotice: StateFlow<PiUpdateNotice?>
 
     /**
      * App foreground: start following settings and connect the selected transport. Idempotent.

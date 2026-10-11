@@ -164,9 +164,11 @@ class BleSchemaV2Test {
         runTest {
             val bare = ScriptedPi().apply { helloResult = """{"features":[],"schema_version":2}""" }
             val transport = transport()
+            // Unknown until hello: no notice can be based on a Pi the phone hasn't talked to.
+            assertThat(transport.piFeatures.value).isNull()
             connect(transport, bare.link())
             assertThat(transport.state.value).isEqualTo(ConnectionState.Connected)
-            assertThat(transport.piFeatures.value).isEmpty()
+            assertThat(transport.piFeatures.value).isNotNull().isEmpty()
 
             val later =
                 ScriptedPi().apply {
@@ -175,7 +177,11 @@ class BleSchemaV2Test {
             val next = transport()
             connect(next, later.link())
             assertThat(next.state.value).isEqualTo(ConnectionState.Connected)
-            assertThat(next.piFeatures.value).contains(SchemaV2Codec.FEATURE_SHOT_CATCH_UP)
+            assertThat(next.piFeatures.value).isNotNull().contains(SchemaV2Codec.FEATURE_SHOT_CATCH_UP)
+
+            next.disconnect()
+            runCurrent()
+            assertThat(next.piFeatures.value).isNull()
         }
 
     // endregion

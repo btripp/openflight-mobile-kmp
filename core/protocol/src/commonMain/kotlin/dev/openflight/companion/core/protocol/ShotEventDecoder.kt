@@ -34,6 +34,9 @@ sealed class ShotDecodeError(
 class ShotEventDecoder {
     private var lastKey: Pair<String, Boolean?>? = null
 
+    /** The last decoded shot's `event_id`: the anchor a BLE `hello` names to catch up. */
+    val lastEventId: String? get() = lastKey?.first
+
     /** Returns the shot when it is new, or `null` when it repeats the last decoded one. */
     fun decode(payload: ByteArray): ShotEvent? = decode(payload.decodeToString())
 
