@@ -53,8 +53,9 @@ sealed interface SchemaV2Event {
 
 /**
  * The `hello` result: the negotiated schema, the Pi's features and its characteristic pair.
- * Features are detected, never required: `shot_catch_up` (and `last_event_id` catch-up) arrive in a
- * later Pi build, so a Pi without them is still a complete schema 2 Pi.
+ * Features are detected, never required: `shot_catch_up` (and `last_event_id` catch-up) and
+ * `deletion_catch_up` arrive in a later Pi build, so a Pi without them is still a complete schema 2
+ * Pi; the app only suggests updating it (`PiUpdateNotice`).
  */
 @Serializable
 data class HelloResult(
@@ -109,6 +110,9 @@ object SchemaV2Codec {
 
     /** An optional `hello` feature: the Pi can replay shots missed while disconnected (later Pi builds). */
     const val FEATURE_SHOT_CATCH_UP = "shot_catch_up"
+
+    /** An optional `hello` feature: catch-up also replays the `shot_deleted` events missed while disconnected. */
+    const val FEATURE_DELETION_CATCH_UP = "deletion_catch_up"
 
     const val EVENT_PROFILES = "profiles"
     const val EVENT_SESSION_CLEARED = "session_cleared"

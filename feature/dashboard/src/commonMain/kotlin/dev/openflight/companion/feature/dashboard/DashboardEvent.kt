@@ -28,6 +28,9 @@ sealed interface DashboardEvent {
     /** Clears the club error under the menu. */
     data object DismissError : DashboardEvent
 
+    /** Hides the "update OpenFlight on your Pi" notice for the rest of this launch. */
+    data object DismissPiUpdate : DashboardEvent
+
     /** A host hint was tapped: fills the field (like typing it); nothing connects until [HostSubmitted]. */
     data class HostHintSelected(
         val host: String,

@@ -13,6 +13,7 @@ import dev.openflight.companion.core.model.ConnectionState
 import dev.openflight.companion.core.model.GolfClub
 import dev.openflight.companion.core.model.ShotEvent
 import dev.openflight.companion.core.model.pi.PiBatteryWarning
+import dev.openflight.companion.core.model.pi.PiUpdateNotice
 
 /**
  * What the dashboard renders. The connection card ([connection]) is on screen in every state;
@@ -36,6 +37,9 @@ sealed interface DashboardUiState {
     /** Issue #48: the Pi's battery is low or critical and nothing is charging it, or `null`. */
     val batteryWarning: PiBatteryWarning?
 
+    /** The connected Pi predates catch-up after a reconnect and should be updated, or `null`. */
+    val piUpdate: PiUpdateNotice?
+
     /** No shot yet: "Waiting for a shot". */
     data class Waiting(
         override val connection: ConnectionPanelState,
@@ -44,6 +48,7 @@ sealed interface DashboardUiState {
         override val clubChips: List<ClubChip> = emptyList(),
         override val processing: ProcessingIndicator? = null,
         override val batteryWarning: PiBatteryWarning? = null,
+        override val piUpdate: PiUpdateNotice? = null,
     ) : DashboardUiState
 
     /**
@@ -65,6 +70,7 @@ sealed interface DashboardUiState {
         val enrichments: Map<String, ShotEnrichment> = emptyMap(),
         override val processing: ProcessingIndicator? = null,
         override val batteryWarning: PiBatteryWarning? = null,
+        override val piUpdate: PiUpdateNotice? = null,
     ) : DashboardUiState {
         val latestEnrichment: ShotEnrichment? get() = enrichments[latest.eventId]
 

@@ -4,9 +4,12 @@ package dev.openflight.companion.core.network
 import app.cash.turbine.test
 import assertk.assertThat
 import assertk.assertions.containsExactly
+import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
+import assertk.assertions.isGreaterThanOrEqualTo
 import assertk.assertions.isInstanceOf
+import assertk.assertions.isNotNull
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
 import dev.openflight.companion.core.model.ConnectionErrorKind
@@ -110,21 +113,73 @@ class WifiShotTransportStreamTest {
     @Test
     fun aReconnectNamesTheLastShotInLastEventIdAndTheFirstConnectNamesNone() =
         runTest {
-            val engine = streamEngine { sseShotChunk(EVENT_ID_1) }
+            // On the virtual clock, so the reconnect 1 s after the stream ends happens on cue.
+            val engine =
+                virtualTimeEngine(testScheduler) {
+                    respond(
+                        content = ByteReadChannel(sseShotChunk(EVENT_ID_1).encodeToByteArray()),
+                        status = HttpStatusCode.OK,
+                        headers = headersOf(HttpHeaders.ContentType, "text/event-stream"),
+                    )
+                }
             val transport = wifiShotTransport(engine, testScheduler)
+
+            transport.start()
+            runCurrent()
+            advanceTimeBy(1_100)
+            runCurrent()
+            transport.disconnect()
+
+            val sent = engine.requestHistory.map { it.headers[WifiShotTransport.LAST_EVENT_ID_HEADER] }
+            assertThat(sent.size).isGreaterThanOrEqualTo(2)
+            assertThat(sent.first()).isNull()
+            assertThat(sent[1]).isEqualTo(EVENT_ID_1)
+        }
+
+    /** open-flight/openflight#297: a Pi names its features in a header, as `hello` does over BLE. */
+    @Test
+    fun aStreamNamesThePiFeaturesInItsHeaderAndADisconnectForgetsThem() =
+        runTest {
+            val engine =
+                MockEngine {
+                    respond(
+                        content = ByteReadChannel(sseShotChunk(EVENT_ID_1).encodeToByteArray()),
+                        status = HttpStatusCode.OK,
+                        headers =
+                            headersOf(
+                                HttpHeaders.ContentType to listOf("text/event-stream"),
+                                WifiShotTransport.PI_FEATURES_HEADER to listOf("club,shot_catch_up, deletion_catch_up"),
+                            ),
+                    )
+                }
+            val transport = wifiShotTransport(engine, testScheduler)
+            assertThat(transport.piFeatures.value).isNull()
 
             transport.shots.test {
                 transport.start()
                 awaitItem()
-                advanceTimeBy(1_100)
-                runCurrent()
                 cancelAndIgnoreRemainingEvents()
             }
-            transport.disconnect()
 
-            val sent = engine.requestHistory.map { it.headers[WifiShotTransport.LAST_EVENT_ID_HEADER] }
-            assertThat(sent.first()).isNull()
-            assertThat(sent[1]).isEqualTo(EVENT_ID_1)
+            assertThat(transport.piFeatures.value).isEqualTo(setOf("club", "shot_catch_up", "deletion_catch_up"))
+            transport.disconnect()
+            assertThat(transport.piFeatures.value).isNull()
+        }
+
+    /** A stream without the header predates feature reporting: no features, which is known, not unknown. */
+    @Test
+    fun aStreamWithoutTheFeaturesHeaderReportsNoFeatures() =
+        runTest {
+            val transport = wifiShotTransport(streamEngine { sseShotChunk(EVENT_ID_1) }, testScheduler)
+
+            transport.shots.test {
+                transport.start()
+                awaitItem()
+                cancelAndIgnoreRemainingEvents()
+            }
+
+            assertThat(transport.piFeatures.value).isNotNull().isEmpty()
+            transport.disconnect()
         }
 
     @Test
@@ -183,6 +238,8 @@ class WifiShotTransportStreamTest {
                 val error = awaitItem() as ConnectionState.Error
                 assertThat(error.kind).isEqualTo(ConnectionErrorKind.STREAM_UNAVAILABLE)
                 assertThat(error.description.contains("404")).isTrue()
+                // A stock Pi says nothing about its features here; core:data names what it lacks.
+                assertThat(transport.piFeatures.value).isNull()
 
                 // Well past the 15 s maximum backoff: nothing is retried on its own.
                 advanceTimeBy(60_000)

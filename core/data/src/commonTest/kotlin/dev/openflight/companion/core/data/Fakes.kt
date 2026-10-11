@@ -33,6 +33,7 @@ internal class FakeShotTransport(
     override val activeClub = MutableStateFlow<GolfClub?>(null)
     override val supportsControls = MutableStateFlow(false)
     override val schemaEvents = MutableSharedFlow<SchemaV2Event>(extraBufferCapacity = 64)
+    override val piFeatures = MutableStateFlow<Set<String>?>(null)
 
     var startCount = 0
         private set

@@ -22,6 +22,7 @@ import dev.openflight.companion.core.model.ShotEvent
 import dev.openflight.companion.core.model.clubMenu
 import dev.openflight.companion.core.model.pi.PiBatteryWarning
 import dev.openflight.companion.core.model.pi.PiLinkState
+import dev.openflight.companion.core.model.pi.PiUpdateNotice
 import dev.openflight.companion.core.model.pi.ShotDetail
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -146,10 +147,25 @@ class DashboardViewModel(
             )
         }
 
-    /** What the Pi is doing with the last swing (plan R8f) and its battery (issue #48). */
+    /** The update notice the user dismissed; the same notice stays hidden for this launch. */
+    private val dismissedPiUpdate = MutableStateFlow<PiUpdateNotice?>(null)
+
+    /**
+     * What the Pi is doing with the last swing (plan R8f), its battery (issue #48) and whether it
+     * should be updated (tester report 2026-10-09).
+     */
     private val piStatus =
-        combine(piSession.shotProcessing, piSession.powerStatus) { processing, power ->
-            PiStatus(ProcessingIndicator.of(processing), PiBatteryWarning.of(power))
+        combine(
+            piSession.shotProcessing,
+            piSession.powerStatus,
+            shots.piUpdateNotice,
+            dismissedPiUpdate,
+        ) { processing, power, update, dismissed ->
+            PiStatus(
+                processing = ProcessingIndicator.of(processing),
+                batteryWarning = PiBatteryWarning.of(power),
+                piUpdate = update?.takeIf { it != dismissed },
+            )
         }
 
     val uiState: StateFlow<DashboardUiState> =
@@ -171,6 +187,7 @@ class DashboardViewModel(
                     clubChips = chips,
                     processing = pi.processing,
                     batteryWarning = pi.batteryWarning,
+                    piUpdate = pi.piUpdate,
                 )
             } else {
                 DashboardUiState.Live(
@@ -183,6 +200,7 @@ class DashboardViewModel(
                     enrichments = enrichments(history, details),
                     processing = pi.processing,
                     batteryWarning = pi.batteryWarning,
+                    piUpdate = pi.piUpdate,
                 )
             }
         }.stateIn(
@@ -257,8 +275,8 @@ class DashboardViewModel(
                 changeClub(event.club)
             }
 
-            DashboardEvent.DismissError -> {
-                clubRequest.update { it.copy(error = null) }
+            DashboardEvent.DismissError, DashboardEvent.DismissPiUpdate -> {
+                dismiss(event)
             }
 
             is DashboardEvent.HostHintSelected -> {
@@ -288,6 +306,15 @@ class DashboardViewModel(
             DashboardEvent.HitDemoShot -> {
                 viewModelScope.launch { demoMode.hitShot() }
             }
+        }
+    }
+
+    /** Hides the club error, or the update notice for the rest of this launch. */
+    private fun dismiss(event: DashboardEvent) {
+        if (event == DashboardEvent.DismissPiUpdate) {
+            dismissedPiUpdate.value = shots.piUpdateNotice.value
+        } else {
+            clubRequest.update { it.copy(error = null) }
         }
     }
 
@@ -362,6 +389,7 @@ class DashboardViewModel(
     private data class PiStatus(
         val processing: ProcessingIndicator?,
         val batteryWarning: PiBatteryWarning?,
+        val piUpdate: PiUpdateNotice?,
     )
 
     companion object {

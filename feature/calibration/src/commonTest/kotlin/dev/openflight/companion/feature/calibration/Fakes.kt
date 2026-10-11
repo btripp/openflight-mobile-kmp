@@ -12,6 +12,7 @@ import dev.openflight.companion.core.model.GolfClub
 import dev.openflight.companion.core.model.GravitySample
 import dev.openflight.companion.core.model.PhoneOrientationMeasurement
 import dev.openflight.companion.core.model.ShotEvent
+import dev.openflight.companion.core.model.pi.PiUpdateNotice
 import dev.openflight.companion.core.sensors.GravitySensor
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -47,6 +48,7 @@ internal class FakeShotRepository : ShotRepository {
     override val latestShot = MutableStateFlow<ShotEvent?>(null)
     override val activeClub = MutableStateFlow<GolfClub?>(null)
     override val supportsControls = MutableStateFlow(false)
+    override val piUpdateNotice = MutableStateFlow<PiUpdateNotice?>(null)
 
     var retryCount = 0
         private set

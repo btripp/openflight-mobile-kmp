@@ -24,6 +24,10 @@ tag. Plain `v0.1.0` waits on the hardware test matrix on a real Raspberry Pi.
   "Leans left", "Mixed"), and a club's detail adds a Shot shape card: how many shots drew, faded or
   went straight, with its last ten flights drawn over each other from above. Shot rows in the bag
   and in sessions name each shot's shape too, so you don't have to open them one by one.
+- **The Dashboard says when the Pi needs an update.** A Pi without reconnect catch-up can't resend
+  what the phone missed while it was away. The Dashboard names what's lost (shots, deletions or
+  both) and suggests updating OpenFlight on the Pi. Dismiss hides the notice until the next launch.
+  The app keeps working with an older Pi either way.
 
 ### Fixed
 
@@ -32,8 +36,8 @@ tag. Plain `v0.1.0` waits on the hardware test matrix on a real Raspberry Pi.
   shots and deletions keep arriving. iOS uses the `bluetooth-central` background mode.
 - **Catch-up after a reconnect.** On reconnecting, the app names the last shot it has (Bluetooth
   `hello`, and `Last-Event-ID` on the network stream). A Pi with reconnect catch-up
-  (open-flight/openflight#297) then resends the shots the phone missed, up to 20. An older Pi still
-  resends only its latest shot.
+  (open-flight/openflight#297) then resends the shots the phone missed, up to 100, and the shots
+  deleted on the kiosk meanwhile. An older Pi still resends only its latest shot.
 - **A shot resent after a reconnect no longer appears in two History sessions.** It updates the copy
   the phone already stored.
 

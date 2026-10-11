@@ -134,9 +134,9 @@ class BleShotTransport internal constructor(
     private val control =
         ControlChannel(config.requestIds, config.controlTimeout, config.initialControlSequence)
 
-    /** The features the Pi listed in its `hello` result; empty until negotiated. */
-    private val mutablePiFeatures = MutableStateFlow<Set<String>>(emptySet())
-    internal val piFeatures: StateFlow<Set<String>> = mutablePiFeatures.asStateFlow()
+    /** The features the Pi listed in its `hello` result; `null` until negotiated. */
+    private val mutablePiFeatures = MutableStateFlow<Set<String>?>(null)
+    override val piFeatures: StateFlow<Set<String>?> = mutablePiFeatures.asStateFlow()
 
     private var adapterWatcher: Job? = null
     private var sessionJob: Job? = null
@@ -274,7 +274,7 @@ class BleShotTransport internal constructor(
         controlReady = false
         mutableSupportsControls.value = false
         mutableSchemaV2Active.value = false
-        mutablePiFeatures.value = emptySet()
+        mutablePiFeatures.value = null
         mutableActiveClub.value = null
         shotReassembler.reset()
         // The control reassembler is reset by fail() when a request was pending; reset it
