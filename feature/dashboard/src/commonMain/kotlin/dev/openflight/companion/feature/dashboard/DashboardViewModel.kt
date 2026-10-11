@@ -4,16 +4,21 @@ package dev.openflight.companion.feature.dashboard
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dev.openflight.companion.core.data.BagRepository
+import dev.openflight.companion.core.data.ConditionsRepository
 import dev.openflight.companion.core.data.DemoModeOff
 import dev.openflight.companion.core.data.DemoModeRepository
 import dev.openflight.companion.core.data.PiSessionRepository
 import dev.openflight.companion.core.data.SettingsRepository
 import dev.openflight.companion.core.data.ShotRepository
 import dev.openflight.companion.core.data.TransportType
+import dev.openflight.companion.core.insights.ShotDetailBuilder
+import dev.openflight.companion.core.insights.ShotDetailState
 import dev.openflight.companion.core.insights.ShotEnrichment
 import dev.openflight.companion.core.insights.computeClubChips
 import dev.openflight.companion.core.insights.computeClubStats
+import dev.openflight.companion.core.insights.toShotDetailInput
 import dev.openflight.companion.core.model.ClubMenu
+import dev.openflight.companion.core.model.Conditions
 import dev.openflight.companion.core.model.ConnectionErrorKind
 import dev.openflight.companion.core.model.ConnectionProblem
 import dev.openflight.companion.core.model.ConnectionState
@@ -24,6 +29,8 @@ import dev.openflight.companion.core.model.pi.PiBatteryWarning
 import dev.openflight.companion.core.model.pi.PiLinkState
 import dev.openflight.companion.core.model.pi.ShotDetail
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
@@ -32,8 +39,11 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
@@ -59,7 +69,15 @@ class DashboardViewModel(
     private val demoMode: DemoModeRepository = DemoModeOff,
     // Issue #15: the club menu lists the active bag's clubs first; without one, all 20.
     private val bags: BagRepository? = null,
+    // The shot detail sheet flies the shot in these conditions; standard air without them. Lazy,
+    // like ShotCalloutCoordinator's: Practice is the first screen, and resolving the real
+    // DataStore-backed repository just by opening it would build it before anything needs it.
+    private val conditions: Lazy<ConditionsRepository>? = null,
+    computeDispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) : ViewModel() {
+    private val detailId = MutableStateFlow<String?>(null)
+    private val detailBuilder = ShotDetailBuilder()
+
     /** The host field's text while the user edits it; `null` shows the saved host. */
     private val hostDraft = MutableStateFlow<String?>(null)
     private val clubRequest = MutableStateFlow(ClubRequest())
@@ -152,7 +170,18 @@ class DashboardViewModel(
             PiStatus(ProcessingIndicator.of(processing), PiBatteryWarning.of(power))
         }
 
-    val uiState: StateFlow<DashboardUiState> =
+    /**
+     * The open sheet's shot, flown off the main thread (a few simulations per shot). The
+     * conditions are only resolved while a sheet is open.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val shotDetail =
+        detailId
+            .flatMapLatest { id ->
+                if (id == null) flowOf(null) else detailFor(id)
+            }.flowOn(computeDispatcher)
+
+    private val baseState: Flow<DashboardUiState> =
         combine(
             panel,
             shots.history,
@@ -185,6 +214,11 @@ class DashboardViewModel(
                     batteryWarning = pi.batteryWarning,
                 )
             }
+        }
+
+    val uiState: StateFlow<DashboardUiState> =
+        combine(baseState, shotDetail) { state, detail ->
+            if (state is DashboardUiState.Live) state.copy(shotDetail = detail) else state
         }.stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
@@ -233,8 +267,32 @@ class DashboardViewModel(
         combine(settings.transport, demoMode.enabled) { transport, demo -> transport.takeUnless { demo } }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS), initialValue = null)
 
+    private fun detailFor(id: String): Flow<ShotDetailState?> {
+        val repository = conditions?.value
+        val input =
+            combine(shots.history, piSession.shotDetails) { history, details ->
+                val index = history.indexOfFirst { it.eventId == id }
+                history.getOrNull(index)?.let { it.toShotDetailInput(history.size - index, details[it.timestamp]) }
+            }.distinctUntilChanged()
+        return combine(
+            input,
+            repository?.conditions ?: flowOf(Conditions.ISA),
+            repository?.targetBearing ?: flowOf(null),
+            settings.units,
+        ) { shot, air, bearing, units -> shot?.let { detailBuilder.build(it, air, bearing, units) } }
+    }
+
+    @Suppress("CyclomaticComplexMethod") // A flat dispatch over the screen's intents, one action each.
     fun onEvent(event: DashboardEvent) {
         when (event) {
+            is DashboardEvent.OpenShotDetail -> {
+                detailId.value = event.eventId
+            }
+
+            DashboardEvent.CloseShotDetail -> {
+                detailId.value = null
+            }
+
             is DashboardEvent.TransportChanged -> {
                 viewModelScope.launch { settings.setTransport(event.transport) }
             }

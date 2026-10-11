@@ -24,6 +24,8 @@ tag. Plain `v0.1.0` waits on the hardware test matrix on a real Raspberry Pi.
   "Leans left", "Mixed"), and a club's detail adds a Shot shape card: how many shots drew, faded or
   went straight, with its last ten flights drawn over each other from above. Shot rows in the bag
   and in sessions name each shot's shape too, so you don't have to open them one by one.
+- **Practice opens shots too.** The latest shot card has a Details button, and every previous
+  shot on Practice opens the same detail sheet.
 
 ## [0.1.0-beta.4] - 2026-10-01
 
