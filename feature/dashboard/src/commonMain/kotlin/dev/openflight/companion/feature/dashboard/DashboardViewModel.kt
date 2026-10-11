@@ -171,15 +171,15 @@ class DashboardViewModel(
         }
 
     /**
-     * The open sheet's shot, flown off the main thread (a few simulations per shot). The
-     * conditions are only resolved while a sheet is open.
+     * The open sheet's shot. Only an open sheet resolves the conditions and hops to
+     * [computeDispatcher] to fly it (a few simulations); with none open nothing leaves the
+     * collector's thread, so the dashboard's state stays synchronous.
      */
     @OptIn(ExperimentalCoroutinesApi::class)
     private val shotDetail =
-        detailId
-            .flatMapLatest { id ->
-                if (id == null) flowOf(null) else detailFor(id)
-            }.flowOn(computeDispatcher)
+        detailId.flatMapLatest { id ->
+            if (id == null) flowOf(null) else detailFor(id).flowOn(computeDispatcher)
+        }
 
     private val baseState: Flow<DashboardUiState> =
         combine(
