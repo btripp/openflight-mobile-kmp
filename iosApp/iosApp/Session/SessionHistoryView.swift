@@ -8,10 +8,27 @@ import SwiftUI
 /// `SessionHistoryScreen.kt` renders the same state.
 struct SessionHistoryView: View {
     @StateObject private var host = ViewModelHost(KoinHelper().sessionHistoryViewModel())
+    /// The picked sessions' CSV, ready for `ShareLink` (which needs its file before the tap).
+    @State private var export: CsvExport?
 
     var body: some View {
-        SessionHistoryContent(state: host.state, send: host.send)
+        SessionHistoryContent(state: host.state, send: host.send, export: export)
             .navigationTitle("History")
+            .task {
+                await host.collect(host.viewModel.sideEffects) { effect in
+                    if let csv = effect as? SessionEffectCsvReady {
+                        export = CsvExport.write(csv: csv.csv, filename: csv.filename) ?? export
+                    }
+                }
+            }
+            // The CSV follows the selection, so Export shares exactly what's ticked.
+            .onChange(of: host.state.selectedIds.sorted(), initial: true) { _, picked in
+                if picked.isEmpty {
+                    export = nil
+                } else {
+                    host.send(SessionHistoryEventExportSelected.shared)
+                }
+            }
     }
 }
 
@@ -23,6 +40,8 @@ struct SessionHistoryView: View {
 struct SessionHistoryContent: View {
     let state: SessionHistoryUiState
     let send: (SessionHistoryEvent) -> Void
+    /// Select mode's prepared export; nil until the picked sessions' CSV is written.
+    var export: CsvExport?
 
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var selectedSessionId: String?
@@ -95,10 +114,16 @@ struct SessionHistoryContent: View {
                     .accessibilityIdentifier(SessionHistoryTestTags.shared.EMPTY)
                 }
             }
+            if state.selecting {
+                Section { selectionControls }
+                    .listRowBackground(Theme.bgCard)
+            }
             if !state.sessions.isEmpty {
                 Section {
                     ForEach(state.sessions, id: \.id) { session in
-                        if horizontalSizeClass == .regular {
+                        if state.selecting {
+                            selectableRow(session)
+                        } else if horizontalSizeClass == .regular {
                             Button {
                                 selectedSessionId = session.id
                             } label: {
@@ -123,22 +148,86 @@ struct SessionHistoryContent: View {
                     }
                     .listRowBackground(Theme.bgCard)
                 }
-                Section {
-                    Button(role: .destructive) {
-                        send(SessionHistoryEventClearAll.shared)
-                    } label: {
-                        Label("Clear all history", systemImage: "trash")
-                            .frame(maxWidth: .infinity, minHeight: 44)
+                if !state.selecting {
+                    Section {
+                        Button(role: .destructive) {
+                            send(SessionHistoryEventClearAll.shared)
+                        } label: {
+                            Label("Clear all history", systemImage: "trash")
+                                .frame(maxWidth: .infinity, minHeight: 44)
+                        }
+                        .tint(Theme.danger)
+                        .disabled(state.action.isBusy)
+                        .accessibilityIdentifier(SessionHistoryTestTags.shared.CLEAR_ALL)
                     }
-                    .tint(Theme.danger)
-                    .disabled(state.action.isBusy)
-                    .accessibilityIdentifier(SessionHistoryTestTags.shared.CLEAR_ALL)
+                    .listRowBackground(Theme.bgCard)
                 }
-                .listRowBackground(Theme.bgCard)
             }
         }
         .listStyle(.insetGrouped)
         .accessibilityIdentifier(SessionHistoryTestTags.shared.LIST)
+        .toolbar {
+            if !state.sessions.isEmpty {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(state.selecting ? "Cancel" : "Select") {
+                        send(state.selecting ? SessionHistoryEventStopSelecting.shared : SessionHistoryEventStartSelecting.shared)
+                    }
+                    .tint(Theme.gold)
+                    .accessibilityIdentifier(SessionHistoryTestTags.shared.SELECT)
+                }
+            }
+        }
+    }
+
+    /// Select mode's actions: pick every session (or none), and share the picked ones as one CSV.
+    private var selectionControls: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Button(state.allSelected ? "Select none" : "Select all") {
+                send(SessionHistoryEventToggleSelectAll.shared)
+            }
+            .font(.of(.subheadline, weight: .semibold))
+            .tint(Theme.gold)
+            .buttonStyle(.borderless)
+            .accessibilityIdentifier(SessionHistoryTestTags.shared.SELECT_ALL)
+            Group {
+                if let export, !state.selectedIds.isEmpty {
+                    ShareLink(item: export.url, preview: SharePreview(export.filename)) {
+                        Label(state.exportLabel, systemImage: "square.and.arrow.up")
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                    }
+                } else {
+                    Button {} label: {
+                        Label(state.exportLabel, systemImage: "square.and.arrow.up")
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                    }
+                    .disabled(true)
+                }
+            }
+            .font(.of(.body, weight: .semibold))
+            .buttonStyle(.borderless)
+            .accessibilityIdentifier(SessionHistoryTestTags.shared.EXPORT_SELECTED)
+        }
+    }
+
+    /// A session in select mode: a tap ticks or unticks it for the export.
+    private func selectableRow(_ session: SessionHistoryRow) -> some View {
+        let picked = state.selectedIds.contains(session.id)
+        return Button {
+            send(SessionHistoryEventToggleSelected(sessionId: session.id))
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: picked ? "checkmark.circle.fill" : "circle")
+                    .font(.title3)
+                    .foregroundStyle(picked ? Theme.gold : Theme.creamMuted)
+                    .accessibilityHidden(true)
+                SessionHistoryRowView(session: session)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(picked ? [.isSelected, .isButton] : .isButton)
+        .accessibilityIdentifier(SessionHistoryTestTags.shared.session(id: session.id))
     }
 }
 

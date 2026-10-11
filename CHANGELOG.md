@@ -24,6 +24,9 @@ tag. Plain `v0.1.0` waits on the hardware test matrix on a real Raspberry Pi.
   "Leans left", "Mixed"), and a club's detail adds a Shot shape card: how many shots drew, faded or
   went straight, with its last ten flights drawn over each other from above. Shot rows in the bag
   and in sessions name each shot's shape too, so you don't have to open them one by one.
+- **Export several sessions at once.** History has a Select mode: tick the sessions you want (or
+  Select all) and export them as one CSV. A leading `session` column says which session each shot
+  came from, and shots are numbered from 1 within each session.
 
 ## [0.1.0-beta.4] - 2026-10-01
 

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 package dev.openflight.companion.feature.session
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -11,8 +13,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -22,16 +27,23 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.toggleableState
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.openflight.companion.core.designsystem.OfButton
 import dev.openflight.companion.core.designsystem.OfCard
 import dev.openflight.companion.core.designsystem.OfColorTokens
+import dev.openflight.companion.core.designsystem.OfIcon
+import dev.openflight.companion.core.designsystem.OfIcons
 import dev.openflight.companion.core.designsystem.OfListDetailPane
 import dev.openflight.companion.core.designsystem.OfOutlinedButton
 import dev.openflight.companion.core.designsystem.OfPill
@@ -70,6 +82,11 @@ fun SessionHistoryRoute(
     onViewOnRange: ((sessionId: String, shotId: String) -> Unit)? = null,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    // A multi-session export's CSV goes to the same share sheet as a single session's.
+    val share by rememberUpdatedState(onShareCsv)
+    LaunchedEffect(viewModel) {
+        viewModel.effects.collect { effect -> if (effect is SessionEffect.CsvReady) share(effect.csv, effect.filename) }
+    }
     if (windowClass == OfWindowClass.EXPANDED) {
         var selectedSessionId by rememberSaveable { mutableStateOf<String?>(null) }
         OfListDetailPane(
@@ -176,6 +193,7 @@ private fun SessionHistoryDetailPlaceholder() {
 /**
  * Every stored session, newest first: day, time range, shot count and how it was recorded, with
  * the current one badged. "Clear all history" asks first and shows its progress (plan R8f).
+ * "Select" picks several sessions to export as one CSV; a row tap then toggles it.
  */
 @Composable
 fun SessionHistoryScreen(
@@ -192,6 +210,21 @@ fun SessionHistoryScreen(
                 title = "History",
                 eyebrow = "OPENFLIGHT",
                 actions = {
+                    if (uiState.sessions.isNotEmpty()) {
+                        OfTextButton(
+                            text = if (uiState.selecting) "Cancel" else "Select",
+                            onClick = {
+                                val toggle =
+                                    if (uiState.selecting) {
+                                        SessionHistoryEvent.StopSelecting
+                                    } else {
+                                        SessionHistoryEvent.StartSelecting
+                                    }
+                                onEvent(toggle)
+                            },
+                            modifier = Modifier.testTag(SessionHistoryTestTags.SELECT),
+                        )
+                    }
                     OfOutlinedButton(
                         text = "Done",
                         onClick = onBack,
@@ -230,10 +263,21 @@ fun SessionHistoryScreen(
             if (uiState.loaded && uiState.sessions.isEmpty()) {
                 item(key = "empty") { EmptyHistory() }
             }
-            items(uiState.sessions, key = { it.id }) { session ->
-                SessionHistoryRowItem(session, onClick = { onOpenSession(session.id) })
+            if (uiState.selecting) {
+                item(key = "exportBar") { ExportBar(uiState, onEvent) }
             }
-            if (uiState.sessions.isNotEmpty()) {
+            items(uiState.sessions, key = { it.id }) { session ->
+                if (uiState.selecting) {
+                    SessionHistoryRowItem(
+                        session,
+                        onClick = { onEvent(SessionHistoryEvent.ToggleSelected(session.id)) },
+                        checked = session.id in uiState.selectedIds,
+                    )
+                } else {
+                    SessionHistoryRowItem(session, onClick = { onOpenSession(session.id) })
+                }
+            }
+            if (uiState.sessions.isNotEmpty() && !uiState.selecting) {
                 item(key = "clearAll") {
                     OfOutlinedButton(
                         text = "Clear all history",
@@ -252,11 +296,36 @@ fun SessionHistoryScreen(
     )
 }
 
-/** One stored session, read by TalkBack as one sentence ([SessionHistoryRow.accessibilityLabel]). */
+/** Select mode's actions: pick every session (or none), and export the picked ones as one CSV. */
+@Composable
+private fun ExportBar(
+    uiState: SessionHistoryUiState,
+    onEvent: (SessionHistoryEvent) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(OfSpacing.Sm)) {
+        OfTextButton(
+            text = if (uiState.allSelected) "Select none" else "Select all",
+            onClick = { onEvent(SessionHistoryEvent.ToggleSelectAll) },
+            modifier = Modifier.testTag(SessionHistoryTestTags.SELECT_ALL),
+        )
+        OfButton(
+            text = uiState.exportLabel,
+            onClick = { onEvent(SessionHistoryEvent.ExportSelected) },
+            enabled = uiState.selectedIds.isNotEmpty(),
+            modifier = Modifier.fillMaxWidth().testTag(SessionHistoryTestTags.EXPORT_SELECTED),
+        )
+    }
+}
+
+/**
+ * One stored session, read by TalkBack as one sentence ([SessionHistoryRow.accessibilityLabel]).
+ * In select mode [checked] is its pick (a check or an empty circle) and a tap toggles it.
+ */
 @Composable
 private fun SessionHistoryRowItem(
     session: SessionHistoryRow,
     onClick: () -> Unit,
+    checked: Boolean? = null,
 ) {
     OfCard(
         modifier =
@@ -264,13 +333,22 @@ private fun SessionHistoryRowItem(
                 .fillMaxWidth()
                 // Outside the clearing modifier below, which drops every semantics modifier after it.
                 .testTag(SessionHistoryTestTags.session(session.id))
-                .clickable(role = Role.Button, onClickLabel = "Open session", onClick = onClick)
-                .clearAndSetSemantics { contentDescription = session.accessibilityLabel },
+                .then(
+                    if (checked == null) {
+                        Modifier.clickable(role = Role.Button, onClickLabel = "Open session", onClick = onClick)
+                    } else {
+                        Modifier.toggleable(value = checked, role = Role.Checkbox, onValueChange = { onClick() })
+                    },
+                ).clearAndSetSemantics {
+                    contentDescription = session.accessibilityLabel
+                    if (checked != null) toggleableState = ToggleableState(checked)
+                },
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(OfSpacing.Md),
         ) {
+            if (checked != null) PickMark(checked)
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 OfText(text = session.date, role = OfTextRole.TitleSmall)
                 OfText(text = session.detailLine, role = OfTextRole.BodySmall, color = OfColorTokens.CreamDim)
@@ -279,6 +357,30 @@ private fun SessionHistoryRowItem(
                 OfText(text = session.shotCountLabel, role = OfTextRole.TitleSmall, color = OfColorTokens.Gold)
                 if (session.isCurrent) CurrentBadge()
             }
+        }
+    }
+}
+
+/** A session's pick in select mode: a gold check, or an empty circle. */
+@Composable
+private fun PickMark(checked: Boolean) {
+    val shape = CircleShape
+    Box(
+        modifier =
+            Modifier
+                .size(24.dp)
+                .clip(shape)
+                .background(if (checked) OfColorTokens.Gold else Color.Transparent, shape)
+                .border(2.dp, if (checked) OfColorTokens.Gold else OfColorTokens.CreamMuted, shape),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (checked) {
+            OfIcon(
+                OfIcons.Check,
+                contentDescription = null,
+                modifier = Modifier.size(16.dp),
+                tint = OfColorTokens.BgDeep,
+            )
         }
     }
 }
