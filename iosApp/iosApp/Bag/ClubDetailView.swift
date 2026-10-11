@@ -75,6 +75,16 @@ struct ClubDetailContent: View {
                     .listRowBackground(Theme.bgCard)
                 }
 
+                if let pattern = state.shapePattern {
+                    Section("Shot shape") {
+                        ShapePatternView(pattern: pattern)
+                            .accessibilityElement(children: .ignore)
+                            .accessibilityLabel(pattern.accessibilitySummary)
+                            .accessibilityIdentifier(BagTestTags.shared.SHAPE_PATTERN)
+                    }
+                    .listRowBackground(Theme.bgCard)
+                }
+
                 if let dispersion = state.dispersion {
                     Section("Where it lands") {
                         ClubDispersionView(dispersion: dispersion)
@@ -89,20 +99,34 @@ struct ClubDetailContent: View {
                 if !state.recentShots.isEmpty {
                     Section("Recent shots") {
                         ForEach(state.recentShots, id: \.id) { shot in
+                            // Two lines (when and its shape, then the numbers), so nothing wraps
+                            // or truncates on an iPhone (matches Android's RecentShot).
                             HStack(spacing: 8) {
-                                Text(shot.timeLabel).font(.of(.caption)).foregroundStyle(Theme.creamDim)
-                                Spacer()
-                                Text(shot.carryLabel).foregroundStyle(Theme.gold).monospacedDigit()
-                                if let total = shot.totalLabel {
-                                    Text(total).font(.of(.caption)).monospacedDigit()
-                                    EstimatedBadge()
+                                VStack(alignment: .leading, spacing: 4) {
+                                    HStack(spacing: 8) {
+                                        Text(shot.timeLabel).font(.of(.caption)).foregroundStyle(Theme.creamDim)
+                                        if let shape = shot.shapeLabel {
+                                            Text(shape).font(.of(.caption, weight: .semibold)).foregroundStyle(Theme.cream)
+                                        }
+                                    }
+                                    .lineLimit(1)
+                                    HStack(spacing: 8) {
+                                        Text(shot.carryLabel).foregroundStyle(Theme.gold).monospacedDigit()
+                                        if let total = shot.totalLabel {
+                                            Text(total).font(.of(.caption)).monospacedDigit()
+                                            EstimatedBadge()
+                                        }
+                                        if let side = shot.sideLabel {
+                                            Text(side).font(.of(.caption)).foregroundStyle(Theme.creamDim)
+                                        }
+                                        if shot.possibleBadRead {
+                                            StatusPill(text: "Bad read?", color: Theme.danger)
+                                        }
+                                    }
+                                    .lineLimit(1)
+                                    .fixedSize(horizontal: false, vertical: true)
                                 }
-                                if let side = shot.sideLabel {
-                                    Text(side).font(.of(.caption)).foregroundStyle(Theme.creamDim)
-                                }
-                                if shot.possibleBadRead {
-                                    StatusPill(text: "Bad read?", color: Theme.danger)
-                                }
+                                Spacer(minLength: 0)
                                 if let openRange {
                                     ViewOnRangeButton(
                                         iconOnly: true,
@@ -112,7 +136,12 @@ struct ClubDetailContent: View {
                                     }
                                 }
                             }
+                            .contentShape(Rectangle())
+                            .onTapGesture { send(ClubDetailEventOpenShotDetail(id: shot.id)) }
                             .accessibilityElement(children: .contain)
+                            .accessibilityAction(named: "Show details") {
+                                send(ClubDetailEventOpenShotDetail(id: shot.id))
+                            }
                             .accessibilityIdentifier(BagTestTags.shared.RECENT)
                         }
                     }
@@ -123,6 +152,17 @@ struct ClubDetailContent: View {
         .listStyle(.insetGrouped)
         .accessibilityIdentifier(BagTestTags.shared.DETAIL)
         .screenBackground()
+        .shotDetailSheet(
+            state.shotDetail,
+            onClose: { send(ClubDetailEventCloseShotDetail.shared) },
+            onViewOnRange: openRange.map { open in
+                { detail in
+                    if let shot = state.recentShots.first(where: { String($0.id) == detail.id }) {
+                        open(RangeTarget(sessionId: shot.sessionId, shotId: detail.id))
+                    }
+                }
+            }
+        )
     }
 }
 
@@ -197,5 +237,57 @@ struct ClubDispersionView: View {
                 context.fill(Path(ellipseIn: CGRect(x: center.x - 4, y: center.y - 4, width: 8, height: 8)), with: .color(Theme.cream))
             }
         }
+    }
+}
+
+/// The club's shot shape at a glance: its typical shape, how many shots went each way, and its
+/// recent flights from above (the newest brightest). Mirrors Android's `ShapePatternCard`; the
+/// geometry is the shared `FlightPathProjector.projectPattern`.
+struct ShapePatternView: View {
+    let pattern: ShapePatternState
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(pattern.headline).font(.of(.title3, weight: .semibold)).foregroundStyle(Theme.gold)
+            Text(pattern.talliesLabel).font(.of(.caption)).foregroundStyle(Theme.creamDim)
+            if !pattern.flights.isEmpty {
+                Canvas { context, size in draw(in: &context, size: size) }
+                    .frame(height: 200)
+                Text("Last \(pattern.flights.count) from above, newest brightest")
+                    .font(.of(.caption))
+                    .foregroundStyle(Theme.creamMuted)
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    private func draw(in context: inout GraphicsContext, size: CGSize) {
+        guard let projected = FlightPathProjector.shared.projectPattern(
+            paths: pattern.flights,
+            width: Float(size.width),
+            height: Float(size.height),
+            padding: 12
+        ) else { return }
+        for guide in projected.guides {
+            context.stroke(line(guide), with: .color(Theme.bgHover), lineWidth: 1)
+        }
+        context.stroke(line(projected.targetLine), with: .color(Theme.creamMuted), style: StrokeStyle(lineWidth: 1, dash: [6, 6]))
+        // Oldest first, so the newest flight is drawn on top.
+        for (index, flight) in projected.flights.enumerated().reversed() {
+            let newest = index == 0
+            let color = newest ? Theme.gold : Theme.goldDim.opacity(0.55)
+            context.stroke(line(flight), with: .color(color), style: StrokeStyle(lineWidth: newest ? 3 : 2, lineCap: .round))
+            if let last = flight.last {
+                let center = CGPoint(x: CGFloat(last.x), y: CGFloat(last.y))
+                context.fill(Path(ellipseIn: CGRect(x: center.x - 3, y: center.y - 3, width: 6, height: 6)), with: .color(color))
+            }
+        }
+    }
+
+    private func line(_ points: [ScreenPoint]) -> Path {
+        var path = Path()
+        if let first = points.first { path.move(to: CGPoint(x: CGFloat(first.x), y: CGFloat(first.y))) }
+        for next in points.dropFirst() { path.addLine(to: CGPoint(x: CGFloat(next.x), y: CGFloat(next.y))) }
+        return path
     }
 }

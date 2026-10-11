@@ -29,6 +29,7 @@ import dev.openflight.companion.core.designsystem.OfText
 import dev.openflight.companion.core.designsystem.OfTextRole
 import dev.openflight.companion.core.designsystem.OfTheme
 import dev.openflight.companion.core.designsystem.OfTopBar
+import dev.openflight.companion.core.ui.ShotDetailSheet
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 
@@ -175,6 +176,7 @@ internal fun SessionHistoryDetailBody(
                     onDelete = { onEvent(SessionHistoryDetailEvent.DeleteShot(shot.id)) },
                     modifier = animateItemUnless(reduceMotion),
                     deletable = uiState.canDelete,
+                    onSelect = { onEvent(SessionHistoryDetailEvent.OpenShotDetail(shot.id)) },
                     onViewOnRange = onViewOnRange?.let { view -> { view(shot.id) } },
                 )
             }
@@ -185,6 +187,13 @@ internal fun SessionHistoryDetailBody(
         onConfirm = { onEvent(SessionHistoryDetailEvent.ConfirmAction) },
         onCancel = { onEvent(SessionHistoryDetailEvent.CancelAction) },
     )
+    session.shotDetail?.let { detail ->
+        ShotDetailSheet(
+            state = detail,
+            onDismiss = { onEvent(SessionHistoryDetailEvent.CloseShotDetail) },
+            onViewOnRange = onViewOnRange?.let { view -> { view(detail.id) } },
+        )
+    }
 }
 
 /** The time range and shot count, then how it was recorded and whether it's the current session. */

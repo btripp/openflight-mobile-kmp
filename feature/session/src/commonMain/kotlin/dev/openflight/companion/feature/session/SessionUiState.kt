@@ -3,6 +3,7 @@ package dev.openflight.companion.feature.session
 
 import dev.openflight.companion.core.insights.ClubChip
 import dev.openflight.companion.core.insights.ClubStats
+import dev.openflight.companion.core.insights.ShotDetailState
 import dev.openflight.companion.core.insights.ShotEnrichment
 import dev.openflight.companion.core.insights.SwingSpeedStats
 import dev.openflight.companion.core.insights.UnitSystem
@@ -36,6 +37,7 @@ enum class SessionSource {
  * @property dispersion the dispersion chart for the selected tab; `null` when no shot can be
  *   plotted (none yet, or only swing reps).
  * @property selectedShot the shot selected on the chart or in the list, while it's on the chart.
+ * @property shotDetail the open shot detail sheet; `null` when it's closed or its shot is gone.
  * @property showSimulateShot the "Simulate Shot" button: visible only when the Pi runs `--mock`.
  * @property simulateLabel "Simulate Swing" in swing-speed mode, otherwise "Simulate Shot".
  * @property simulateAvailability why [SessionEvent.SimulateShot] can't run, if it can't.
@@ -56,6 +58,7 @@ data class SessionUiState(
     val shots: List<SessionShotRow> = emptyList(),
     val dispersion: SessionDispersionUiState? = null,
     val selectedShot: SelectedShotCard? = null,
+    val shotDetail: ShotDetailState? = null,
     val showSimulateShot: Boolean = false,
     val simulateLabel: String = SIMULATE_SHOT,
     val simulateAvailability: PiFeatureAvailability =
@@ -116,6 +119,8 @@ data class SessionShotRow(
     val durationMs: Double?,
     val implementLabel: String?,
     val enrichment: ShotEnrichment?,
+    /** The shot's shape ("Push fade"), when its curve or start line was measured. */
+    val shapeLabel: String? = null,
 ) {
     /** The range can fly this row (plan F8d): a ball shot with ball speed and carry. */
     val canFly: Boolean

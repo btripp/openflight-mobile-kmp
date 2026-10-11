@@ -4,6 +4,7 @@ package dev.openflight.companion.feature.bag
 import dev.openflight.companion.core.data.HistoryShot
 import dev.openflight.companion.core.flight.FlightMeasurements
 import dev.openflight.companion.core.flight.ShotDistanceEstimator
+import dev.openflight.companion.core.flight.ShotShape
 import dev.openflight.companion.core.flight.toFlightMeasurements
 import dev.openflight.companion.core.insights.ClubDistanceSample
 import dev.openflight.companion.core.insights.OfflineDistance
@@ -19,6 +20,7 @@ import dev.openflight.companion.core.model.TargetBearing
  * @property totalYards carry plus the estimated roll; `null` when the shot couldn't be flown.
  *   Always an estimate (plan §0.2), so the UI badges it "est.".
  * @property offlineYards positive right; `null` when the side wasn't measured.
+ * @property shape its draw/fade shape; `null` when the shot couldn't be flown.
  */
 data class ClubShot(
     val shot: HistoryShot,
@@ -26,6 +28,7 @@ data class ClubShot(
     val totalYards: Double?,
     val offlineYards: Double?,
     val carryAdjusted: Boolean,
+    val shape: ShotShape? = null,
 ) {
     val sample: ClubDistanceSample get() = ClubDistanceSample(carryYards, totalYards, offlineYards)
 }
@@ -63,6 +66,7 @@ class ClubShotDistances(
                     totalYards = values.totalYards,
                     offlineYards = side?.takeUnless { it.sideEstimated }?.offlineYards,
                     carryAdjusted = values.adjusted,
+                    shape = side?.shape,
                 )
             }
         estimates = nextEstimates

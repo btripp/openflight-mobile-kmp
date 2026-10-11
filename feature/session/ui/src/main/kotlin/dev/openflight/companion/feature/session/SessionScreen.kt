@@ -53,6 +53,7 @@ import dev.openflight.companion.core.insights.distanceUnitLabel
 import dev.openflight.companion.core.insights.speedUnitLabel
 import dev.openflight.companion.core.model.ShotMetricFormatter
 import dev.openflight.companion.core.model.pi.PiFeatureAvailability
+import dev.openflight.companion.core.ui.ShotDetailSheet
 
 /**
  * The session/stats screen (plans R5b/R6c), ported from the web UI's `StatsView.tsx` (club tabs and
@@ -148,6 +149,13 @@ fun SessionScreen(
         onConfirm = { onEvent(SessionEvent.ConfirmAction) },
         onCancel = { onEvent(SessionEvent.CancelAction) },
     )
+    uiState.shotDetail?.let { detail ->
+        ShotDetailSheet(
+            state = detail,
+            onDismiss = { onEvent(SessionEvent.CloseShotDetail) },
+            onViewOnRange = onViewOnRange?.let { view -> { view(detail.id) } },
+        )
+    }
 }
 
 /**
@@ -212,6 +220,7 @@ private fun SessionShotList(
                             card = card,
                             units = uiState.units,
                             onClose = { onEvent(SessionEvent.SelectShot(null)) },
+                            onOpenDetail = { onEvent(SessionEvent.OpenShotDetail(card.id)) },
                             onDelete = { onEvent(SessionEvent.DeleteShot(card.id)) },
                             deletable = canEdit,
                             onViewOnRange = onViewOnRange?.let { view -> { view(card.id) } },
@@ -240,7 +249,7 @@ private fun SessionShotList(
                     shot = shot,
                     units = uiState.units,
                     selected = shot.id == uiState.selectedShot?.id,
-                    onSelect = { onEvent(SessionEvent.SelectShot(shot.id)) },
+                    onSelect = { onEvent(SessionEvent.OpenShotDetail(shot.id)) },
                     onDelete = { onEvent(SessionEvent.DeleteShot(shot.id)) },
                     modifier = animateItemUnless(reduceMotion),
                     deletable = canEdit,
@@ -280,6 +289,7 @@ private fun SelectedShotDetailPane(
                     card = card,
                     units = units,
                     onClose = { onEvent(SessionEvent.SelectShot(null)) },
+                    onOpenDetail = { onEvent(SessionEvent.OpenShotDetail(card.id)) },
                     onDelete = { onEvent(SessionEvent.DeleteShot(card.id)) },
                     deletable = canEdit,
                     onViewOnRange = onViewOnRange?.let { view -> { view(card.id) } },

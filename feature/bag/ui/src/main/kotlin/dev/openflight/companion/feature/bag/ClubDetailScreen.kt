@@ -3,6 +3,7 @@ package dev.openflight.companion.feature.bag
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -50,6 +51,7 @@ import dev.openflight.companion.core.insights.UnitSystem
 import dev.openflight.companion.core.insights.computeDispersionEllipse
 import dev.openflight.companion.core.insights.computeDispersionViewport
 import dev.openflight.companion.core.insights.distanceUnitLabel
+import dev.openflight.companion.core.ui.ShotDetailSheet
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 
@@ -156,6 +158,7 @@ fun ClubDetailContent(
             return@LazyColumn
         }
         item(key = "summary") { SummaryCard(uiState) }
+        uiState.shapePattern?.let { pattern -> item(key = "shape") { ShapePatternCard(pattern) } }
         if (uiState.histogram.isNotEmpty()) item(key = "histogram") { HistogramCard(uiState.histogram, uiState) }
         uiState.dispersion?.let { dispersion -> item(key = "dispersion") { DispersionCard(dispersion) } }
         if (uiState.recentShots.isNotEmpty()) {
@@ -163,6 +166,7 @@ fun ClubDetailContent(
             items(uiState.recentShots, key = { it.id }) { row ->
                 RecentShot(
                     row,
+                    onOpen = { onEvent(ClubDetailEvent.OpenShotDetail(row.id)) },
                     onViewOnRange =
                         onViewOnRange?.let { view ->
                             { view(row.sessionId, row.id.toString()) }
@@ -170,6 +174,14 @@ fun ClubDetailContent(
                 )
             }
         }
+    }
+    uiState.shotDetail?.let { detail ->
+        val sessionId = uiState.recentShots.firstOrNull { it.id.toString() == detail.id }?.sessionId
+        ShotDetailSheet(
+            state = detail,
+            onDismiss = { onEvent(ClubDetailEvent.CloseShotDetail) },
+            onViewOnRange = sessionId?.let { session -> onViewOnRange?.let { view -> { view(session, detail.id) } } },
+        )
     }
 }
 
@@ -255,26 +267,37 @@ private fun HistogramCard(
 @Composable
 private fun RecentShot(
     row: RecentShotRow,
+    onOpen: () -> Unit,
     onViewOnRange: (() -> Unit)?,
 ) {
+    // Two lines (when and its shape, then the numbers), so the time never wraps on a phone.
     Row(
-        modifier = Modifier.fillMaxWidth().testTag(BagTestTags.RECENT),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable(onClickLabel = "Show details", onClick = onOpen)
+                .testTag(BagTestTags.RECENT),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(OfSpacing.Sm),
     ) {
-        OfText(
-            text = row.timeLabel,
-            role = OfTextRole.BodySmall,
-            color = OfColorTokens.CreamDim,
-            modifier = Modifier.weight(1f),
-        )
-        OfText(text = row.carryLabel, role = OfTextRole.Body, color = OfColorTokens.Gold)
-        row.totalLabel?.let {
-            OfText(text = it, role = OfTextRole.BodySmall)
-            EstimatedBadge()
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(OfSpacing.Sm)) {
+                OfText(text = row.timeLabel, role = OfTextRole.BodySmall, color = OfColorTokens.CreamDim, maxLines = 1)
+                row.shapeLabel?.let { OfText(text = it, role = OfTextRole.BodySmall, color = OfColorTokens.Cream) }
+            }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(OfSpacing.Sm),
+            ) {
+                OfText(text = row.carryLabel, role = OfTextRole.Body, color = OfColorTokens.Gold)
+                row.totalLabel?.let {
+                    OfText(text = it, role = OfTextRole.BodySmall)
+                    EstimatedBadge()
+                }
+                row.sideLabel?.let { OfText(text = it, role = OfTextRole.BodySmall, color = OfColorTokens.CreamDim) }
+                if (row.possibleBadRead) OfPill(label = "Bad read?", tone = StatusTone.Negative)
+            }
         }
-        row.sideLabel?.let { OfText(text = it, role = OfTextRole.BodySmall, color = OfColorTokens.CreamDim) }
-        if (row.possibleBadRead) OfPill(label = "Bad read?", tone = StatusTone.Negative)
         if (onViewOnRange != null) {
             OfTextButton(
                 text = "Range",

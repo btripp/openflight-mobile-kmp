@@ -41,6 +41,7 @@ data class BagOption(
  * @property carryLabel the mean carry ("155 yds"), or "—" without shots.
  * @property plusMinusLabel "± 5 yds", or `null` below two shots.
  * @property gap the chip between this row and the next club with enough shots.
+ * @property shapeLabel the club's typical shape ("Mostly fade"); `null` without a measured curve.
  */
 data class BagClubRow(
     val id: String,
@@ -58,6 +59,7 @@ data class BagClubRow(
     val shotCountLabel: String,
     val colorIndex: Int,
     val gap: GapChipState?,
+    val shapeLabel: String? = null,
 ) {
     /** One sentence for a screen reader. */
     val accessibilityLabel: String
@@ -68,6 +70,7 @@ data class BagClubRow(
                 if (avgCarryYards == null) "no shots yet" else "$carryLabel average carry",
                 plusMinusLabel,
                 shotCountLabel,
+                shapeLabel,
                 gap?.label,
             ).joinToString(", ")
 }

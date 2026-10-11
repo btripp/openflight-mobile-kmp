@@ -98,6 +98,11 @@ struct SessionContent: View {
             onConfirm: { send(SessionEventConfirmAction.shared) },
             onCancel: { send(SessionEventCancelAction.shared) }
         )
+        .shotDetailSheet(
+            state.shotDetail,
+            onClose: { send(SessionEventCloseShotDetail.shared) },
+            onViewOnRange: openRange.map { open in { open(.liveShot($0.id)) } }
+        )
     }
 
     private var compactLayout: some View {
@@ -233,7 +238,8 @@ struct SessionContent: View {
                     deletable: canEdit,
                     onClose: { send(SessionEventSelectShot(id: nil)) },
                     onDelete: { send(SessionEventDeleteShot(id: card.id)) },
-                    onViewOnRange: openRange.map { open in { open(.liveShot(card.id)) } }
+                    onViewOnRange: openRange.map { open in { open(.liveShot(card.id)) } },
+                    onOpenDetail: { send(SessionEventOpenShotDetail(id: card.id)) }
                 )
             }
             .listRowBackground(Theme.bgElevated)
@@ -255,9 +261,9 @@ struct SessionContent: View {
                 HStack(spacing: 4) {
                     SessionShotRowView(row: row, units: units)
                         .contentShape(Rectangle())
-                        .onTapGesture { send(SessionEventSelectShot(id: row.id)) }
+                        .onTapGesture { send(SessionEventOpenShotDetail(id: row.id)) }
                         .accessibilityAddTraits(selected ? [.isSelected, .isButton] : .isButton)
-                        .accessibilityHint("Shows this shot on the chart")
+                        .accessibilityHint("Shows this shot's flight and details")
                     // Plan F8d-B: fly this shot on the range, paused on it.
                     if let openRange, row.canFly {
                         ViewOnRangeButton(iconOnly: true, identifier: RangeEntryTags.sessionShot(row.id)) {
@@ -482,7 +488,7 @@ struct SessionShotRowView: View {
                 Text(row.implementLabel ?? Units.clubLabel(row.club))
                     .font(.of(.headline, weight: .semibold))
                     .lineLimit(2)
-                Text([Units.clockTime(row.timestamp), row.profileName].compactMap { $0 }.joined(separator: " · "))
+                Text([Units.clockTime(row.timestamp), row.profileName, row.shapeLabel].compactMap { $0 }.joined(separator: " · "))
                     .font(.of(.caption))
                     .foregroundStyle(Theme.creamDim)
                     .lineLimit(2)

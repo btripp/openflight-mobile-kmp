@@ -204,7 +204,7 @@ internal fun testFlightPlan(
 ): PlannedShot? {
     val estimate = ShotDistanceEstimator().estimate(measurements, conditions, bearing) ?: return null
     val input = FlightInputResolver().resolve(measurements).copy(targetCarryMeters = estimate.carryYards * 0.9144)
-    return PlannedShot(estimate, simulation(input))
+    return PlannedShot(estimate, simulation(input), input)
 }
 
 /**
@@ -234,5 +234,5 @@ internal fun cheapFlightPlan(
             airDensity = 1.225,
             flightProvenance = input.provenance,
         )
-    return PlannedShot(estimate, makeTestTrajectory(input))
+    return PlannedShot(estimate, makeTestTrajectory(input), input)
 }

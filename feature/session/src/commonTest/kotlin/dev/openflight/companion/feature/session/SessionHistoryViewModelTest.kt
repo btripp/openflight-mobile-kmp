@@ -15,6 +15,7 @@ import dev.openflight.companion.core.data.TransportType
 import dev.openflight.companion.core.insights.ClubChip
 import dev.openflight.companion.core.insights.UnitSystem
 import dev.openflight.companion.core.model.pi.ShotDetail
+import dev.openflight.companion.core.testing.FakeConditionsRepository
 import dev.openflight.companion.core.testing.FakeSettingsRepository
 import dev.openflight.companion.core.testing.FakeShotHistoryRepository
 import kotlinx.coroutines.Dispatchers
@@ -291,6 +292,27 @@ class SessionHistoryViewModelTest {
         }
 
     @Test
+    fun openingAStoredShotShowsItsDetailUntilClosed() =
+        runTest {
+            history.put(
+                "s1",
+                listOf(stored(2, "2026-09-25T10:05:00"), stored(1, "2026-09-25T10:00:00", club = "7-iron")),
+            )
+            val viewModel = detailViewModel()
+
+            viewModel.uiState.testIgnoringRest {
+                awaitUntil { it.session.allCount == 2 }
+                viewModel.onEvent(SessionHistoryDetailEvent.OpenShotDetail("2026-09-25T10:00:00"))
+
+                val detail = awaitUntil { it.session.shotDetail != null }.session.shotDetail!!
+                assertThat(detail.title).isEqualTo("Shot 1 · 7-Iron")
+
+                viewModel.onEvent(SessionHistoryDetailEvent.CloseShotDetail)
+                awaitUntil { it.session.shotDetail == null }
+            }
+        }
+
+    @Test
     fun deletingARowAsksFirstThenIsPendingUntilTheShotIsGone() =
         runTest {
             history.put(
@@ -439,7 +461,14 @@ class SessionHistoryViewModelTest {
 
     // endregion
 
-    private fun detailViewModel() = SessionHistoryDetailViewModel("s1", history, settings)
+    private fun detailViewModel() =
+        SessionHistoryDetailViewModel(
+            "s1",
+            history,
+            settings,
+            FakeConditionsRepository(),
+            computeDispatcher = Dispatchers.Main,
+        )
 
     private fun stored(
         number: Int,

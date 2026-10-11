@@ -228,6 +228,12 @@ struct BagClubRowView: View {
                 Text([row.plusMinusLabel, row.shotCountLabel].compactMap { $0 }.joined(separator: " · "))
                     .font(.of(.caption2))
                     .foregroundStyle(Theme.creamMuted)
+                if let shape = row.shapeLabel {
+                    Text(shape)
+                        .font(.of(.caption2))
+                        .foregroundStyle(Theme.creamDim)
+                        .accessibilityIdentifier(BagTestTags.shared.ROW_SHAPE)
+                }
             }
         }
         .contentShape(Rectangle())

@@ -127,6 +127,14 @@ sealed interface SessionHistoryDetailEvent {
         val id: String,
     ) : SessionHistoryDetailEvent
 
+    /** Opens the shot detail sheet for a row (its timestamp id), in [SessionUiState.shotDetail]. */
+    data class OpenShotDetail(
+        val id: String,
+    ) : SessionHistoryDetailEvent
+
+    /** Closes the shot detail sheet. */
+    data object CloseShotDetail : SessionHistoryDetailEvent
+
     /** Builds this session's CSV; the result arrives as [SessionEffect.CsvReady]. */
     data object ExportCsv : SessionHistoryDetailEvent
 

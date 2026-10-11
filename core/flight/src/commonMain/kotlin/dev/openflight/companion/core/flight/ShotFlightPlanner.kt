@@ -9,11 +9,13 @@ import dev.openflight.companion.core.model.TargetBearing
  *
  * [trajectory] lands exactly at [ShotDistanceEstimate.carryYards], so the drawn ball lands where
  * the carry label says, and it flies in the conditions' air (and wind, once a target bearing is
- * set).
+ * set). [input] is what it flew: the resolved launch (with its provenance) aimed at the displayed
+ * carry.
  */
 data class PlannedShot(
     val estimate: ShotDistanceEstimate,
     val trajectory: FlightTrajectory,
+    val input: FlightInput,
 )
 
 /**
@@ -41,7 +43,7 @@ class ShotFlightPlanner(
                 windMetersPerSecond = adjusted.windMetersPerSecond,
             )
         val simulator = BallFlightSimulator(renderConfiguration.copy(airDensity = adjusted.airDensity))
-        return PlannedShot(result.estimate, simulator.fitToCarry(input, adjusted.run))
+        return PlannedShot(result.estimate, simulator.fitToCarry(input, adjusted.run), input)
     }
 
     private companion object {

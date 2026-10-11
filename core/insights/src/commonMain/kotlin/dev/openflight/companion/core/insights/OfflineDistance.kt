@@ -6,6 +6,7 @@ import dev.openflight.companion.core.flight.FlightInputResolutionError
 import dev.openflight.companion.core.flight.FlightInputResolver
 import dev.openflight.companion.core.flight.FlightMeasurements
 import dev.openflight.companion.core.flight.FlightParameter
+import dev.openflight.companion.core.flight.ShotShape
 
 /**
  * Where a shot finished side to side.
@@ -13,10 +14,12 @@ import dev.openflight.companion.core.flight.FlightParameter
  * @property offlineYards positive right of the target line.
  * @property sideEstimated the shot reported neither horizontal launch nor spin axis, so it sits on
  *   the target line by default rather than by measurement.
+ * @property shape the shot's shape from the same flight; its parts are `null` where unmeasured.
  */
 data class OfflineDistance(
     val offlineYards: Double,
     val sideEstimated: Boolean,
+    val shape: ShotShape = ShotShape(start = null, curve = null),
 )
 
 /**
@@ -44,6 +47,7 @@ class OfflineDistanceEstimator(
         return OfflineDistance(
             offlineYards = trajectory.lateralMeters / METERS_PER_YARD,
             sideEstimated = FlightParameter.HORIZONTAL_LAUNCH in estimated && FlightParameter.SPIN_AXIS in estimated,
+            shape = ShotShape.classify(input, trajectory),
         )
     }
 

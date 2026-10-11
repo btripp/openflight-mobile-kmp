@@ -377,14 +377,15 @@ class SessionScreenTest {
     }
 
     @Test
-    fun givenAShot_whenItsRowIsTapped_thenItIsSelectedOnTheChart() {
+    fun givenAShot_whenItsRowIsTapped_thenItsDetailOpens() {
         show(withChart)
         val row = SessionTestTags.shot(previewRows[1].id)
         composeRule.onNode(hasScrollToNodeAction()).performScrollToNode(hasTestTag(row))
 
         composeRule.onNodeWithTag(row).performClick()
 
-        assertEquals(listOf<SessionEvent>(SessionEvent.SelectShot(previewRows[1].id)), events)
+        // The view model also selects it on the chart (SessionViewModelTest).
+        assertEquals(listOf<SessionEvent>(SessionEvent.OpenShotDetail(previewRows[1].id)), events)
     }
 
     @Test

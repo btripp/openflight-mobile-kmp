@@ -44,6 +44,7 @@ data class DispersionPoint(
     val offlineYards: Double,
     val sideEstimated: Boolean,
     val possibleBadRead: Boolean = false,
+    val shapeLabel: String? = null,
 ) {
     val sample: DispersionSample get() = DispersionSample(offlineYards, carryYards)
 }
@@ -108,6 +109,12 @@ data class SelectedShotCard(
     val clubSpeedMph: Double?,
     val possibleBadRead: Boolean = false,
 )
+
+/** [rows] with each one's shape ("Push fade") from [points], matched by id. */
+internal fun List<SessionShotRow>.withShapes(points: List<DispersionPoint>): List<SessionShotRow> {
+    val shapes = points.associate { it.id to it.shapeLabel }
+    return map { row -> shapes[row.id]?.let { row.copy(shapeLabel = it) } ?: row }
+}
 
 /**
  * Builds [DispersionPoint]s, simulating each shot's flight once: results are kept per
@@ -179,6 +186,7 @@ internal class DispersionCalculator(
                 carryYards = measurements.carryYards,
                 offlineYards = landing.offlineYards,
                 sideEstimated = landing.sideEstimated,
+                shapeLabel = landing.shape.label,
             )
         }
     }

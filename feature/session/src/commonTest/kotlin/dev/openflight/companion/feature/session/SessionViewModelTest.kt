@@ -28,6 +28,7 @@ import dev.openflight.companion.core.model.pi.Profile
 import dev.openflight.companion.core.model.pi.ProfilesState
 import dev.openflight.companion.core.model.pi.SessionStats
 import dev.openflight.companion.core.model.pi.TriggerStatus
+import dev.openflight.companion.core.testing.FakeConditionsRepository
 import dev.openflight.companion.core.testing.FakePiSessionRepository
 import dev.openflight.companion.core.testing.FakeSettingsRepository
 import dev.openflight.companion.core.testing.FakeShotRepository
@@ -55,7 +56,15 @@ class SessionViewModelTest {
     @BeforeTest
     fun setUp() {
         Dispatchers.setMain(UnconfinedTestDispatcher())
-        viewModel = SessionViewModel(shots, settings, piSession, now = { "2026-09-24T18:30:05.123Z" })
+        viewModel =
+            SessionViewModel(
+                shots,
+                settings,
+                piSession,
+                FakeConditionsRepository(),
+                now = { "2026-09-24T18:30:05.123Z" },
+                computeDispatcher = Dispatchers.Main,
+            )
     }
 
     @AfterTest
@@ -486,6 +495,59 @@ class SessionViewModelTest {
                 shots.setHistory(listOf(shot(2)))
 
                 assertThat(awaitUntil { it.shots.size == 1 }.selectedShot).isNull()
+            }
+        }
+
+    @Test
+    fun openingAShotShowsItsDetailAndSelectsItUntilClosed() =
+        runTest {
+            viewModel.uiState.testIgnoringRest {
+                shots.setHistory(listOf(shot(2), shot(1, club = "7-iron", carryYards = 162.0)))
+                awaitUntil { it.shots.size == 2 }
+
+                viewModel.onEvent(SessionEvent.OpenShotDetail(shotId(1)))
+
+                val opened = awaitUntil { it.shotDetail != null }
+                assertThat(opened.shotDetail!!.title).isEqualTo("Shot 1 · 7-Iron")
+                assertThat(opened.shotDetail!!.flight).isNotNull()
+                assertThat(opened.selectedShot?.id).isEqualTo(shotId(1))
+
+                viewModel.onEvent(SessionEvent.CloseShotDetail)
+
+                assertThat(awaitUntil { it.shotDetail == null }.selectedShot?.id).isEqualTo(shotId(1))
+            }
+        }
+
+    @Test
+    fun rowsNameTheirShapeWhenItWasMeasured() =
+        runTest {
+            viewModel.uiState.testIgnoringRest {
+                shots.setHistory(
+                    listOf(
+                        shot(3, spinAxisDeg = -10.0, launchAngleHorizontal = 0.0),
+                        shot(2, spinAxisDeg = 0.0),
+                        shot(1),
+                    ),
+                )
+
+                val rows = awaitUntil { it.shots.size == 3 && it.shots.first().shapeLabel != null }.shots
+                assertThat(rows.map { it.shapeLabel }).isEqualTo(listOf("Draw", "Straight", null))
+            }
+        }
+
+    @Test
+    fun anOpenDetailClosesWhenItsShotIsDeleted() =
+        runTest {
+            viewModel.uiState.testIgnoringRest {
+                shots.setHistory(listOf(shot(2), shot(1)))
+                awaitUntil { it.shots.size == 2 }
+                viewModel.onEvent(SessionEvent.OpenShotDetail(shotId(1)))
+                awaitUntil { it.shotDetail != null }
+
+                shots.setHistory(listOf(shot(2)))
+
+                // The detail is built off the main thread, so it can trail the list by an emission.
+                assertThat(awaitUntil { it.shots.size == 1 && it.shotDetail == null }.selectedShot).isNull()
             }
         }
 

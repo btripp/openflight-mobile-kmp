@@ -13,6 +13,7 @@ import dev.openflight.companion.core.data.ShotWindow
 import dev.openflight.companion.core.insights.GappingClub
 import dev.openflight.companion.core.insights.UnitSystem
 import dev.openflight.companion.core.insights.analyzeGapping
+import dev.openflight.companion.core.insights.summarizeShapes
 import dev.openflight.companion.core.model.Conditions
 import dev.openflight.companion.core.model.GolfClub
 import dev.openflight.companion.core.model.TargetBearing
@@ -235,6 +236,12 @@ class BagViewModel(
                     shotCountLabel = BagCopy.shotCount(summary?.shotCount ?: 0),
                     colorIndex = colors.getValue(entry.club),
                     gap = gap?.let { GapChipState(BagCopy.gapChip(it.gapYards, it.flag, units), it.flag) },
+                    shapeLabel =
+                        stats[entry.club]
+                            ?.shots
+                            ?.let { shots ->
+                                summarizeShapes(shots.mapNotNull { it.shape })
+                            }?.headline,
                 )
             }
         return BagUiState(

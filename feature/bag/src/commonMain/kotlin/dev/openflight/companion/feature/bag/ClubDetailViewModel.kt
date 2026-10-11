@@ -6,15 +6,24 @@ import androidx.lifecycle.viewModelScope
 import dev.openflight.companion.core.data.ConditionsRepository
 import dev.openflight.companion.core.data.SettingsRepository
 import dev.openflight.companion.core.data.ShotHistoryRepository
+import dev.openflight.companion.core.flight.ShotFlightPath
+import dev.openflight.companion.core.flight.ShotFlightPlanner
+import dev.openflight.companion.core.flight.toFlightMeasurements
 import dev.openflight.companion.core.insights.ClubDistanceSummary
 import dev.openflight.companion.core.insights.DispersionEllipse
 import dev.openflight.companion.core.insights.DispersionSample
 import dev.openflight.companion.core.insights.DispersionViewport
+import dev.openflight.companion.core.insights.ShotDetailBuilder
+import dev.openflight.companion.core.insights.ShotDetailState
 import dev.openflight.companion.core.insights.UnitSystem
 import dev.openflight.companion.core.insights.computeDispersionEllipse
 import dev.openflight.companion.core.insights.computeDispersionViewport
 import dev.openflight.companion.core.insights.convertDistanceFromYards
+import dev.openflight.companion.core.insights.summarizeShapes
+import dev.openflight.companion.core.insights.toShotDetailInput
+import dev.openflight.companion.core.model.Conditions
 import dev.openflight.companion.core.model.GolfClub
+import dev.openflight.companion.core.model.TargetBearing
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -37,6 +46,9 @@ import kotlin.math.floor
  * @property summaryLines "155 yds ± 5 carry", "Median 154 yds · p10–p90 148–161 yds", …
  * @property totalLabel the mean estimated total, badged "est." by the UI; `null` without one.
  * @property dispersion only shots with a measured side; `null` when there are none.
+ * @property shotDetail the open shot detail sheet; `null` when it's closed or its shot left the window.
+ * @property shapePattern the club's typical shape and its recent flights from above; `null` until a
+ *   shot's curve was measured.
  */
 data class ClubDetailUiState(
     val loaded: Boolean = false,
@@ -49,6 +61,8 @@ data class ClubDetailUiState(
     val histogram: List<HistogramBin> = emptyList(),
     val dispersion: ClubDispersionState? = null,
     val recentShots: List<RecentShotRow> = emptyList(),
+    val shotDetail: ShotDetailState? = null,
+    val shapePattern: ShapePatternState? = null,
     val adjustedForConditions: Boolean = false,
     val units: UnitSystem = UnitSystem.IMPERIAL,
     val window: AnalysisWindow = AnalysisWindow.LIFETIME,
@@ -61,6 +75,14 @@ sealed interface ClubDetailEvent {
     data class SelectWindow(
         val window: AnalysisWindow,
     ) : ClubDetailEvent
+
+    /** Opens the shot detail sheet for a recent shot ([RecentShotRow.id]). */
+    data class OpenShotDetail(
+        val id: Long,
+    ) : ClubDetailEvent
+
+    /** Closes the shot detail sheet. */
+    data object CloseShotDetail : ClubDetailEvent
 }
 
 /** One histogram bar: carries in `[lowYards, highYards)`; [fraction] of the tallest bar. */
@@ -81,6 +103,20 @@ data class ClubDispersionState(
 )
 
 /**
+ * A club's shot shape at a glance (plan: bag shape pattern).
+ *
+ * @property headline "Mostly fade", "Leans left", "Mixed".
+ * @property talliesLabel "Draw 2 · Straight 3 · Fade 6".
+ * @property flights the most recent flown shots (newest first), to draw over each other from above.
+ */
+data class ShapePatternState(
+    val headline: String,
+    val talliesLabel: String,
+    val flights: List<ShotFlightPath>,
+    val accessibilitySummary: String,
+)
+
+/**
  * One recent shot. [totalLabel] is an estimate, badged "est.". [sessionId] and [id] (the stored
  * row) open it on the range (plan F8d).
  */
@@ -92,6 +128,7 @@ data class RecentShotRow(
     val sideLabel: String?,
     val possibleBadRead: Boolean,
     val sessionId: String,
+    val shapeLabel: String? = null,
 )
 
 /** Club Detail's state holder for [wireValue] (a [GolfClub] wire value). */
@@ -106,6 +143,10 @@ class ClubDetailViewModel(
     private val distances = ClubShotDistances()
     private val club = GolfClub.fromWireValue(wireValue)
     private val window = MutableStateFlow(AnalysisWindow.LIFETIME)
+    private val detailId = MutableStateFlow<Long?>(null)
+    private val detailBuilder = ShotDetailBuilder()
+    private val planner = ShotFlightPlanner()
+    private var patternCache: Pair<PatternKey, List<ShotFlightPath>>? = null
 
     private val stats =
         combine(
@@ -116,11 +157,17 @@ class ClubDetailViewModel(
             conditions.conditions,
             conditions.targetBearing,
         ) { (selected, shots), conditionsValue, bearing ->
-            selected to clubStats(distances.of(shots, conditionsValue, bearing))
+            Loaded(selected, clubStats(distances.of(shots, conditionsValue, bearing)), conditionsValue, bearing)
         }.flowOn(computeDispatcher)
 
     val uiState: StateFlow<ClubDetailUiState> =
-        combine(stats, settings.units) { (selected, stats), units -> state(stats, units).copy(window = selected) }
+        combine(stats, settings.units, detailId) { loaded, units, id ->
+            state(loaded.stats, units).copy(
+                window = loaded.window,
+                shotDetail = id?.let { detail(it, loaded, units) },
+                shapePattern = shapePattern(loaded),
+            )
+        }.flowOn(computeDispatcher)
             .stateIn(
                 viewModelScope,
                 SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
@@ -130,8 +177,63 @@ class ClubDetailViewModel(
     fun onEvent(event: ClubDetailEvent) {
         when (event) {
             is ClubDetailEvent.SelectWindow -> window.value = event.window
+            is ClubDetailEvent.OpenShotDetail -> detailId.value = event.id
+            ClubDetailEvent.CloseShotDetail -> detailId.value = null
         }
     }
+
+    /** The sheet for stored shot [id], flown in the same air as the stats; `null` once it's gone. */
+    private fun detail(
+        id: Long,
+        loaded: Loaded,
+        units: UnitSystem,
+    ): ShotDetailState? {
+        val shot =
+            loaded.stats.shots
+                .firstOrNull { it.shot.id == id }
+                ?.shot ?: return null
+        val input = shot.detail.toShotDetailInput(shotNumber = null, id = id.toString())
+        return detailBuilder.build(input, loaded.conditions, loaded.bearing, units)
+    }
+
+    /**
+     * The club's shape summary and its recent flights, flown once per set of shots and conditions
+     * (opening a shot or changing units doesn't fly them again).
+     */
+    private fun shapePattern(loaded: Loaded): ShapePatternState? {
+        val summary = summarizeShapes(loaded.stats.shots.mapNotNull { it.shape }) ?: return null
+        val recent =
+            loaded.stats.shots
+                .take(PATTERN_SHOTS)
+                .map { it.shot }
+        val key = PatternKey(recent.map { it.id }, loaded.conditions, loaded.bearing)
+        val flights =
+            patternCache?.takeIf { it.first == key }?.second
+                ?: recent
+                    .mapNotNull { shot ->
+                        shot.detail.toFlightMeasurements()?.let { planner.plan(it, loaded.conditions, loaded.bearing) }
+                    }.mapNotNull(ShotFlightPath::from)
+                    .also { patternCache = key to it }
+        return ShapePatternState(
+            headline = summary.headline,
+            talliesLabel = summary.talliesLabel,
+            flights = flights,
+            accessibilitySummary = "Shot shape: ${summary.headline}. ${summary.talliesLabel}.",
+        )
+    }
+
+    private data class PatternKey(
+        val shotIds: List<Long>,
+        val conditions: Conditions,
+        val bearing: TargetBearing?,
+    )
+
+    private data class Loaded(
+        val window: AnalysisWindow,
+        val stats: ClubStatsEntry,
+        val conditions: Conditions,
+        val bearing: TargetBearing?,
+    )
 
     private fun state(
         stats: ClubStatsEntry,
@@ -163,6 +265,7 @@ class ClubDetailViewModel(
                         sideLabel = shot.offlineYards?.let { BagCopy.side(it, units) },
                         possibleBadRead = index in outliers,
                         sessionId = shot.shot.sessionId,
+                        shapeLabel = shot.shape?.label,
                     )
                 },
             adjustedForConditions = stats.shots.any { it.carryAdjusted },
@@ -173,6 +276,7 @@ class ClubDetailViewModel(
     private companion object {
         const val STOP_TIMEOUT_MILLIS = 5_000L
         const val RECENT_SHOTS = 10
+        const val PATTERN_SHOTS = 10
     }
 }
 

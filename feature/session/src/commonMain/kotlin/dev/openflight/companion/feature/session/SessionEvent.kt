@@ -47,6 +47,17 @@ sealed interface SessionEvent {
         val id: String?,
     ) : SessionEvent
 
+    /**
+     * Opens the shot detail sheet (its flight, shape and every metric) for row [id], and selects the
+     * shot on the chart like [SelectShot].
+     */
+    data class OpenShotDetail(
+        val id: String,
+    ) : SessionEvent
+
+    /** Closes the shot detail sheet. */
+    data object CloseShotDetail : SessionEvent
+
     /** Asks a `--mock` Pi for a fake shot (`simulate_shot`); see [SessionUiState.showSimulateShot]. */
     data object SimulateShot : SessionEvent
 }

@@ -63,6 +63,45 @@ class ClubDetailViewModelTest {
         }
 
     @Test
+    fun aClubThatFadesShowsItsPatternAndEachShotsShape() =
+        runTest {
+            history.put(
+                "s1",
+                (1..4).map { historyShot(GolfClub.IRON_7, 160.0, spinAxis = 8.0) } +
+                    historyShot(GolfClub.IRON_7, 160.0, spinAxis = -8.0) +
+                    historyShot(GolfClub.IRON_7, 160.0, spinAxis = null),
+            )
+
+            viewModel().uiState.testIgnoringRest {
+                val state = awaitUntil { it.shapePattern != null }
+                val pattern = state.shapePattern!!
+                assertThat(pattern.headline).isEqualTo("Mostly fade")
+                assertThat(pattern.talliesLabel).isEqualTo("Draw 1 · Fade 4")
+                assertThat(pattern.flights.size).isEqualTo(6)
+                assertThat(state.recentShots.mapNotNull { it.shapeLabel }.toSet()).isEqualTo(setOf("Fade", "Draw"))
+            }
+        }
+
+    @Test
+    fun aRecentShotOpensItsDetailUntilClosed() =
+        runTest {
+            history.put("s1", fiveShots(GolfClub.IRON_7, 160.0))
+            val viewModel = viewModel()
+
+            viewModel.uiState.testIgnoringRest {
+                val recent = awaitUntil { it.recentShots.isNotEmpty() }.recentShots.first()
+                viewModel.onEvent(ClubDetailEvent.OpenShotDetail(recent.id))
+
+                val detail = awaitUntil { it.shotDetail != null }.shotDetail!!
+                assertThat(detail.title).isEqualTo("7-Iron")
+                assertThat(detail.flight).isNotNull()
+
+                viewModel.onEvent(ClubDetailEvent.CloseShotDetail)
+                awaitUntil { it.shotDetail == null }
+            }
+        }
+
+    @Test
     fun aClubWithoutShotsIsLoadedButEmpty() =
         runTest {
             viewModel().uiState.testIgnoringRest {
