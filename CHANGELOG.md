@@ -45,18 +45,12 @@ tag. Plain `v0.1.0` waits on the hardware test matrix on a real Raspberry Pi.
   deleted on the kiosk meanwhile. An older Pi still resends only its latest shot.
 - **A shot resent after a reconnect no longer appears in two History sessions.** It updates the copy
   the phone already stored.
-
-### Fixed
-
 - **The range at the largest text sizes.** Prev, Play and Next (replay and overlay) no longer
   slide off the bottom of the screen or get squeezed out of a narrow landscape scene; the metrics
   scroll above them when they don't fit. On iOS, Ball speed and Carry now grow with your text size
   instead of shrinking to the smallest numbers on screen, the "Driving Range Ready" card no longer
   covers the metrics, and in landscape the controls share one row so the metrics stay clear. The
   shot table shows one card per shot instead of cutting clubs and numbers short ("Dri…", "1…").
-
-### Fixed
-
 - Leaving a screen while a weather lookup is in flight now stops it, instead of letting it carry on
   and report a "network error" after the screen is gone (#91).
 

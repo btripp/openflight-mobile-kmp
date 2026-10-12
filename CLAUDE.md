@@ -128,7 +128,7 @@ invariants above:
   then the `xcodebuild … build` above.
 
 `.github/workflows/mock-server-it.yml` runs `:core:data:mockServerIT` on ubuntu against two
-pinned backends (upstream `main` and the `feat/phone-connectivity` fork), only when app code or
+pinned backends (upstream `main` and open-flight/openflight#297's branch), only when app code or
 the build changes. `.github/dependabot.yml` opens weekly grouped Gradle and Actions updates.
 
 CI doesn't run device UI tests (`connectedDebugAndroidTest`) or the Xcode test targets. Run
