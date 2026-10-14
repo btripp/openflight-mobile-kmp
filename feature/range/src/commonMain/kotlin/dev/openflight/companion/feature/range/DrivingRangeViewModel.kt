@@ -207,8 +207,11 @@ class DrivingRangeViewModel(
     /** Stored shots' Pi details by the event id they fly under, so roll-out uses the spin-adjusted carry. */
     private val historyDetails = mutableMapOf<String, ShotDetail>()
 
-    /** Overlay trajectories by stored row id (`null`: the shot can't be simulated). Main thread only. */
-    private val overlayCache = mutableMapOf<Long, FlightTrajectory?>()
+    /**
+     * Overlay trajectories by everything a flight depends on (`null`: the shot can't be simulated), so
+     * a row's final `shot_update` or new conditions re-fly it. Main thread only.
+     */
+    private val overlayCache = mutableMapOf<Triple<HistoryShot, Conditions, TargetBearing?>, FlightTrajectory?>()
 
     /** Plan F8d: why the last simulate request failed. */
     private val simulateError = MutableStateFlow<String?>(null)
@@ -914,19 +917,21 @@ class DrivingRangeViewModel(
         val clubs = orderClubs(candidates.mapNotNull { shot -> shot.detail.club?.takeIf { it.isNotEmpty() } })
         val matching = if (club == null) candidates else candidates.filter { it.detail.club == club }
         val capped = matching.take(limit ?: RangeBrowseState.OVERLAY_CAP)
-        val missing = capped.filter { it.id !in overlayCache }
+        val air = conditions.conditions.value
+        val bearing = conditions.targetBearing.value
+        // Trimmed to every candidate, not just the shown ones, so changing the club filter doesn't re-fly.
+        overlayCache.keys.retainAll(candidates.mapTo(HashSet()) { Triple(it, air, bearing) })
+        val missing = capped.filter { Triple(it, air, bearing) !in overlayCache }
         if (missing.isNotEmpty()) {
-            val air = conditions.conditions.value
-            val bearing = conditions.targetBearing.value
             val computed =
                 withContext(computeDispatcher) {
-                    missing.associate { it.id to overlayTrajectory(it, air, bearing) }
+                    missing.associate { Triple(it, air, bearing) to overlayTrajectory(it, air, bearing) }
                 }
             overlayCache.putAll(computed)
         }
         val flights =
             capped.mapNotNull { shot ->
-                val trajectory = overlayCache[shot.id] ?: return@mapNotNull null
+                val trajectory = overlayCache[Triple(shot, air, bearing)] ?: return@mapNotNull null
                 val wire = shot.detail.club.orEmpty()
                 OverlayFlight(shot.id.toString(), wire, clubs.indexOf(wire).coerceAtLeast(0), trajectory)
             }
