@@ -211,13 +211,27 @@ struct SettingsContent: View {
         }
     }
 
+    /// The same colours as the Dashboard's connection pill.
+    private var streamColor: Color {
+        switch state.connectionState {
+        case is ConnectionStateConnected: Theme.success
+        case is ConnectionStateScanning, is ConnectionStateConnecting, is ConnectionStateDiscovering: Theme.warning
+        case is ConnectionStateError, is ConnectionStateUnavailable: Theme.danger
+        default: Theme.neutral
+        }
+    }
+
     private var connectionSection: some View {
         Section {
             // Plan F14: Demo mode's pretend Pi is on the network, whatever transport the real Pi uses.
             row("Transport", state.demo.enabled ? "Demo Pi (Network)" : state.transport.label_)
             if !state.demo.enabled { row("Host", state.host) }
-            row("Shot stream", state.connectionState.description_)
-            LabeledContent("Live session") {
+            LabeledContent("Shot stream") {
+                StatusPill(text: state.connectionState.description_, color: streamColor)
+            }
+            .accessibilityElement(children: .combine)
+            // The Socket.IO link: delete, camera, training and radar settings. Bluetooth doesn't carry it.
+            LabeledContent("Pi controls") {
                 StatusPill(text: state.linkDescription, color: linkColor)
             }
             .accessibilityElement(children: .combine)

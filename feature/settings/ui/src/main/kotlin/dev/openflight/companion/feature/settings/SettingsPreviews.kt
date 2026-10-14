@@ -201,7 +201,7 @@ private fun SettingsConnectedPreview() {
     }
 }
 
-/** Issue #7: a long reconnect reason wraps under "Live session" instead of squeezing it. */
+/** Issue #7: a long reconnect reason wraps under "Pi controls" instead of squeezing it. */
 @Preview(heightDp = 900)
 @Preview(heightDp = 900, fontScale = 2f)
 @Composable

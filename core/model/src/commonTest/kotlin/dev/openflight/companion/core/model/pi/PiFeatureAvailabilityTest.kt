@@ -32,7 +32,7 @@ class PiFeatureAvailabilityTest {
             .isEqualTo("Network only: Bluetooth can't delete or edit on the Pi")
         assertThat(PiFeatureAvailability.DELETE_AND_CLEAR_NEED_WIFI)
             .isEqualTo("Delete and Clear need Network. Bluetooth is read-only.")
-        assertThat(PiLinkState.WifiOnly.description).isEqualTo("Available on Network only")
+        assertThat(PiLinkState.WifiOnly.description).isEqualTo("Requires Network")
     }
 
     @Test

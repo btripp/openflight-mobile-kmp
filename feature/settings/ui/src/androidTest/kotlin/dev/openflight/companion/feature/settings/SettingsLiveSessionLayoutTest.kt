@@ -26,7 +26,7 @@ import kotlin.test.assertTrue
 
 /**
  * Issue #7: a long live-session status (the Socket.IO link's reconnect reason) took the whole
- * connection row, so the "Live session" label was laid out one letter per line.
+ * connection row, so the "Pi controls" (then "Live session") label was laid out one letter per line.
  */
 @RunWith(AndroidJUnit4::class)
 class SettingsLiveSessionLayoutTest {
@@ -83,7 +83,7 @@ class SettingsLiveSessionLayoutTest {
         assertStatusFitsTheCard(PiLinkState.Connected.description)
     }
 
-    /** "Live session" stays one line, or at most breaks between its two words, never mid-word. */
+    /** "Pi controls" stays one line, or at most breaks between its two words, never mid-word. */
     private fun assertLabelIsNotSqueezed() {
         val layout = textLayout(composeRule.onNodeWithTag(SettingsUiTags.LIVE_SESSION_LABEL, useUnmergedTree = true))
         val text = layout.layoutInput.text.text

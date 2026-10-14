@@ -8,8 +8,11 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performScrollTo
@@ -31,7 +34,7 @@ import kotlin.test.assertTrue
  * Issue #54: at 200% text the connection card's "Shot stream" value (a DNS error that quotes the
  * host) was squeezed beside its label and broke inside the host name ("raspberrypi.loc" / "al").
  * The label/value rows now wrap only at spaces: a value that doesn't fit beside its label moves
- * under it, like the "Live session" row (issue #7).
+ * under it, like the "Pi controls" row (issue #7).
  */
 @RunWith(AndroidJUnit4::class)
 class SettingsConnectionRowsLayoutTest {
@@ -150,8 +153,15 @@ class SettingsConnectionRowsLayoutTest {
 
     private fun bounds(tag: String) = composeRule.onNodeWithTag(tag, useUnmergedTree = true).getUnclippedBoundsInRoot()
 
+    /** The text node tagged [tag], or the one inside it (the shot stream's value is a pill). */
     private fun textLayout(tag: String): TextLayoutResult =
-        textLayout(composeRule.onNodeWithTag(tag, useUnmergedTree = true))
+        textLayout(
+            composeRule.onNode(
+                (hasTestTag(tag) or hasAnyAncestor(hasTestTag(tag))) and
+                    SemanticsMatcher.keyIsDefined(SemanticsActions.GetTextLayoutResult),
+                useUnmergedTree = true,
+            ),
+        )
 
     private fun textLayout(node: SemanticsNodeInteraction): TextLayoutResult {
         val layouts = mutableListOf<TextLayoutResult>()

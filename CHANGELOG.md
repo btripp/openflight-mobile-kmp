@@ -11,6 +11,14 @@ tag. Plain `v0.1.0` waits on the hardware test matrix on a real Raspberry Pi.
 
 ## [Unreleased]
 
+### Changed
+
+- **Clearer connection status in Settings.** The shot stream's state is now a coloured pill like
+  the row under it (green when connected, red on an error). That row is renamed from "Live session"
+  to "Pi controls" and says "Requires Network" on Bluetooth, since deleting shots and the camera,
+  training and radar settings need a Network connection to the Pi. Shots still arrive over
+  Bluetooth (#140).
+
 ### Fixed
 
 - **One shot the app can't read no longer turns off club and power controls.** Over Bluetooth and
