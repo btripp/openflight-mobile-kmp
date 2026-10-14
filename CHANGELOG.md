@@ -21,6 +21,8 @@ tag. Plain `v0.1.0` waits on the hardware test matrix on a real Raspberry Pi.
 
 ### Fixed
 
+- The range overlay redraws a shot's tracer when the Pi's final update for it arrives, instead of
+  keeping the first, provisional flight (#119).
 - **One shot the app can't read no longer turns off club and power controls.** Over Bluetooth and
   Wi-Fi, the connection error clears with the next shot or club change the app does read, and
   club changes and power status keep working over Bluetooth without reconnecting.

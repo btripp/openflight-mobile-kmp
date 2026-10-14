@@ -14,6 +14,7 @@ import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
+import dev.openflight.companion.core.data.RangeShowSetting
 import dev.openflight.companion.core.flight.FlightInput
 import dev.openflight.companion.core.flight.FlightTrajectory
 import dev.openflight.companion.core.testing.FakeConditionsRepository
@@ -270,6 +271,38 @@ class RangeReplayViewModelTest {
                 awaitUntil { it.browse.overlayFlights.size == 3 && !it.browse.loading }
 
                 assertThat(simulated.sorted()).containsExactly(eventIdFor(1), eventIdFor(2), eventIdFor(3))
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
+    fun aFollowedOverlayReFliesARowAfterItsFinalShotUpdate() =
+        runTest(scheduler) {
+            seedSession()
+            history.currentSessionId.value = "s1"
+            val viewModel = makeViewModel()
+
+            fun DrivingRangeUiState.landingOf(shotId: String) =
+                browse.overlayFlights
+                    .first { it.shotId == shotId }
+                    .trajectory.points
+                    .last()
+                    .positionMeters.z
+
+            viewModel.uiState.test {
+                viewModel.onEvent(DrivingRangeEvent.SetShow(RangeShowSetting.THIS_SESSION))
+                val provisional = awaitUntil { it.browse.overlayFlights.size == 3 && !it.browse.loading }
+                val provisionalLanding = provisional.landingOf("3")
+
+                // The Pi's final shot_update rewrites the same row (same id) with a longer carry.
+                val final = storedShot(3).let { it.copy(detail = it.detail.copy(estimatedCarryYards = 250.0)) }
+                history.put("s1", listOf(final, storedShot(2, club = "7-iron"), storedShot(1)))
+
+                val updated =
+                    awaitUntil { it.browse.overlayFlights.size == 3 && it.landingOf("3") != provisionalLanding }
+                assertThat(updated.landingOf("3")).isGreaterThan(provisionalLanding)
+                assertThat(simulated.count { it == eventIdFor(3) }).isEqualTo(2)
+                assertThat(simulated.count { it == eventIdFor(2) }).isEqualTo(1)
                 cancelAndIgnoreRemainingEvents()
             }
         }
