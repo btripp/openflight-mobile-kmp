@@ -13,6 +13,9 @@ tag. Plain `v0.1.0` waits on the hardware test matrix on a real Raspberry Pi.
 
 ### Fixed
 
+- **One shot the app can't read no longer turns off club and power controls.** Over Bluetooth and
+  Wi-Fi, the connection error clears with the next shot or club change the app does read, and
+  club changes and power status keep working over Bluetooth without reconnecting.
 - Android no longer follows an HTTP redirect from the Pi's address, which could send a cleartext
   request to a public host past the LAN-only check (#118).
 
