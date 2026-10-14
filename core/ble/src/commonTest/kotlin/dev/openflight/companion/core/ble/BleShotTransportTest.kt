@@ -137,6 +137,40 @@ class BleShotTransportTest {
         }
 
     @Test
+    fun aGoodFrameAfterADecodeErrorRestoresConnectedAndControls() =
+        runTest {
+            val transport = transport()
+            val link = connect(transport)
+            link.notifyShot(makeBleFrames("""{"schema_version":2}""", sequence = 1))
+            runCurrent()
+            assertThat(transport.state.value).isInstanceOf<ConnectionState.Error>()
+
+            link.notifyControl(makeBleFrames("""{"club":"pw","schema_version":2,"type":"club_changed"}""", 2))
+            runCurrent()
+            assertThat(transport.state.value).isEqualTo(ConnectionState.Connected)
+
+            val result = async { transport.setClub(GolfClub.IRON_7) }
+            runCurrent()
+            link.notifyControl(makeBleFrames(clubResponse("req-2", "7-iron"), sequence = 40))
+            runCurrent()
+            assertThat(result.await()).isEqualTo(ClubSelection(status = "ok", club = GolfClub.IRON_7))
+        }
+
+    @Test
+    fun aGoodShotAfterADecodeErrorRestoresConnected() =
+        runTest {
+            val transport = transport()
+            val link = connect(transport)
+            link.notifyShot(makeBleFrames("""{"schema_version":2}""", sequence = 1))
+            runCurrent()
+
+            link.notifyShot(BleGoldenFrames.frames("v2_shot_final"))
+            runCurrent()
+
+            assertThat(transport.state.value).isEqualTo(ConnectionState.Connected)
+        }
+
+    @Test
     fun missingServiceOrCharacteristicsIsAnError() =
         runTest {
             val transport = transport()

@@ -11,6 +11,12 @@ tag. Plain `v0.1.0` waits on the hardware test matrix on a real Raspberry Pi.
 
 ## [Unreleased]
 
+### Fixed
+
+- **One shot the app can't read no longer turns off club and power controls.** Over Bluetooth and
+  Wi-Fi, the connection error clears with the next shot or club change the app does read, and
+  club changes and power status keep working over Bluetooth without reconnecting.
+
 ## [0.1.0-beta.5] - 2026-10-14
 
 iOS 0.1.0 (build 6) for TestFlight, and the signed Android APK 0.1.0 (versionCode 6).

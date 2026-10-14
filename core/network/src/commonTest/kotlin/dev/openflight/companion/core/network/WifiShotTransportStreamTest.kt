@@ -202,6 +202,24 @@ class WifiShotTransportStreamTest {
         }
 
     @Test
+    fun aGoodShotAfterAMalformedOneRestoresConnected() =
+        runTest {
+            val engine = streamEngine { "event: shot\ndata: not json\n\n" + sseShotChunk(EVENT_ID_1) }
+            val transport = wifiShotTransport(engine, testScheduler)
+
+            transport.state.test {
+                assertThat(awaitItem()).isEqualTo(ConnectionState.Idle)
+                transport.start()
+                assertThat(awaitItem()).isEqualTo(ConnectionState.Connecting)
+                assertThat(awaitItem()).isEqualTo(ConnectionState.Connected)
+                assertThat(awaitItem()).isInstanceOf<ConnectionState.Error>()
+                assertThat(awaitItem()).isEqualTo(ConnectionState.Connected)
+                cancelAndIgnoreRemainingEvents()
+            }
+            transport.disconnect()
+        }
+
+    @Test
     fun tooManyDevicesRespondsWithARetryableError() =
         runTest {
             val engine = MockEngine { respond(content = "", status = HttpStatusCode.ServiceUnavailable) }

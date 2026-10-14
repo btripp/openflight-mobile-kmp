@@ -478,7 +478,9 @@ class BleShotTransport internal constructor(
     /** The reference's `receive(_:)`: reassemble, decode, de-duplicate, publish. */
     internal fun receiveShotFrame(frame: ByteArray) {
         try {
-            shotReassembler.append(frame)?.let(decoder::decode)?.let(mutableShots::tryEmit)
+            val payload = shotReassembler.append(frame) ?: return
+            decoder.decode(payload)?.let(mutableShots::tryEmit)
+            recoverFromDecodeError()
         } catch (error: BleFrameError) {
             reportDecodeError(error)
         } catch (error: ShotDecodeError) {
@@ -493,6 +495,11 @@ class BleShotTransport internal constructor(
         mutableState.value = ConnectionState.Error(error.message ?: DECODE_FAILED)
     }
 
+    /** A frame decoded on a live link, so an earlier undecodable frame no longer makes it an error (#115). */
+    private fun recoverFromDecodeError() {
+        if (link != null && mutableState.value is ConnectionState.Error) mutableState.value = ConnectionState.Connected
+    }
+
     /** The reference's `receiveControl(_:)`: responses, `club_changed` and the other v2 events. */
     internal fun receiveControlFrame(frame: ByteArray) {
         route(control.receive(frame))
@@ -500,10 +507,23 @@ class BleShotTransport internal constructor(
 
     private fun route(inbound: ControlInbound) {
         when (inbound) {
-            is ControlInbound.ClubChanged -> mutableActiveClub.value = inbound.club
-            is ControlInbound.ClubChangedInvalid -> mutableState.value = ConnectionState.Error(inbound.message)
-            is ControlInbound.Event -> mutableSchemaEvents.tryEmit(inbound.event)
-            ControlInbound.Consumed -> Unit
+            is ControlInbound.ClubChanged -> {
+                mutableActiveClub.value = inbound.club
+                recoverFromDecodeError()
+            }
+
+            is ControlInbound.ClubChangedInvalid -> {
+                mutableState.value = ConnectionState.Error(inbound.message)
+            }
+
+            is ControlInbound.Event -> {
+                mutableSchemaEvents.tryEmit(inbound.event)
+                recoverFromDecodeError()
+            }
+
+            ControlInbound.Consumed -> {
+                Unit
+            }
         }
     }
 
@@ -513,10 +533,8 @@ class BleShotTransport internal constructor(
     private suspend fun sendControl(encode: (requestId: String) -> ByteArray): ControlResponseEnvelope =
         withContext(confined) {
             val peripheral = link
-            if (mutableState.value != ConnectionState.Connected || peripheral == null) {
-                throw BleControlException.Unavailable()
-            }
-            if (!controlReady) throw BleControlException.Unsupported()
+            // Not the state: a decode error leaves the link usable (#115).
+            if (peripheral == null || !controlReady) throw BleControlException.Unavailable()
             control.send(encode) { frame ->
                 peripheral.writeWithResponse(SERVICE_UUID, CONTROL_CHARACTERISTIC_UUID, frame)
             }

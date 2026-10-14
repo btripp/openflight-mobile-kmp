@@ -263,6 +263,7 @@ class WifiShotTransport(
                             event.data.encodeToByteArray(),
                             ControlCodec.V1_AND_V2_SCHEMAS,
                         )
+                    recoverFromDecodeError()
                 } catch (cancellation: CancellationException) {
                     throw cancellation
                 } catch (error: Exception) {
@@ -274,6 +275,7 @@ class WifiShotTransport(
                 try {
                     val shot = decoder.decode(event.data)
                     if (shot != null) _shots.emit(shot)
+                    recoverFromDecodeError()
                 } catch (cancellation: CancellationException) {
                     throw cancellation
                 } catch (error: Exception) {
@@ -285,6 +287,11 @@ class WifiShotTransport(
                 receiveSchemaEvent(event.data)
             }
         }
+    }
+
+    /** An event decoded on the open stream, so an earlier undecodable one no longer makes it an error (#115). */
+    private fun recoverFromDecodeError() {
+        if (_state.value is ConnectionState.Error) _state.value = ConnectionState.Connected
     }
 
     /** A malformed or unknown v2 event is dropped, like a malformed Socket.IO event. */
