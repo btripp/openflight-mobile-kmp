@@ -11,6 +11,15 @@ tag. Plain `v0.1.0` waits on the hardware test matrix on a real Raspberry Pi.
 
 ## [Unreleased]
 
+## [0.1.0-beta.5] - 2026-10-14
+
+iOS 0.1.0 (build 6) for TestFlight, and the signed Android APK 0.1.0 (versionCode 6).
+
+**Known: "Update OpenFlight on your Pi."** Reconnect catch-up needs a Pi update
+(open-flight/openflight#297) that isn't in an OpenFlight release yet. Until it is, a Pi running
+the current OpenFlight shows this Dashboard notice; there's nothing to install yet, so tap Dismiss.
+Everything else works as before.
+
 ### Added
 
 - **Tap any shot to see all of it.** In the session list, a stored session and a club's recent
@@ -33,6 +42,10 @@ tag. Plain `v0.1.0` waits on the hardware test matrix on a real Raspberry Pi.
   what the phone missed while it was away. The Dashboard names what's lost (shots, deletions or
   both) and suggests updating OpenFlight on the Pi. Dismiss hides the notice until the next launch.
   The app keeps working with an older Pi either way.
+
+### Changed
+
+- Build numbers bumped to iOS build 6 and Android versionCode 6 for this release.
 
 ### Fixed
 
@@ -264,7 +277,8 @@ Android 0.1.0 (versionCode 1). No GitHub release or store build.
   training, player selection, a radar/debug panel and a Pi shutdown.
 - Imperial or Metric units, accessibility labels, and app icons from the OpenFlight logo.
 
-[Unreleased]: https://github.com/btripp/openflight-mobile-kmp/compare/v0.1.0-beta.4...HEAD
+[Unreleased]: https://github.com/btripp/openflight-mobile-kmp/compare/v0.1.0-beta.5...HEAD
+[0.1.0-beta.5]: https://github.com/btripp/openflight-mobile-kmp/compare/v0.1.0-beta.4...v0.1.0-beta.5
 [0.1.0-beta.4]: https://github.com/btripp/openflight-mobile-kmp/compare/v0.1.0-beta.3...v0.1.0-beta.4
 [0.1.0-beta.3]: https://github.com/btripp/openflight-mobile-kmp/compare/v0.1.0-beta.2...v0.1.0-beta.3
 [0.1.0-beta.2]: https://github.com/btripp/openflight-mobile-kmp/compare/v0.1.0-beta.1...v0.1.0-beta.2
