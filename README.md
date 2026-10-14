@@ -176,20 +176,20 @@ Next:
 The app works with more than one OpenFlight server. What it can do depends on which one the Pi
 runs:
 
-| | Upstream `main` ([open-flight/openflight](https://github.com/open-flight/openflight)) | Fork branch `feat/phone-connectivity` ([btripp/openflight](https://github.com/btripp/openflight/tree/feat/phone-connectivity)) |
+| | Upstream `main` ([open-flight/openflight](https://github.com/open-flight/openflight)) | Upstream `main` + [open-flight/openflight#297](https://github.com/open-flight/openflight/pull/297) (branch [`feat/phone-network-stream`](https://github.com/btripp/openflight/tree/feat/phone-network-stream)) |
 |---|---|---|
 | Socket.IO session: snapshot, profiles, Session screen, server-confirmed delete/clear, stats, stored history, device cards, power, camera, training, shutdown | Yes | Yes |
 | Live shots on the Practice latest-shot card and the range | Yes, over Socket.IO: there's no SSE stream (`/api/shots/stream` answers 404), so the app feeds the live feed from the Pi's `shot`/`shot_update` and shows Connected while the Socket.IO link is up. It probes SSE once per connection, not on a retry loop | Yes, over the SSE stream with schema v2 (`?schema=2`); Socket.IO only enriches it |
 | Change the club from the phone over Network | Yes, over Socket.IO `set_club` (there's no `/api/club`); the phone shows the club once the Pi's `club_changed` confirms it | Yes, `POST /api/club` |
-| Phone calibration (`/api/calibration/iwr6843/orientation`) | No | Yes |
-| Bluetooth LE | None | Schema 2 only; the app needs the Pi's schema 2 build. An older build that still offers only the v1 characteristics gets a "needs its Bluetooth update" message: use Network |
-| `MockServerIT` (pinned in CI) | `7ca4b40`: all 26 pass (asserting the Socket.IO fallbacks) | `07d5313`: all 26 pass |
+| Phone calibration (`/api/calibration/iwr6843/orientation`) | No | No: that's [open-flight/openflight#298](https://github.com/open-flight/openflight/pull/298) |
+| Bluetooth LE | Schema 2 ([open-flight/openflight#285](https://github.com/open-flight/openflight/pull/285), start the Pi with `--ble`). No reconnect catch-up, so the Dashboard suggests updating the Pi | Schema 2 with reconnect catch-up |
+| `MockServerIT` (pinned in CI) | `8d681d0`: passes, asserting the Socket.IO fallbacks; the catch-up steps skip and check the update notice instead | `533bcc8`: every step passes |
 
-The fork branch is upstream `main` plus the phone transport from
+#297 is upstream `main` plus the network shot stream (SSE with `?schema=2`), `/api/club` and
+reconnect catch-up. It isn't merged yet. A Pi running
 [`jake-fishtech/openflight@feat/iOS-ble`](https://github.com/jake-fishtech/openflight/tree/feat/iOS-ble)
-(SSE, `/api/club`, phone calibration) and BLE schema 2, which has replaced that branch's BLE v1.
-It isn't upstream yet. A Pi running jake-fishtech's branch itself speaks only BLE v1, which this
-app no longer supports, so connect to it over **Network** instead (its SSE v1 stream still works).
+speaks only BLE v1, which this app doesn't support, so connect to it over **Network** instead (its
+SSE v1 stream still works).
 Its Socket.IO API predates profiles, so the profile, power and processing features stay empty
 there.
 
@@ -474,8 +474,9 @@ adb shell am start -n dev.openflight.companion/.MainActivity \
 
 The OpenFlight Pi server runs without radar hardware in mock mode. Use a checkout of
 [upstream `main`](https://github.com/open-flight/openflight), or of the
-[`feat/phone-connectivity`](https://github.com/btripp/openflight/tree/feat/phone-connectivity)
-fork branch for SSE, `/api/club` and Bluetooth (see [Backend compatibility](#backend-compatibility)):
+[`feat/phone-network-stream`](https://github.com/btripp/openflight/tree/feat/phone-network-stream)
+branch ([#297](https://github.com/open-flight/openflight/pull/297)) for SSE, `/api/club` and
+reconnect catch-up (see [Backend compatibility](#backend-compatibility)):
 
 ```bash
 uv sync
