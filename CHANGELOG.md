@@ -20,6 +20,8 @@ tag. Plain `v0.1.0` waits on the hardware test matrix on a real Raspberry Pi.
   request to a public host past the LAN-only check (#118).
 - A shot deleted, or a history cleared, without a Wi-Fi link to the Pi (always the case over
   Bluetooth) no longer comes back when the Pi resends it after a reconnect (#116).
+- When the Pi clears a profile's session over Bluetooth, every one of that profile's shots in the
+  current session leaves the phone's history and stats, not just the newest 100 (#117).
 
 ## [0.1.0-beta.5] - 2026-10-14
 

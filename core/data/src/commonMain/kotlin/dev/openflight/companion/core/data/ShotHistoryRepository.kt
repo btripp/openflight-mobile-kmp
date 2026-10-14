@@ -87,6 +87,12 @@ interface ShotHistoryRepository {
     /** Mirrors a delete of several shots, e.g. a profile's rows after `session_cleared`. */
     fun deleteShots(timestamps: Collection<String>)
 
+    /**
+     * Mirrors a BLE `session_cleared` (#117): deletes [profileId]'s shots in the current session,
+     * however many it holds. Nothing before the first connect.
+     */
+    fun clearProfile(profileId: String)
+
     /** Deletes the phone's own sessions and their shots, never an imported one. The UI confirms first. */
     fun clearAll()
 

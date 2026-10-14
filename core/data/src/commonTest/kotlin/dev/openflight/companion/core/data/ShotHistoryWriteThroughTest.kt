@@ -363,6 +363,28 @@ class ShotHistoryWriteThroughTest {
             assertThat(h.storedTimestamps()).containsExactly("2026-09-25T10:01:00")
         }
 
+    // #117: more of the profile's shots than the 100-shot in-memory cache holds.
+    @Test
+    fun aSchemaV2SessionClearedDropsEveryStoredShotOfThatProfileBeyondTheCache() =
+        runWriteThroughTest(transport = TransportType.BLUETOOTH) { h ->
+            h.ble.state.value = ConnectionState.Connected
+            h.ble.shots.emit(timedShot(1, "2026-09-25T09:00:00").copy(profileId = "alex", schemaVersion = 2))
+            (2..181).forEach { n ->
+                val minute = (n / 60).toString().padStart(2, '0')
+                val second = (n % 60).toString().padStart(2, '0')
+                h.ble.shots.emit(
+                    timedShot(n, "2026-09-25T10:$minute:$second").copy(profileId = "sam", schemaVersion = 2),
+                )
+            }
+            assertThat(h.storedTimestamps()).hasSize(181)
+
+            h.ble.schemaEvents.emit(SchemaV2Event.SessionCleared("sam"))
+            // The repository applies the event on its own collector, after awaitWrites would queue its marker.
+            val kept = h.history.shots(h.current()).first { rows -> rows.none { it.detail.profileId == "sam" } }
+
+            assertThat(kept.map { it.detail.timestamp }).containsExactly("2026-09-25T09:00:00")
+        }
+
     // Plan F3, A8: the Pi's deletes are about the phone's own sessions only.
     @Test
     fun anImportedSessionWithTheSameTimestampSurvivesAPiDeleteShot() =

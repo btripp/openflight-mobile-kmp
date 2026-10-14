@@ -121,6 +121,8 @@ internal class PreviewShotHistoryRepository(
             }
         }
 
+    override fun clearProfile(profileId: String) = Unit
+
     override fun clearAll() = write { stored.value = emptyList() }
 
     override fun clearImported() = Unit

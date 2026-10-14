@@ -517,6 +517,8 @@ internal class DefaultShotRepository(
                         .map { it.timestamp }
                 removeLocally(matches)
                 forgetPiRows(cleared)
+                // #117: the cache holds at most 100 shots; the store drops every one of the profile's.
+                persistentHistory?.clearProfile(profileId)
             }
 
             else -> {
