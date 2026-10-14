@@ -158,6 +158,14 @@ internal class DefaultShotHistoryRepository(
         enqueue { it.deleteByTimestampsIn(list, world) }
     }
 
+    override fun clearProfile(profileId: String) {
+        // shortcut: only the current session, so a clear after an app restart misses the Pi
+        // session's earlier rows (they sit in the previous phone session); upgrade with #148.
+        val filed = currentSession.value ?: return
+        // On the queue, so it follows a rollover ([fileShot]) to where this Pi session's shots went.
+        enqueue { dao -> dao.clearProfile((rolledOver[filed.session.id] ?: filed).session.id, profileId) }
+    }
+
     override fun clearAll() = enqueue { if (demoWorld) it.clearDemo() else it.clearAll() }
 
     override fun clearImported() {

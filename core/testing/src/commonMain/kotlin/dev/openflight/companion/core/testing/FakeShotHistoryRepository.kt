@@ -161,6 +161,16 @@ class FakeShotHistoryRepository : ShotHistoryRepository {
         }
     }
 
+    override fun clearProfile(profileId: String) {
+        val sessionId = currentSessionId.value ?: return
+        write {
+            sessionsById.update { sessions ->
+                val data = sessions[sessionId] ?: return@update sessions
+                sessions + (sessionId to data.copy(shots = data.shots.filterNot { it.detail.profileId == profileId }))
+            }
+        }
+    }
+
     override fun clearAll() {
         clearAllCount++
         write { sessionsById.update { sessions -> sessions.filterValues { it.source != SessionSource.LOCAL } } }

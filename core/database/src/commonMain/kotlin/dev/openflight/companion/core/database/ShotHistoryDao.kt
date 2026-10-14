@@ -177,6 +177,19 @@ abstract class ShotHistoryDao {
         deleteSessionsOfSource(SessionEntity.SOURCE_IMPORTED)
     }
 
+    /**
+     * #117: deletes [profileId]'s shots in session [sessionId] (the Pi cleared that profile), then
+     * the sessions left empty.
+     */
+    @Transaction
+    open suspend fun clearProfile(
+        sessionId: String,
+        profileId: String,
+    ) {
+        deleteShotsOfProfile(sessionId, profileId)
+        deleteEmptySessions()
+    }
+
     /** Plan F14: deletes every Demo mode session and its shots ("Clear demo data"). */
     @Transaction
     open suspend fun clearDemo() {
@@ -311,6 +324,12 @@ abstract class ShotHistoryDao {
     protected abstract suspend fun deleteShotsByTimestamp(
         timestamps: List<String>,
         world: String,
+    )
+
+    @Query("DELETE FROM shots WHERE session_id = :sessionId AND profile_id = :profileId")
+    protected abstract suspend fun deleteShotsOfProfile(
+        sessionId: String,
+        profileId: String,
     )
 
     @Query("DELETE FROM sessions WHERE id NOT IN (SELECT DISTINCT session_id FROM shots)")
