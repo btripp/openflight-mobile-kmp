@@ -3,7 +3,7 @@ package dev.openflight.companion.feature.settings
 
 /** Android-only test tags for the settings screen (shared ones live in [SettingsTestTags]). */
 object SettingsUiTags {
-    /** The connection card's "Live session" label. */
+    /** The connection card's "Pi controls" label (the live-session link). */
     const val LIVE_SESSION_LABEL = "settings_live_session_label"
 
     /** The connection card's live-session status pill. */
@@ -18,6 +18,6 @@ object SettingsUiTags {
     /** The connection card's "Shot stream" label. */
     const val SHOT_STREAM_LABEL = "settings_shot_stream_label"
 
-    /** The connection card's shot-stream state. */
+    /** The connection card's shot-stream status pill. */
     const val SHOT_STREAM_VALUE = "settings_shot_stream_value"
 }

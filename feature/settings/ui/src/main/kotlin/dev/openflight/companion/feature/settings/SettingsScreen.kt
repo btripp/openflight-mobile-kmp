@@ -41,6 +41,7 @@ import dev.openflight.companion.core.designsystem.OfWindowClass
 import dev.openflight.companion.core.designsystem.StatusTone
 import dev.openflight.companion.core.designsystem.rememberOfWindowClass
 import dev.openflight.companion.core.insights.UnitSystem
+import dev.openflight.companion.core.model.ConnectionState
 import dev.openflight.companion.core.model.pi.PiLinkState
 import dev.openflight.companion.core.speech.Voice
 import dev.openflight.companion.core.speech.VoiceQuality
@@ -247,13 +248,39 @@ private fun ConnectionCard(uiState: SettingsUiState) {
         if (uiState.transport == TransportType.WIFI && !uiState.demo.enabled) {
             InfoRow("Host", uiState.host, labelTag = SettingsUiTags.HOST_LABEL, valueTag = SettingsUiTags.HOST_VALUE)
         }
-        InfoRow(
-            "Shot stream",
-            uiState.connectionState.description,
+        StatusRow(
+            label = "Shot stream",
+            description = uiState.connectionState.description,
+            // The same tones as the Dashboard's connection pill.
+            tone =
+                when (uiState.connectionState) {
+                    ConnectionState.Connected -> {
+                        StatusTone.Positive
+                    }
+
+                    ConnectionState.Scanning, ConnectionState.Connecting, ConnectionState.Discovering -> {
+                        StatusTone.InProgress
+                    }
+
+                    is ConnectionState.Error, is ConnectionState.Unavailable -> {
+                        StatusTone.Negative
+                    }
+
+                    ConnectionState.Idle -> {
+                        StatusTone.Neutral
+                    }
+                },
             labelTag = SettingsUiTags.SHOT_STREAM_LABEL,
-            valueTag = SettingsUiTags.SHOT_STREAM_VALUE,
+            statusTag = SettingsUiTags.SHOT_STREAM_VALUE,
         )
-        LiveSessionRow(description = uiState.linkDescription, tone = uiState.linkState.tone())
+        // The Socket.IO link: delete, camera, training and radar settings. Bluetooth doesn't carry it.
+        StatusRow(
+            label = "Pi controls",
+            description = uiState.linkDescription,
+            tone = uiState.linkState.tone(),
+            labelTag = SettingsUiTags.LIVE_SESSION_LABEL,
+            statusTag = SettingsUiTags.LIVE_SESSION_STATUS,
+        )
         // Plan R8f: say what's wrong in words, not only with the pill's colour.
         uiState.connectionProblem?.let { problem ->
             OfNotice(
@@ -270,15 +297,18 @@ private fun ConnectionCard(uiState: SettingsUiState) {
 }
 
 /**
- * "Live session" and the link's status pill. Issue #7: in a `Row` the unweighted pill was
- * measured first and took the whole width for a long reconnect reason, leaving the weighted label
- * a sliver, one letter per line. In a [FlowRow] the label keeps its own width; a pill that
- * doesn't fit beside it moves to the next line and wraps across the full width.
+ * A label and a status pill, e.g. "Pi controls" and the link's state. Issue #7: in a `Row` the
+ * unweighted pill was measured first and took the whole width for a long reconnect reason, leaving
+ * the weighted label a sliver, one letter per line. In a [FlowRow] the label keeps its own width; a
+ * pill that doesn't fit beside it moves to the next line and wraps across the full width.
  */
 @Composable
-private fun LiveSessionRow(
+private fun StatusRow(
+    label: String,
     description: String,
     tone: StatusTone,
+    labelTag: String,
+    statusTag: String,
 ) {
     FlowRow(
         modifier = Modifier.fillMaxWidth(),
@@ -287,12 +317,12 @@ private fun LiveSessionRow(
         itemVerticalAlignment = Alignment.CenterVertically,
     ) {
         OfText(
-            text = "Live session",
+            text = label,
             role = OfTextRole.BodySmall,
             color = OfColorTokens.CreamDim,
-            modifier = Modifier.padding(end = OfSpacing.Md).testTag(SettingsUiTags.LIVE_SESSION_LABEL),
+            modifier = Modifier.padding(end = OfSpacing.Md).testTag(labelTag),
         )
-        OfPill(label = description, tone = tone, modifier = Modifier.testTag(SettingsUiTags.LIVE_SESSION_STATUS))
+        OfPill(label = description, tone = tone, modifier = Modifier.testTag(statusTag))
     }
 }
 
@@ -301,7 +331,7 @@ private fun LiveSessionRow(
  * value only had the width the label left over, so at 200% text a long value (a DNS error quoting
  * the host) broke mid-word inside the host name. In a [FlowRow] the value sits beside its label
  * when it fits on that line; otherwise it moves under the label and wraps across the full width,
- * at spaces only, like [LiveSessionRow].
+ * at spaces only, like [StatusRow].
  */
 @Composable
 internal fun InfoRow(

@@ -11,6 +11,13 @@ tag. Plain `v0.1.0` waits on the hardware test matrix on a real Raspberry Pi.
 
 ## [Unreleased]
 
+### Changed
+
+- **Clearer connection status in Settings.** The shot stream's state is now a coloured pill like
+  the row under it (green when connected, red on an error). That row is renamed from "Live session"
+  to "Pi controls" and says "Requires Network" on Bluetooth, since deleting shots and the camera,
+  training and radar settings need a Network connection to the Pi. Shots still arrive over Bluetooth.
+
 ## [0.1.0-beta.5] - 2026-10-14
 
 iOS 0.1.0 (build 6) for TestFlight, and the signed Android APK 0.1.0 (versionCode 6).
