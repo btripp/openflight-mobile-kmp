@@ -40,6 +40,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
@@ -886,24 +887,21 @@ class DrivingRangeViewModel(
                     showOverlay(loadOverlayCandidates(sessionId, club), club, limit)
                     return@launch
                 }
-                val current =
-                    history.currentSessionId.value ?: history
-                        .sessions()
-                        .first()
-                        .firstOrNull()
-                        ?.id
-                browse.update { it.copy(mode = RangeMode.Overlay(current, club, limit)) }
-                if (current == null) {
-                    showOverlay(emptyList(), club, limit)
-                    return@launch
-                }
-                history.shots(current).collect { stored ->
-                    val profiles = profileFilter
-                    showOverlay(
-                        stored.filter { it.toRangeShotEvent() != null && profiles.shows(it.detail.profileId) },
-                        club,
-                        limit,
-                    )
+                // A connect can start a new session; the overlay moves to it like the shot table.
+                tableSessionId().collectLatest { current ->
+                    browse.update { it.copy(mode = RangeMode.Overlay(current, club, limit)) }
+                    if (current == null) {
+                        showOverlay(emptyList(), club, limit)
+                        return@collectLatest
+                    }
+                    history.shots(current).collect { stored ->
+                        val profiles = profileFilter
+                        showOverlay(
+                            stored.filter { it.toRangeShotEvent() != null && profiles.shows(it.detail.profileId) },
+                            club,
+                            limit,
+                        )
+                    }
                 }
             }
     }

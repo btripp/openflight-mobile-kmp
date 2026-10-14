@@ -242,6 +242,28 @@ class RangeQuickSettingsViewModelTest {
         }
 
     @Test
+    fun aFollowedOverlayOpenedBeforeConnectingMovesToTheSessionTheConnectStarts() =
+        runTest(scheduler) {
+            seedSessions()
+            history.currentSessionId.value = null
+            val viewModel = makeViewModel()
+
+            viewModel.uiState.test {
+                awaitItem()
+                viewModel.onEvent(DrivingRangeEvent.SetShow(RangeShowSetting.LAST_5))
+                // Before the first connect: the newest stored session.
+                val before = awaitUntil { it.mode == RangeMode.Overlay("now", null, 5) && !it.browse.loading }
+                assertThat(before.browse.overlayFlights).hasSize(5)
+
+                history.put("new", listOf(storedShot(201, sessionId = "new", timestamp = "2026-09-28T10:00:00")))
+                history.currentSessionId.value = "new"
+                val after = awaitUntil { it.browse.overlayFlights.map { flight -> flight.shotId } == listOf("201") }
+                assertThat(after.mode).isEqualTo(RangeMode.Overlay("new", null, 5))
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
     fun theClubFilterAppliesBeforeTheLimitAndCarriesOverToTheNextShowChoice() =
         runTest(scheduler) {
             seedSessions()
