@@ -18,6 +18,8 @@ tag. Plain `v0.1.0` waits on the hardware test matrix on a real Raspberry Pi.
   club changes and power status keep working over Bluetooth without reconnecting.
 - Android no longer follows an HTTP redirect from the Pi's address, which could send a cleartext
   request to a public host past the LAN-only check (#118).
+- A shot deleted, or a history cleared, without a Wi-Fi link to the Pi (always the case over
+  Bluetooth) no longer comes back when the Pi resends it after a reconnect (#116).
 
 ## [0.1.0-beta.5] - 2026-10-14
 

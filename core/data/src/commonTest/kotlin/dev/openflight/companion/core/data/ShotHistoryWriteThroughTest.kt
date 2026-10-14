@@ -295,6 +295,42 @@ class ShotHistoryWriteThroughTest {
             assertThat(h.storedTimestamps()).containsExactlyInAnyOrder("2026-09-25T10:01:00", "2026-09-25T10:02:00")
         }
 
+    // #116: on reconnect the Pi resends shots from last_event_id, and a stock Pi its latest one.
+    @Test
+    fun aLocallyDeletedShotThePiReplaysStaysDeleted() =
+        runWriteThroughTest(transport = TransportType.BLUETOOTH) { h ->
+            h.ble.state.value = ConnectionState.Connected
+            h.ble.shots.emit(timedShot(1, "2026-09-25T10:00:00"))
+            h.ble.shots.emit(timedShot(2, "2026-09-25T10:01:00"))
+
+            h.repository.deleteShot(shotId(2))
+            h.ble.state.value = ConnectionState.Connecting
+            h.ble.state.value = ConnectionState.Connected
+            h.ble.shots.emit(timedShot(2, "2026-09-25T10:01:00"))
+
+            assertThat(
+                h.repository.history.value
+                    .map { it.timestamp },
+            ).containsExactly("2026-09-25T10:00:00")
+            assertThat(h.storedTimestamps()).containsExactly("2026-09-25T10:00:00")
+        }
+
+    @Test
+    fun aLocallyClearedShotThePiReplaysStaysCleared() =
+        runWriteThroughTest(transport = TransportType.BLUETOOTH) { h ->
+            h.ble.state.value = ConnectionState.Connected
+            h.ble.shots.emit(timedShot(1, "2026-09-25T10:00:00"))
+
+            h.repository.clearHistory()
+            h.ble.shots.emit(timedShot(1, "2026-09-25T10:00:00"))
+            h.ble.shots.emit(timedShot(2, "2026-09-25T10:01:00"))
+
+            assertThat(
+                h.repository.history.value
+                    .map { it.timestamp },
+            ).containsExactly("2026-09-25T10:01:00")
+        }
+
     @Test
     fun aSchemaV2ShotDeletedIsMirrored() =
         runWriteThroughTest(transport = TransportType.BLUETOOTH) { h ->

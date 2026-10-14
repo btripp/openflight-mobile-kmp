@@ -144,7 +144,7 @@ internal class DefaultShotRepository(
 
     private val mutableLiveShotSource = MutableStateFlow(LiveShotSource.NONE)
 
-    /** The newest rows [forgetPiRows] deleted from [persistentHistory], oldest first. */
+    /** The newest rows deleted or cleared here or on the Pi, oldest first: [record] skips a replay of one (#116). */
     private val forgottenRows = MutableStateFlow(emptySet<String>())
 
     /** Plan R8j: where [history]'s live shots come from right now (for tests and MockServerIT). */
@@ -303,6 +303,7 @@ internal class DefaultShotRepository(
         val pi = connectedPi()
         if (pi == null) {
             removeLocally(matches)
+            remember(listOf(timestamp))
             persistentHistory?.deleteShot(timestamp)
             return
         }
@@ -331,6 +332,8 @@ internal class DefaultShotRepository(
                 ?.activeProfileId
                 .orEmpty()
         if (pi == null || profileId.isEmpty()) {
+            // A local clear leaves the stored history, but a replayed shot mustn't come back.
+            remember(shotHistory.value.shots.map { it.timestamp })
             changeHistory { ShotHistory(maximumCount = it.maximumCount) }
             return
         }
@@ -368,13 +371,19 @@ internal class DefaultShotRepository(
         val gone = timestamps.toSet()
         if (gone.isEmpty()) return
         removeLocally { it.timestamp in gone }
+        val fresh = remember(gone)
+        if (fresh.isNotEmpty()) persistentHistory?.deleteShots(fresh)
+    }
+
+    /** Adds [timestamps] to [forgottenRows]; returns the ones it didn't hold yet. */
+    private fun remember(timestamps: Collection<String>): List<String> {
         var fresh = emptyList<String>()
         forgottenRows.update { seen ->
-            fresh = gone.filterNot(seen::contains)
+            fresh = timestamps.filterNot(seen::contains)
             val all = seen + fresh
             if (all.size > MAX_FORGOTTEN_ROWS) all.drop(all.size - MAX_FORGOTTEN_ROWS).toSet() else all
         }
-        if (fresh.isNotEmpty()) persistentHistory?.deleteShots(fresh)
+        return fresh
     }
 
     /**
@@ -524,6 +533,7 @@ internal class DefaultShotRepository(
         shot: ShotEvent,
         writeThrough: Boolean = true,
     ) {
+        if (shot.timestamp in forgottenRows.value) return
         if (!changeHistory { it.record(shot) }) return
         if (writeThrough) persistentHistory?.record(shot, piSession?.detailFor(shot))
     }
