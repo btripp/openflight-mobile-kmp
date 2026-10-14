@@ -52,7 +52,7 @@ class ShotHistoryConcurrencyTest {
 
             val base = round * (SEEDED + ADDED + 1)
             val seeded = (base until base + SEEDED).map(::shotId)
-            (base until base + SEEDED).forEach { transport.shots.emit(shot(it)) }
+            (base until base + SEEDED).forEach { transport.shots.emit(uniqueShot(it)) }
             withTimeout(WAIT) { repository.history.first { it.size == SEEDED } }
 
             val added = (base + SEEDED until base + SEEDED + ADDED).toList()
@@ -60,8 +60,8 @@ class ShotHistoryConcurrencyTest {
             val deletes = seeded.map { id -> scope.launch { repository.deleteShot(id) } }
             val adds =
                 scope.launch {
-                    added.forEach { transport.shots.emit(shot(it)) }
-                    transport.shots.emit(shot(sentinel))
+                    added.forEach { transport.shots.emit(uniqueShot(it)) }
+                    transport.shots.emit(uniqueShot(sentinel))
                 }
             (deletes + adds).joinAll()
             // The collector records in order, so once the sentinel is in every new shot was recorded.
@@ -78,6 +78,9 @@ class ShotHistoryConcurrencyTest {
     }
 
     private companion object {
+        /** As a Pi stamps them: a deleted shot's timestamp is never reused (#116). */
+        fun uniqueShot(number: Int) = shot(number).copy(timestamp = "2026-08-05T23:54:00.$number")
+
         const val ROUNDS = 200
         const val SEEDED = 40
         const val ADDED = 40
