@@ -12,9 +12,11 @@ import io.ktor.serialization.kotlinx.json.json
  * Installs the plugins every OpenFlight [HttpClient] needs, regardless of engine: JSON content
  * negotiation using the shared [OpenFlightJson] instance (so `encodeDefaults`/`ignoreUnknownKeys`
  * match every other codec), and [HttpTimeout] so [WifiShotTransport] can set the stream's infinite
- * request timeout and the control calls' 10 s timeout per-request.
+ * request timeout and the control calls' 10 s timeout per-request. Redirects are off: the Pi never
+ * sends one, and following it would skip [EndpointPolicy] (plan R8d) for the redirect target.
  */
 internal fun HttpClientConfig<*>.installOpenFlightDefaults() {
+    followRedirects = false
     install(ContentNegotiation) {
         json(OpenFlightJson)
     }
