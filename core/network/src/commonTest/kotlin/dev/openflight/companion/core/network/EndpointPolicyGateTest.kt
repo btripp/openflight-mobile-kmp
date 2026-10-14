@@ -14,6 +14,10 @@ import dev.openflight.companion.core.model.GolfClub
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
+import io.ktor.client.request.get
+import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpStatusCode
+import io.ktor.http.headersOf
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 
@@ -97,8 +101,22 @@ class EndpointPolicyGateTest {
             assertThat(requests).isEqualTo(1)
         }
 
+    @Test
+    fun aRedirectFromTheLanHostIsNotFollowed() =
+        runTest {
+            val redirecting =
+                MockEngine {
+                    requests++
+                    respond("", HttpStatusCode.Found, headersOf(HttpHeaders.Location, "$PUBLIC_HTTP/x"))
+                }
+            val response = HttpClient(redirecting) { installOpenFlightDefaults() }.get("$LAN_HTTP/api/shots/stream")
+            assertThat(response.status).isEqualTo(HttpStatusCode.Found)
+            assertThat(requests).isEqualTo(1)
+        }
+
     private companion object {
         const val PUBLIC_IP = "8.8.8.8"
         const val PUBLIC_HTTP = "http://$PUBLIC_IP"
+        const val LAN_HTTP = "http://192.168.1.50:8080"
     }
 }

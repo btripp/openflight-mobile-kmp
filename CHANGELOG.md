@@ -16,7 +16,13 @@ tag. Plain `v0.1.0` waits on the hardware test matrix on a real Raspberry Pi.
 - **Clearer connection status in Settings.** The shot stream's state is now a coloured pill like
   the row under it (green when connected, red on an error). That row is renamed from "Live session"
   to "Pi controls" and says "Requires Network" on Bluetooth, since deleting shots and the camera,
-  training and radar settings need a Network connection to the Pi. Shots still arrive over Bluetooth.
+  training and radar settings need a Network connection to the Pi. Shots still arrive over
+  Bluetooth (#140).
+
+### Fixed
+
+- Android no longer follows an HTTP redirect from the Pi's address, which could send a cleartext
+  request to a public host past the LAN-only check (#118).
 
 ## [0.1.0-beta.5] - 2026-10-14
 
