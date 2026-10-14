@@ -14,10 +14,6 @@
       "Bash(git fetch *)",
       "Bash(git pull --ff-only *)"
     ],
-    "ask": [
-      "Bash(git commit *)",
-      "Bash(git push *)"
-    ],
     "deny": [
       "Bash(./gradlew *publish*)",
       "Bash(./gradlew --init-script*)",
