@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 package dev.openflight.companion.core.protocol
 
+import assertk.assertFailure
 import assertk.assertThat
 import assertk.assertions.containsExactly
 import assertk.assertions.isEqualTo
+import assertk.assertions.isInstanceOf
 import assertk.assertions.isNull
 import kotlin.test.Test
 
@@ -150,5 +152,45 @@ class SseEventParserTest {
         val events = stream.encodeToByteArray().toList().mapNotNull { parser.append(it) }
 
         assertThat(events).containsExactly(SseEvent(name = null, data = "line one\nline two"))
+    }
+
+    @Test
+    fun aLineWithNoNewlinePastTheCapThrows() {
+        val parser = SseByteStreamParser()
+        val maxLine =
+            "data: ".encodeToByteArray() + ByteArray(SseByteStreamParser.MAX_LINE_BYTES - 6) { 'x'.code.toByte() }
+        maxLine.forEach { assertThat(parser.append(it)).isNull() }
+
+        assertFailure { parser.append('x'.code.toByte()) }.isInstanceOf<IllegalArgumentException>()
+    }
+
+    @Test
+    fun aLineAtTheCapStillParses() {
+        val parser = SseByteStreamParser()
+        val payload = "x".repeat(SseByteStreamParser.MAX_LINE_BYTES - 6)
+        val events = "data: $payload\n\n".encodeToByteArray().toList().mapNotNull { parser.append(it) }
+
+        assertThat(events).containsExactly(SseEvent(name = null, data = payload))
+    }
+
+    @Test
+    fun endlessDataLinesPastTheEventCapThrow() {
+        val parser = SseEventParser()
+        val line = "data: " + "x".repeat(1023)
+        repeat(SseEventParser.MAX_EVENT_CHARS / 1024) { assertThat(parser.append(line)).isNull() }
+
+        assertFailure { parser.append(line) }.isInstanceOf<IllegalArgumentException>()
+    }
+
+    @Test
+    fun resetAfterAnOversizedEventAcceptsTheNextOne() {
+        val parser = SseEventParser()
+        val line = "data: " + "x".repeat(1023)
+        assertFailure { repeat(SseEventParser.MAX_EVENT_CHARS / 1024 + 1) { parser.append(line) } }
+
+        parser.reset()
+        parser.append("data: next")
+
+        assertThat(parser.append("")).isEqualTo(SseEvent(name = null, data = "next"))
     }
 }

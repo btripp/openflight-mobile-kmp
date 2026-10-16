@@ -25,7 +25,9 @@ import kotlinx.coroutines.launch
 class KtorWebSocketTransport(
     httpClient: HttpClient,
 ) : EngineIoTransport {
-    private val client = httpClient.config { install(WebSockets) }
+    // Ktor's default is Long.MAX_VALUE; cap a frame at python-engineio's `max_http_buffer_size`
+    // so a hostile LAN host can't make us buffer one huge frame (issue #132).
+    private val client = httpClient.config { install(WebSockets) { maxFrameSize = MAX_FRAME_BYTES } }
 
     /**
      * @throws dev.openflight.companion.core.network.OpenFlightHttpError.InvalidHost when
@@ -55,6 +57,8 @@ class KtorWebSocketTransport(
         }
 
         const val DEFAULT_PATH: String = "/socket.io/"
+
+        internal const val MAX_FRAME_BYTES: Long = 1_000_000
 
         /** `ws[s]://` as `http[s]://`, so the endpoint policy judges the address the HTTP API uses. */
         internal fun httpEquivalent(url: String): String =
