@@ -21,6 +21,9 @@ tag. Plain `v0.1.0` waits on the hardware test matrix on a real Raspberry Pi.
 
 ### Fixed
 
+- A Wi-Fi address that isn't an OpenFlight Pi (another device answering web pages on that port)
+  shows "not an OpenFlight stream" and backs off, instead of flashing Connected and retrying every
+  second (#128).
 - Returning to the Dashboard after hitting shots on another tab gives one haptic and flash, not
   one per shot back to back (#126).
 - A shot's offline distance and shape now match across the bag, the Session dispersion chart and
