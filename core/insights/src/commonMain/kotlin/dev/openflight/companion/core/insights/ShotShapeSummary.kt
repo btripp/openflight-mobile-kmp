@@ -34,8 +34,9 @@ data class ShotShapeSummary(
 
 /**
  * The typical curve of [shapes]: one curve on at least half the shots is "Mostly <curve>"; else one
- * side (draw and hook, or fade and slice) on at least 60 % "Leans left/right"; else "Mixed". Shots
- * whose curve wasn't measured are left out; `null` when none was.
+ * side (draw and hook, or fade and slice) on at least 60 % "Leans left/right"; else "Mixed". A tie for
+ * the most common curve is never "Mostly" (nor, under three shots, named alone). Shots whose curve
+ * wasn't measured are left out; `null` when none was.
  */
 fun summarizeShapes(shapes: List<ShotShape>): ShotShapeSummary? {
     val curves = shapes.mapNotNull { it.curve }
@@ -43,13 +44,15 @@ fun summarizeShapes(shapes: List<ShotShape>): ShotShapeSummary? {
     val counts = curves.groupingBy { it }.eachCount()
     val tallies = Curve.entries.mapNotNull { curve -> counts[curve]?.let { ShapeTally(curve, curve.label, it) } }
     val top = tallies.maxBy { it.count }
+    // A tie for the top count names no single curve; it falls through to lean or Mixed.
+    val topIsUnique = tallies.count { it.count == top.count } == 1
     val total = curves.size
     val left = curves.count { it == Curve.DRAW || it == Curve.HOOK }
     val right = curves.count { it == Curve.FADE || it == Curve.SLICE }
     val headline =
         when {
-            total < ShotShapeSummary.MIN_SHOTS_FOR_TREND -> top.label
-            top.count * 2 >= total -> "Mostly ${top.label.lowercase()}"
+            topIsUnique && total < ShotShapeSummary.MIN_SHOTS_FOR_TREND -> top.label
+            topIsUnique && top.count * 2 >= total -> "Mostly ${top.label.lowercase()}"
             left >= total * LEAN_SHARE -> "Leans left"
             right >= total * LEAN_SHARE -> "Leans right"
             else -> "Mixed"

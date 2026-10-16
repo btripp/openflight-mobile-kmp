@@ -40,6 +40,17 @@ class ShotShapeSummaryTest {
     }
 
     @Test
+    fun aTieForTheMostCommonCurveIsNotMostly() {
+        assertThat(summarizeShapes(shapes(Curve.DRAW, Curve.DRAW, Curve.FADE, Curve.FADE))?.headline)
+            .isEqualTo("Mixed")
+        assertThat(summarizeShapes(shapes(Curve.STRAIGHT, Curve.STRAIGHT, Curve.FADE, Curve.FADE))?.headline)
+            .isEqualTo("Mixed")
+        assertThat(summarizeShapes(shapes(Curve.DRAW, Curve.DRAW, Curve.HOOK, Curve.HOOK))?.headline)
+            .isEqualTo("Leans left")
+        assertThat(summarizeShapes(shapes(Curve.DRAW, Curve.FADE))?.headline).isEqualTo("Mixed")
+    }
+
+    @Test
     fun unmeasuredCurvesAreLeftOut() {
         val summary = summarizeShapes(shapes(null, null, Curve.DRAW, Curve.DRAW, Curve.DRAW))
 
