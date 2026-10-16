@@ -21,6 +21,8 @@ tag. Plain `v0.1.0` waits on the hardware test matrix on a real Raspberry Pi.
 
 ### Fixed
 
+- Session stats on a mix of shots and swing-speed reps count only the shots, so a rep no longer
+  inflates the shot count or skews the ball- and club-speed averages (#130).
 - Returning to the Dashboard after hitting shots on another tab gives one haptic and flash, not
   one per shot back to back (#126).
 - A shot's offline distance and shape now match across the bag, the Session dispersion chart and
