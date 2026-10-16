@@ -27,6 +27,7 @@ import io.ktor.http.headersOf
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
@@ -202,6 +203,21 @@ class DataStoreConditionsRepositoryTest {
 
             assertThat(repository.mode.value).isEqualTo(ConditionsMode.MANUAL)
             assertThat(repository.lastError.value).isEqualTo(ConditionsError.LocationDisabled)
+        }
+
+    @Test
+    fun aLocationRequestThatNeverAnswersTimesOutToUnavailable() =
+        runTest {
+            val hanging =
+                object : LocationProvider {
+                    override suspend fun current(accuracy: LocationAccuracy): LocationResult = awaitCancellation()
+                }
+            val repository = backgroundScope.repository(hanging)
+
+            repository.setMode(ConditionsMode.AUTO)
+
+            assertThat(repository.mode.value).isEqualTo(ConditionsMode.MANUAL)
+            assertThat(repository.lastError.value).isEqualTo(ConditionsError.LocationUnavailable)
         }
 
     @Test

@@ -31,7 +31,9 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.withTimeoutOrNull
 import okio.IOException
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * [ConditionsRepository] persisted in the settings DataStore (plan F2 A2, extended by F6). MANUAL
@@ -109,7 +111,11 @@ internal class DataStoreConditionsRepository(
 
     /** Plan F6 task 3: location, then weather; on any failure it keeps the last value. */
     private suspend fun fetchAuto() {
-        when (val fix = locationProvider.current(LocationAccuracy.COARSE)) {
+        // A platform callback that never arrives (issue #127) must not leave AUTO refreshing forever.
+        val fix =
+            withTimeoutOrNull(LOCATION_TIMEOUT) { locationProvider.current(LocationAccuracy.COARSE) }
+                ?: LocationResult.Unavailable
+        when (fix) {
             is LocationResult.Fix -> fetchWeather(fix)
             LocationResult.PermissionDenied -> fallBackToManual(ConditionsError.LocationPermissionDenied)
             LocationResult.Disabled -> fallBackToManual(ConditionsError.LocationDisabled)
@@ -217,6 +223,9 @@ internal class DataStoreConditionsRepository(
         }
 
     private companion object {
+        // Long enough for the user to answer iOS's permission prompt plus a cold fix.
+        val LOCATION_TIMEOUT = 30.seconds
+
         // Plan F2/F6: the conditions live in the settings file under their own prefix. MANUAL and
         // AUTO are stored separately so toggling AUTO on and off never loses a manual entry.
         val MODE_KEY = stringPreferencesKey("conditions.mode")
