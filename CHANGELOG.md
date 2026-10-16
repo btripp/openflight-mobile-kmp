@@ -23,6 +23,9 @@ tag. Plain `v0.1.0` waits on the hardware test matrix on a real Raspberry Pi.
 
 - A club change from the launch monitor no longer crashes the app when the phone can't save it
   (e.g. storage full). The club still updates for the session, and the save failure is logged (#131).
+- A Wi-Fi address that isn't an OpenFlight Pi (another device answering web pages on that port)
+  shows "not an OpenFlight stream" and backs off, instead of flashing Connected and retrying every
+  second (#128).
 - Returning to the Dashboard after hitting shots on another tab gives one haptic and flash, not
   one per shot back to back (#126).
 - A shot's offline distance and shape now match across the bag, the Session dispersion chart and
@@ -30,6 +33,8 @@ tag. Plain `v0.1.0` waits on the hardware test matrix on a real Raspberry Pi.
   axis alone, not only from horizontal launch (#124).
 - The Session screen works out its dispersion chart off the main thread, so a long history no
   longer stutters when the screen opens or the Pi reconnects (#125).
+- Automatic conditions can no longer get stuck loading on iOS: a location request that never
+  answers gives up after 30 seconds and falls back to manual conditions (#127).
 - The shot detail sheet badges Carry "est." when it was adjusted for altitude, weather or wind,
   instead of showing the adjusted number as if the radar measured it (#123).
 - The range overlay redraws a shot's tracer when the Pi's final update for it arrives, instead of
