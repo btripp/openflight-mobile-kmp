@@ -23,6 +23,8 @@ tag. Plain `v0.1.0` waits on the hardware test matrix on a real Raspberry Pi.
 
 - A club change from the launch monitor no longer crashes the app when the phone can't save it
   (e.g. storage full). The club still updates for the session, and the save failure is logged (#131).
+- Session stats on a mix of shots and swing-speed reps count only the shots, so a rep no longer
+  inflates the shot count or skews the ball- and club-speed averages (#130).
 - Voice call-outs round a .5 the same way the screen does, so a 150.5-yard carry is spoken
   "150", not "151" (#129).
 - A Wi-Fi address that isn't an OpenFlight Pi (another device answering web pages on that port)
