@@ -11,10 +11,14 @@ import assertk.assertions.isNotNull
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
 import dev.openflight.companion.core.data.BagRepository
+import dev.openflight.companion.core.data.ConditionsError
+import dev.openflight.companion.core.data.ConditionsMode
 import dev.openflight.companion.core.data.SessionSource
 import dev.openflight.companion.core.insights.GapFlag
 import dev.openflight.companion.core.insights.UnitSystem
+import dev.openflight.companion.core.location.LocationResult
 import dev.openflight.companion.core.model.Conditions
+import dev.openflight.companion.core.model.ConditionsSource
 import dev.openflight.companion.core.model.Firmness
 import dev.openflight.companion.core.model.GolfClub
 import dev.openflight.companion.core.model.TargetBearing
@@ -205,6 +209,52 @@ class BagViewModelTest {
                 ).isEqualTo("Enter an altitude.")
             }
             assertThat(conditions.conditions.value).isEqualTo(Conditions.ISA)
+        }
+
+    @Test
+    fun useMyLocationSwitchesToAutoAndCreditsOpenMeteo() =
+        runTest {
+            conditions.setModeResult = {
+                conditions.lastLocation.value =
+                    LocationResult.Fix(lat = 39.739, lon = -104.99, altitudeM = null, accuracyM = 500.0)
+                conditions.conditions.value =
+                    Conditions.ISA.copy(altitudeMeters = 1609.0, source = ConditionsSource.WEATHER)
+            }
+            val vm = viewModel()
+            vm.uiState.testIgnoringRest {
+                assertThat(awaitUntil { it.loaded }.conditions.attribution).isNull()
+                vm.onEvent(BagEvent.UseMyLocation)
+                val card =
+                    awaitUntil { it.conditions.mode == ConditionsMode.AUTO && !it.conditions.locating }
+                        .conditions
+                assertThat(card.modeLabel).isEqualTo("Automatic")
+                assertThat(card.locationLabel).isEqualTo("near 39.74, -104.99")
+                assertThat(card.attribution).isEqualTo("Weather data by Open-Meteo.com (CC BY 4.0)")
+                assertThat(card.autoError).isNull()
+            }
+        }
+
+    @Test
+    fun aDeniedLocationStaysManualAndSaysWhyUntilManualValuesAreSaved() =
+        runTest {
+            conditions.setModeResult = {
+                conditions.lastError.value = ConditionsError.LocationPermissionDenied
+                conditions.mode.value = ConditionsMode.MANUAL
+            }
+            val vm = viewModel()
+            vm.uiState.testIgnoringRest {
+                awaitUntil { it.loaded }
+                vm.onEvent(BagEvent.UseMyLocation)
+                val card = awaitUntil { it.conditions.autoError != null }.conditions
+                assertThat(card.mode).isEqualTo(ConditionsMode.MANUAL)
+                assertThat(card.autoError).isEqualTo(ConditionsError.LocationPermissionDenied.userMessage)
+                assertThat(card.attribution).isNull()
+
+                vm.onEvent(BagEvent.SaveConditions(ConditionsForm.of(Conditions.ISA, null, settings.units.value)))
+                assertThat(
+                    awaitUntil { it.conditions.autoError == null }.conditions.mode,
+                ).isEqualTo(ConditionsMode.MANUAL)
+            }
         }
 
     @Test

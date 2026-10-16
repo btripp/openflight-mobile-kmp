@@ -82,10 +82,14 @@ data class GapChipState(
 )
 
 /**
- * The conditions card (plan F5; manual until F6's automatic source).
+ * The conditions card (plan F5, with F6's automatic source).
  *
  * @property windNote [BagCopy.WIND_NEEDS_TARGET] when there's wind but no target direction.
  * @property form the editor, pre-filled with the current values.
+ * @property locationLabel "near lat, lon" behind AUTO conditions.
+ * @property autoError why the last "Use my location" fell short, in plain words.
+ * @property attribution Open-Meteo's CC BY 4.0 credit, shown while its data is in use (AUTO).
+ * @property locating a "Use my location" fetch is running.
  */
 data class BagConditionsCardState(
     val mode: ConditionsMode = ConditionsMode.MANUAL,
@@ -106,6 +110,10 @@ data class BagConditionsCardState(
     val temperatureUnit: String = "°F",
     val windUnit: String = "mph",
     val formError: String? = null,
+    val locationLabel: String? = null,
+    val autoError: String? = null,
+    val attribution: String? = null,
+    val locating: Boolean = false,
 )
 
 /** What My Bag's user can do. */
@@ -145,6 +153,9 @@ sealed interface BagEvent {
     data class SaveConditions(
         val form: ConditionsForm,
     ) : BagEvent
+
+    /** Switches the conditions to AUTO (location + weather) and fetches; also refreshes AUTO. */
+    data object UseMyLocation : BagEvent
 
     data object DismissError : BagEvent
 }

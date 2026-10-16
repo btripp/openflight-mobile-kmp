@@ -101,7 +101,9 @@ The app has four tabs on both platforms: **Practice · Sessions · Bag · Settin
   range".
 - **Playing conditions**: altitude, temperature, wind, turf firmness and target bearing adjust
   the estimated carry and roll through air density and wind. Every adjusted number is labelled
-  "est."; the Pi's carry stays the anchor.
+  "est."; the Pi's carry stays the anchor. Type them in, or tap **Use my location** to fill
+  them from Open-Meteo weather and elevation for a coarse fix (the location prompt appears only
+  then).
 
 ### Settings
 - **Device**: connection and transport, the live link, and cards for power (a Pi started with
@@ -145,7 +147,7 @@ Done and on `main`:
 - [x] Session stats, dispersion map, CSV export, server-confirmed delete and clear
 - [x] Stored session history (Room), with replay on the range
 - [x] My Bag, club analysis and gapping
-- [x] Conditions-adjusted carry, wind and estimated roll (manual conditions)
+- [x] Conditions-adjusted carry, wind and estimated roll (manual or automatic conditions)
 - [x] Audio call-outs
 - [x] Device cards, radar calibration, camera, speed training, Pi shutdown
 - [x] Tablet layouts: Android navigation rail, iPad sidebar, list-detail screens
@@ -155,8 +157,6 @@ Done and on `main`:
 Next:
 
 - [ ] Estimated total and roll on Practice, Sessions, history and CSV, plus a "show total" toggle
-- [ ] Automatic conditions from location and Open-Meteo weather in the UI (the engine is done;
-      the Bag screen only offers manual conditions so far)
 - [ ] Games and activities: a **Play** tab with target call-out, closest to the pin, bullseye,
       golf pong and iconic shots (the engine is done; no screens yet)
 - [ ] Range themes and atmosphere (dusk, night, links), a top-down view, and your own range
