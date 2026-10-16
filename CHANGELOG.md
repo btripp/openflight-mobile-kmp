@@ -21,6 +21,9 @@ tag. Plain `v0.1.0` waits on the hardware test matrix on a real Raspberry Pi.
 
 ### Fixed
 
+- A shot's offline distance and shape now match across the bag, the Session dispersion chart and
+  games: Session respects a calculated spin the way the bag does, and games show a side from spin
+  axis alone, not only from horizontal launch (#124).
 - The Session screen works out its dispersion chart off the main thread, so a long history no
   longer stutters when the screen opens or the Pi reconnects (#125).
 - The shot detail sheet badges Carry "est." when it was adjusted for altitude, weather or wind,
