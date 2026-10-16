@@ -21,6 +21,8 @@ tag. Plain `v0.1.0` waits on the hardware test matrix on a real Raspberry Pi.
 
 ### Fixed
 
+- Returning to the Dashboard after hitting shots on another tab gives one haptic and flash, not
+  one per shot back to back (#126).
 - The shot detail sheet badges Carry "est." when it was adjusted for altitude, weather or wind,
   instead of showing the adjusted number as if the radar measured it (#123).
 - The range overlay redraws a shot's tracer when the Pi's final update for it arrives, instead of

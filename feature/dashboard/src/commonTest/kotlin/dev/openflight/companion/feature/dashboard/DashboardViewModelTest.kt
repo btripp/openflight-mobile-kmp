@@ -266,6 +266,19 @@ class DashboardViewModelTest {
         }
 
     @Test
+    fun shotsWhileNoOneCollectsFireOneEffectNotABurst() =
+        runTest {
+            shots.history.value = listOf(shot(1))
+            shots.history.value = listOf(shot(2), shot(1))
+            shots.history.value = listOf(shot(3), shot(2), shot(1))
+
+            viewModel.effects.test {
+                assertThat(awaitItem()).isEqualTo(DashboardEffect.NewShot)
+                expectNoEvents()
+            }
+        }
+
+    @Test
     fun historyAlreadyPresentWhenTheViewModelStartsDoesNotFireTheEffect() =
         runTest {
             val preSeededSettings = FakeSettingsRepository()
