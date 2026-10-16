@@ -21,6 +21,9 @@ tag. Plain `v0.1.0` waits on the hardware test matrix on a real Raspberry Pi.
 
 ### Fixed
 
+- A shot's offline distance and shape now match across the bag, the Session dispersion chart and
+  games: Session respects a calculated spin the way the bag does, and games show a side from spin
+  axis alone, not only from horizontal launch (#124).
 - The shot detail sheet badges Carry "est." when it was adjusted for altitude, weather or wind,
   instead of showing the adjusted number as if the radar measured it (#123).
 - The range overlay redraws a shot's tracer when the Pi's final update for it arrives, instead of

@@ -143,23 +143,8 @@ internal class DispersionCalculator(
     fun piPoints(session: List<ShotDetail>): List<DispersionPoint> {
         val candidates =
             session.mapIndexedNotNull { index, detail ->
-                val ballSpeed = detail.ballSpeedMph
-                val carry = detail.estimatedCarryYards
-                if (detail.isSwingSpeed || ballSpeed == null || carry == null) return@mapIndexedNotNull null
-                Candidate(
-                    shotNumber = session.size - index,
-                    measurements =
-                        FlightMeasurements(
-                            id = detail.timestamp,
-                            club = detail.club.orEmpty(),
-                            ballSpeedMph = ballSpeed,
-                            carryYards = carry,
-                            launchAngleVertical = detail.launchAngleVertical,
-                            launchAngleHorizontal = detail.launchAngleHorizontal,
-                            spinRpm = detail.spinRpm,
-                            spinAxisDeg = detail.spinAxisDeg,
-                        ),
-                )
+                val measurements = detail.toFlightMeasurements() ?: return@mapIndexedNotNull null
+                Candidate(shotNumber = session.size - index, measurements = measurements)
             }
         return points(candidates)
     }

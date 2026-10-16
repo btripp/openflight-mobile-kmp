@@ -15,19 +15,21 @@ import kotlin.test.Test
 class GameShotMeasurerTest {
     private val measurer = GameShotMeasurer()
 
-    private fun shot(horizontal: Double?) =
-        ShotEvent(
-            schemaVersion = 1,
-            eventId = "00000000-0000-4000-8000-000000000001",
-            timestamp = "2026-09-25T10:00:00",
-            club = "7-iron",
-            ballSpeedMph = 120.0,
-            estimatedCarryYards = 165.0,
-            launchAngleVertical = 16.0,
-            launchAngleHorizontal = horizontal,
-            spinRpm = 7000.0,
-            spinAxisDeg = 0.0,
-        )
+    private fun shot(
+        horizontal: Double?,
+        axis: Double? = null,
+    ) = ShotEvent(
+        schemaVersion = 1,
+        eventId = "00000000-0000-4000-8000-000000000001",
+        timestamp = "2026-09-25T10:00:00",
+        club = "7-iron",
+        ballSpeedMph = 120.0,
+        estimatedCarryYards = 165.0,
+        launchAngleVertical = 16.0,
+        launchAngleHorizontal = horizontal,
+        spinRpm = 7000.0,
+        spinAxisDeg = axis,
+    )
 
     @Test
     fun atIsaTheCarryIsTheServersAndTotalAddsAnEstimatedRoll() {
@@ -37,7 +39,7 @@ class GameShotMeasurerTest {
         assertThat(measured.carryEstimated).isFalse()
         assertThat(measured.totalYards).isNotNull().isGreaterThan(165.0)
         assertThat(measured.apexYards).isNotNull().isGreaterThan(10.0)
-        // No horizontal launch angle: the miss is distance-only.
+        // Neither horizontal launch nor spin axis: the miss is distance-only.
         assertThat(measured.offlineYards).isNull()
     }
 
@@ -48,5 +50,12 @@ class GameShotMeasurerTest {
 
         assertThat(right.offlineYards).isNotNull().isGreaterThan(0.0)
         assertThat(left.offlineYards).isNotNull().isLessThan(0.0)
+    }
+
+    @Test
+    fun aSpinAxisAloneGivesASideLikeTheBagAndSession() {
+        val measured = measurer.measure(shot(horizontal = null, axis = 10.0), Conditions.ISA, targetBearing = null)
+
+        assertThat(measured.offlineYards).isNotNull().isGreaterThan(0.0)
     }
 }
