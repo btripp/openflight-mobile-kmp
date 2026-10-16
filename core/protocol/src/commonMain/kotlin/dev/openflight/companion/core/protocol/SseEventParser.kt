@@ -16,8 +16,13 @@ data class SseEvent(
 class SseEventParser {
     private var eventName: String? = null
     private val dataLines = mutableListOf<String>()
+    private var dataLength = 0
 
-    /** Feeds one line, returning an event when that line completes one. */
+    /**
+     * Feeds one line, returning an event when that line completes one.
+     *
+     * @throws IllegalArgumentException when the pending event's data passes [MAX_EVENT_CHARS].
+     */
     fun append(line: String): SseEvent? {
         // The byte adapter strips LF, but a CRLF stream leaves the carriage return behind.
         val trimmed = if (line.endsWith("\r")) line.dropLast(1) else line
@@ -43,24 +48,39 @@ class SseEventParser {
     private fun applyField(line: String) {
         val (field, value) = splitSseField(line)
         when (field) {
-            "event" -> eventName = value
+            "event" -> {
+                eventName = value
+            }
 
-            "data" -> dataLines.add(value)
+            "data" -> {
+                // Untrusted LAN input (issue #132): endless `data:` lines must not grow memory forever.
+                dataLength += value.length + 1
+                require(dataLength <= MAX_EVENT_CHARS) { "SSE event exceeds $MAX_EVENT_CHARS characters" }
+                dataLines.add(value)
+            }
 
             // `id` and `retry` are unused, and unknown fields must be ignored.
-            else -> Unit
+            else -> {
+                Unit
+            }
         }
     }
 
     fun reset() {
         eventName = null
         dataLines.clear()
+        dataLength = 0
     }
 
     private fun dispatch(): SseEvent? {
         val event = if (dataLines.isEmpty()) null else SseEvent(eventName, dataLines.joinToString("\n"))
         reset()
         return event
+    }
+
+    companion object {
+        /** The most data one event may carry, 256 KiB; a shot payload is a few hundred bytes. */
+        const val MAX_EVENT_CHARS: Int = 256 * 1024
     }
 }
 
@@ -88,8 +108,16 @@ class SseByteStreamParser {
     private val lineBytes = mutableListOf<Byte>()
     private val eventParser = SseEventParser()
 
+    /**
+     * Feeds one byte, returning an event when it completes one.
+     *
+     * @throws IllegalArgumentException when a line passes [MAX_LINE_BYTES] or an event passes
+     *   [SseEventParser.MAX_EVENT_CHARS]. The caller treats it as a dropped stream and reconnects.
+     */
     fun append(byte: Byte): SseEvent? {
         if (byte != LINE_FEED) {
+            // Untrusted LAN input (issue #132): a stream with no newline must not grow memory forever.
+            require(lineBytes.size < MAX_LINE_BYTES) { "SSE line exceeds $MAX_LINE_BYTES bytes" }
             lineBytes.add(byte)
             return null
         }
@@ -103,7 +131,9 @@ class SseByteStreamParser {
         eventParser.reset()
     }
 
-    private companion object {
-        const val LINE_FEED: Byte = 0x0A
+    companion object {
+        /** The longest line accepted, 64 KiB. */
+        const val MAX_LINE_BYTES: Int = 64 * 1024
+        private const val LINE_FEED: Byte = 0x0A
     }
 }

@@ -21,6 +21,9 @@ tag. Plain `v0.1.0` waits on the hardware test matrix on a real Raspberry Pi.
 
 ### Fixed
 
+- A broken or hostile device on the network can no longer run the app out of memory by streaming
+  endless data on the shot stream: an oversized line or event drops the connection and reconnects
+  (#132).
 - A club change from the launch monitor no longer crashes the app when the phone can't save it
   (e.g. storage full). The club still updates for the session, and the save failure is logged (#131).
 - Session stats on a mix of shots and swing-speed reps count only the shots, so a rep no longer
