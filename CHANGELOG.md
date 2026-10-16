@@ -21,6 +21,8 @@ tag. Plain `v0.1.0` waits on the hardware test matrix on a real Raspberry Pi.
 
 ### Fixed
 
+- When the Pi's two shot streams connect at the same moment, they now share one session, so the
+  current-session view no longer comes up empty while shots are saved somewhere else (#135).
 - A club change from the launch monitor no longer crashes the app when the phone can't save it
   (e.g. storage full). The club still updates for the session, and the save failure is logged (#131).
 - Session stats on a mix of shots and swing-speed reps count only the shots, so a rep no longer
