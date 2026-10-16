@@ -164,7 +164,7 @@ class SessionViewModel(
                         !pi.connected && control.connection != ConnectionState.Connected && base.hasShots
                     },
             )
-        }
+        }.flowOn(computeDispatcher) // the dispersion simulates every uncached shot
 
     val uiState: StateFlow<SessionUiState> =
         combine(baseState, shotDetail) { state, detail -> state.copy(shotDetail = detail) }.stateIn(
