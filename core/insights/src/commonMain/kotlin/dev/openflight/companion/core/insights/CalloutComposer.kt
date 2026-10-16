@@ -4,7 +4,6 @@ package dev.openflight.companion.core.insights
 import kotlin.math.abs
 import kotlin.math.pow
 import kotlin.math.round
-import kotlin.math.roundToLong
 
 /**
  * Composes a spoken shot call-out from a [CalloutInput] (plan F4): pure text in, text out, no
@@ -157,7 +156,8 @@ object CalloutComposer {
     private fun spokenSpeedUnit(units: UnitSystem): String =
         if (units == UnitSystem.METRIC) "kilometers per hour" else "miles per hour"
 
-    private fun roundedInt(value: Double): Long = value.roundToLong()
+    // Half-to-even, like ShotMetricFormatter, so the voice says the number the screen shows.
+    private fun roundedInt(value: Double): Long = round(value).toLong()
 
     private const val SMASH_DECIMALS = 2
 }
