@@ -4,6 +4,7 @@ package dev.openflight.companion.core.data
 import app.cash.turbine.test
 import assertk.assertFailure
 import assertk.assertThat
+import assertk.assertions.contains
 import assertk.assertions.containsExactly
 import assertk.assertions.hasSize
 import assertk.assertions.isEmpty
@@ -235,6 +236,18 @@ class ShotRepositoryTest {
 
             assertThat(h.repository.supportsControls.value).isTrue()
             assertThat(h.repository.activeClub.value).isEqualTo(GolfClub.IRON_7)
+        }
+
+    @Test
+    fun aFailedClubWriteIsLoggedAndTheSessionKeepsFollowingTheClub() =
+        runRepositoryTest { h ->
+            h.settings.clubWriteFailure = IllegalStateException("disk full")
+
+            h.ble.activeClub.value = GolfClub.IRON_7
+            h.ble.activeClub.value = GolfClub.SAND_WEDGE
+
+            assertThat(h.repository.activeClub.value).isEqualTo(GolfClub.SAND_WEDGE)
+            assertThat(h.logs).contains("Persist club failed: disk full")
         }
 
     // endregion

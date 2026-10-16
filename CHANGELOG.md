@@ -21,6 +21,8 @@ tag. Plain `v0.1.0` waits on the hardware test matrix on a real Raspberry Pi.
 
 ### Fixed
 
+- A club change from the launch monitor no longer crashes the app when the phone can't save it
+  (e.g. storage full). The club still updates for the session, and the save failure is logged (#131).
 - Returning to the Dashboard after hitting shots on another tab gives one haptic and flash, not
   one per shot back to back (#126).
 - A shot's offline distance and shape now match across the bag, the Session dispersion chart and
