@@ -481,7 +481,7 @@ internal class DefaultShotRepository(
                     launch(start = CoroutineStart.UNDISPATCHED) {
                         transport.activeClub.collect { club ->
                             mutableActiveClub.value = club
-                            if (club != null) settings.setSelectedClub(club)
+                            if (club != null) quietly("Persist club") { settings.setSelectedClub(club) }
                         }
                     }
                     launch(start = CoroutineStart.UNDISPATCHED) { syncClubOnConnect(transport, key.type) }
@@ -589,7 +589,7 @@ internal class DefaultShotRepository(
                 .collect { club ->
                     if (club != null) {
                         mutableActiveClub.value = club
-                        settings.setSelectedClub(club)
+                        quietly("Persist club") { settings.setSelectedClub(club) }
                     }
                 }
         }

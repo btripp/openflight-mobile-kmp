@@ -115,7 +115,11 @@ internal class FakeSettingsRepository(
         connectedHosts += host
     }
 
+    /** When set, [setSelectedClub] throws it, as DataStore's `edit` does on a full disk. */
+    var clubWriteFailure: Exception? = null
+
     override suspend fun setSelectedClub(club: GolfClub) {
+        clubWriteFailure?.let { throw it }
         clubWrites += club
         clubState.value = club
     }

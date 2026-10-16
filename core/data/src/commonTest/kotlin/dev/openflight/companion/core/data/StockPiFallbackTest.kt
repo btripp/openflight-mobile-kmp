@@ -385,6 +385,21 @@ class StockPiFallbackTest {
         }
 
     @Test
+    fun stockPiClubChangedSurvivesAFailedClubWrite() =
+        runStockPiTest { h ->
+            h.noClubApi()
+            h.sseMissing()
+            val socket = h.piConnected()
+            h.settings.clubWriteFailure = IllegalStateException("disk full")
+
+            socket.serverFrame(PiFixtures.CONNECT_SESSION_STATE_FRAME)
+            socket.serverFrame(PiFixtures.CLUB_CHANGED_FRAME)
+
+            assertThat(h.repository.activeClub.value).isEqualTo(GolfClub.IRON_7)
+            assertThat(h.settings.clubWrites).isEmpty()
+        }
+
+    @Test
     fun bluetoothClubErrorsAreNotRoutedToSocketIo() =
         runTest(UnconfinedTestDispatcher()) {
             val h = Harness(backgroundScope)
