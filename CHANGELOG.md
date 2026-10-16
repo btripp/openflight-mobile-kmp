@@ -36,6 +36,8 @@ tag. Plain `v0.1.0` waits on the hardware test matrix on a real Raspberry Pi.
   Bluetooth) no longer comes back when the Pi resends it after a reconnect (#116).
 - When the Pi clears a profile's session over Bluetooth, every one of that profile's shots in the
   current session leaves the phone's history and stats, not just the newest 100 (#117).
+- The Dashboard's spin card says "estimated" for a spin the Pi took from the club's typical value,
+  instead of showing it like a radar measurement (#122).
 
 ## [0.1.0-beta.5] - 2026-10-14
 

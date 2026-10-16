@@ -44,7 +44,10 @@ private const val ALL_DOTS = 3
 
 /** Where a spin rate came from (`spin_source`). */
 enum class SpinSource(
-    /** The web UI's subtext under the spin rate: `measured` shows "radar", `calculated` "estimated". */
+    /**
+     * The web UI's subtext under the spin rate: `measured` shows "radar", `calculated` and
+     * `club_typical` "estimated".
+     */
     val label: String,
 ) {
     MEASURED("radar"),
@@ -55,7 +58,7 @@ enum class SpinSource(
         fun fromWire(source: String?): SpinSource? =
             when (source) {
                 "measured" -> MEASURED
-                "calculated" -> ESTIMATED
+                "calculated", "club_typical" -> ESTIMATED
                 else -> null
             }
     }

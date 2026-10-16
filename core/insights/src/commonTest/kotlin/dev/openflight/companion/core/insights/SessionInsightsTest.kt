@@ -64,6 +64,14 @@ class SessionInsightsTest {
         assertThat(enrichment.carrySpinAdjustedYards).isEqualTo(248.0)
     }
 
+    @Test
+    fun clubTypicalSpinShowsAsEstimated() {
+        val enrichment = ShotEnrichment.from(mockShotDetail().copy(spinSource = "club_typical"))
+
+        assertThat(enrichment.spinSource).isEqualTo(SpinSource.ESTIMATED)
+        assertThat(enrichment.spinSource?.label).isEqualTo("estimated")
+    }
+
     // endregion
 
     // region swing speed (computeSwingSpeedStats)
