@@ -126,6 +126,21 @@ class SessionStatsTest {
     }
 
     @Test
+    fun swingSpeedRepsAreNotCountedAsShots() {
+        // A rep may carry its speed in ball_speed_mph; it must not skew the shot figures.
+        val rep = ShotDetail(timestamp = "t4", ballSpeedMph = 105.0, clubSpeedMph = 105.0, mode = "swing-speed")
+        val stats =
+            computeDetailStats(
+                listOf(row(ballSpeedMph = 150.0), row(ballSpeedMph = 150.0), row(ballSpeedMph = 150.0), rep),
+            )
+
+        assertThat(stats.shotCount).isEqualTo(3)
+        assertThat(stats.avgBallSpeedMph).isEqualTo(150.0)
+        assertThat(stats.minBallSpeedMph).isEqualTo(150.0)
+        assertThat(stats.avgClubSpeedMph!!).isCloseTo(104.1, TOLERANCE)
+    }
+
+    @Test
     fun theSseStatsUseTheSameSpread() {
         assertThat(sampleStdDev(listOf(100.0, 110.0, 120.0))).isEqualTo(10.0)
         assertThat(sampleStdDev(listOf(140.0))).isEqualTo(0.0)

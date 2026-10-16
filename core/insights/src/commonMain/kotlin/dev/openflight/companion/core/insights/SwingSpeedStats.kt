@@ -64,9 +64,11 @@ private fun normalizeToken(value: String?): String = value?.trim()?.lowercase().
 /**
  * The kiosk's `computeStats` over the Pi's session rows (the Socket.IO counterpart of
  * [computeClubStats]). A row missing its ball speed or carry is left out of that figure only.
- * The Pi's session holds every profile's rows, so filter them with [forProfile] first.
+ * The Pi's session holds every profile's rows, so filter them with [forProfile] first. Swing-speed
+ * reps are not shots and are left out (see [computeSwingSpeedStats]).
  */
-fun computeDetailStats(shots: List<ShotDetail>): ClubStats {
+fun computeDetailStats(rows: List<ShotDetail>): ClubStats {
+    val shots = rows.filterNot { it.isSwingSpeed }
     if (shots.isEmpty()) return ClubStats.EMPTY
     val ballSpeeds = shots.mapNotNull { it.ballSpeedMph }
     val carries = shots.mapNotNull { it.estimatedCarryYards }
