@@ -3,10 +3,14 @@ package dev.openflight.companion.feature.session
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import dev.openflight.companion.core.data.ConditionsRepository
 import dev.openflight.companion.core.data.ShotHistoryRepository
 import dev.openflight.companion.core.insights.ExportShot
 import dev.openflight.companion.core.insights.buildExportCsv
 import dev.openflight.companion.core.insights.buildSessionsCsvFilename
+import dev.openflight.companion.core.insights.withEstimatedTotals
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
@@ -19,6 +23,7 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
@@ -36,7 +41,10 @@ import kotlin.time.ExperimentalTime
 @OptIn(ExperimentalTime::class)
 class SessionHistoryViewModel(
     private val history: ShotHistoryRepository,
+    // Plan F5b: the export's estimated roll and total use the current conditions.
+    private val conditions: ConditionsRepository,
     private val now: () -> String = { Clock.System.now().toString() },
+    private val computeDispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) : ViewModel() {
     private val action = MutableStateFlow<SessionActionState>(SessionActionState.Idle)
     private var actionJob: Job? = null
@@ -173,7 +181,10 @@ class SessionHistoryViewModel(
                     }
                 }
             if (rows.isEmpty()) return@launch
-            historyEffects.send(SessionEffect.CsvReady(buildExportCsv(rows), buildSessionsCsvFilename(now())))
+            val air = conditions.conditions.value
+            val bearing = conditions.targetBearing.value
+            val csv = withContext(computeDispatcher) { buildExportCsv(rows.withEstimatedTotals(air, bearing)) }
+            historyEffects.send(SessionEffect.CsvReady(csv, buildSessionsCsvFilename(now())))
         }
     }
 

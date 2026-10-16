@@ -11,6 +11,13 @@ tag. Plain `v0.1.0` waits on the hardware test matrix on a real Raspberry Pi.
 
 ## [Unreleased]
 
+### Added
+
+- **Estimated total and roll on Practice, Sessions and session history.** The latest shot card
+  and every shot row show "Total … · Roll … (est.)", using your conditions and the landing-area
+  firmness from My Bag › Conditions. "Show total distance" in Settings hides them. CSV exports add
+  `roll_est_yards` and `total_est_yards` columns (#30).
+
 ### Changed
 
 - **Clearer connection status in Settings.** The shot stream's state is now a coloured pill like

@@ -56,6 +56,7 @@ internal fun ShotCard(
     onViewOnRange: (() -> Unit)? = null,
     demo: Boolean = false,
     onOpenDetail: (() -> Unit)? = null,
+    estimatedTotal: String? = null,
 ) {
     OfCard(
         modifier = Modifier.fillMaxWidth().testTag(DashboardTestTags.LATEST_SHOT),
@@ -107,6 +108,15 @@ internal fun ShotCard(
             }
         }
         PrimaryMetrics(shot, units, enrichment)
+        // Plan F5b: the estimated total and roll, labelled "est.".
+        estimatedTotal?.let {
+            OfText(
+                text = it,
+                role = OfTextRole.BodySmall,
+                color = OfColorTokens.CreamDim,
+                modifier = Modifier.testTag(DashboardUiTags.ESTIMATED_TOTAL),
+            )
+        }
         OfDivider()
         val speedUnit = speedUnitLabel(units)
         DetailRow(

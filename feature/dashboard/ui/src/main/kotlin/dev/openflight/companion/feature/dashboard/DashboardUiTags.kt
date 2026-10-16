@@ -9,6 +9,7 @@ object DashboardUiTags {
     const val SHOT_FLASH = "dashboard.shotFlash"
     const val CLUB_CHIPS = "dashboard.clubChips"
     const val CARRY = "dashboard.carry"
+    const val ESTIMATED_TOTAL = "dashboard.estimatedTotal"
     const val PLAYER = "dashboard.player"
 
     /** The confidence badge under a detail metric ("Launch" or "Spin"). */

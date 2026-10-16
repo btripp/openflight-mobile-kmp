@@ -2,7 +2,11 @@
 package dev.openflight.companion.core.insights
 
 import assertk.assertThat
+import assertk.assertions.isCloseTo
 import assertk.assertions.isEqualTo
+import assertk.assertions.isGreaterThan
+import assertk.assertions.isTrue
+import dev.openflight.companion.core.model.Conditions
 import dev.openflight.companion.core.model.ShotEvent
 import kotlin.test.Test
 
@@ -44,6 +48,25 @@ class ShotCsvTest {
         val csv = buildExportCsv(listOf(ExportShot.of(shot(eventId = "00000000-0000-4000-8000-000000000001"), null)))
 
         assertThat(csv.lines().first().startsWith("shot_number,")).isEqualTo(true)
+    }
+
+    @Test
+    fun estimatedRollAndTotalAreAppendedAsEstColumnsAndAddUp() {
+        val shots = listOf(ExportShot.of(shot(launchAngleVertical = 12.0, spinRpm = 2_600.0), null))
+        val rows = buildExportCsv(shots.withEstimatedTotals(Conditions.ISA, null)).lines().map { it.split(",") }
+
+        assertThat(rows[0].takeLast(2)).isEqualTo(listOf("roll_est_yards", "total_est_yards"))
+        val (roll, total) = rows[1].takeLast(2).map(String::toDouble)
+        assertThat(roll).isGreaterThan(0.0)
+        // At ISA the carry is the server's 240 yd, so total = carry + roll (to the 0.1 yd rounding).
+        assertThat(total).isCloseTo(240.0 + roll, 0.11)
+    }
+
+    @Test
+    fun withoutAnEstimateThereAreNoEstColumns() {
+        val csv = buildExportCsv(listOf(ExportShot.of(shot(), null)))
+
+        assertThat(csv.lines().first().endsWith("spin_axis_deg")).isTrue()
     }
 
     @Test

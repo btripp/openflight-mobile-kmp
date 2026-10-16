@@ -106,6 +106,10 @@ private fun ShotRowContent(
                 color = OfColorTokens.CreamDim,
                 maxLines = 2,
             )
+            // Plan F5b: the estimated total and roll, labelled "est.".
+            shot.estimatedTotal?.let {
+                OfText(text = it, role = OfTextRole.BodySmall, color = OfColorTokens.CreamDim, maxLines = 2)
+            }
         }
         if (shot.isSwingSpeed) {
             RowMetric(shot.swingSpeedMph?.let { speedValue(it, units) } ?: ShotMetricFormatter.MISSING, "SWING")
