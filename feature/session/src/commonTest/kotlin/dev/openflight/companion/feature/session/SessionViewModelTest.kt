@@ -35,6 +35,8 @@ import dev.openflight.companion.core.testing.FakeShotRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -84,6 +86,32 @@ class SessionViewModelTest {
                 assertThat(state.clubChips).isEmpty()
                 assertThat(state.selectedClub).isNull()
                 assertThat(state.source).isEqualTo(SessionSource.LOCAL)
+            }
+        }
+
+    @Test
+    fun theDispersionIsSimulatedOnTheComputeDispatcherNotMain() =
+        runTest {
+            val compute = TestCoroutineScheduler()
+            val offMain =
+                SessionViewModel(
+                    shots,
+                    settings,
+                    piSession,
+                    FakeConditionsRepository(),
+                    computeDispatcher = StandardTestDispatcher(compute),
+                )
+
+            offMain.uiState.testIgnoringRest {
+                awaitItem()
+                compute.advanceUntilIdle()
+
+                shots.setHistory(listOf(shot(1)))
+                // Main is unconfined: had the dispersion run there, the shot would already show.
+                assertThat(offMain.uiState.value.allCount).isEqualTo(0)
+
+                compute.advanceUntilIdle()
+                awaitUntil { it.allCount == 1 }
             }
         }
 
