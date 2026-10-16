@@ -243,7 +243,9 @@ class DashboardViewModel(
             initialValue = DashboardUiState.Waiting(ConnectionPanelState()),
         )
 
-    private val newShotEffects = Channel<DashboardEffect>(Channel.BUFFERED)
+    // Conflated: while no UI collects (another tab is showing), shots collapse into one pending
+    // effect instead of replaying a haptic and flash per shot on return (#126).
+    private val newShotEffects = Channel<DashboardEffect>(Channel.CONFLATED)
 
     /**
      * One-shot signals for haptics and the shot-flash (plan R5a). Fires only when
