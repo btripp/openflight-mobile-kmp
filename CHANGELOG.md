@@ -21,6 +21,8 @@ tag. Plain `v0.1.0` waits on the hardware test matrix on a real Raspberry Pi.
 
 ### Fixed
 
+- Voice call-outs round a .5 the same way the screen does, so a 150.5-yard carry is spoken
+  "150", not "151" (#129).
 - Returning to the Dashboard after hitting shots on another tab gives one haptic and flash, not
   one per shot back to back (#126).
 - A shot's offline distance and shape now match across the bag, the Session dispersion chart and
