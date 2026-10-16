@@ -49,7 +49,7 @@ class SessionHistoryViewModelTest {
 
     @Test
     fun beforeTheFirstReadNothingIsLoaded() {
-        assertThat(SessionHistoryViewModel(history).uiState.value.loaded).isFalse()
+        assertThat(SessionHistoryViewModel(history, FakeConditionsRepository()).uiState.value.loaded).isFalse()
     }
 
     @Test
@@ -58,7 +58,8 @@ class SessionHistoryViewModelTest {
             history.put("s1", listOf(stored(2, "2026-09-25T10:05:00"), stored(1, "2026-09-25T10:00:00")))
             history.put("s2", listOf(stored(1, "2026-09-27T18:30:00", club = "7-iron")))
             history.put("s3", listOf(stored(1, "2026-09-28T09:00:00")))
-            val viewModel = SessionHistoryViewModel(history, now = { "2026-10-11T09:30:00Z" })
+            val viewModel =
+                SessionHistoryViewModel(history, FakeConditionsRepository(), now = { "2026-10-11T09:30:00Z" })
 
             viewModel.uiState.test {
                 awaitUntil { it.sessions.size == 3 }
@@ -92,7 +93,7 @@ class SessionHistoryViewModelTest {
         runTest {
             history.put("s1", listOf(stored(1, "2026-09-25T10:00:00")))
             history.put("s2", listOf(stored(1, "2026-09-27T18:30:00")))
-            val viewModel = SessionHistoryViewModel(history)
+            val viewModel = SessionHistoryViewModel(history, FakeConditionsRepository())
 
             viewModel.uiState.testIgnoringRest {
                 awaitUntil { it.sessions.size == 2 }
@@ -114,7 +115,7 @@ class SessionHistoryViewModelTest {
     @Test
     fun withNoStoredSessionsTheListIsEmptyButLoaded() =
         runTest {
-            SessionHistoryViewModel(history).uiState.testIgnoringRest {
+            SessionHistoryViewModel(history, FakeConditionsRepository()).uiState.testIgnoringRest {
                 val state = awaitUntil { it.loaded }
                 assertThat(state.sessions).isEmpty()
                 assertThat(state.isPersistent).isTrue()
@@ -131,7 +132,7 @@ class SessionHistoryViewModelTest {
             )
             history.currentSessionId.value = "newer"
 
-            SessionHistoryViewModel(history).uiState.testIgnoringRest {
+            SessionHistoryViewModel(history, FakeConditionsRepository()).uiState.testIgnoringRest {
                 val state = awaitUntil { it.loaded }
                 assertThat(state.sessions).containsExactly(
                     SessionHistoryRow(
@@ -170,7 +171,7 @@ class SessionHistoryViewModelTest {
         runTest {
             history.isPersistent.value = false
 
-            SessionHistoryViewModel(history).uiState.testIgnoringRest {
+            SessionHistoryViewModel(history, FakeConditionsRepository()).uiState.testIgnoringRest {
                 assertThat(awaitUntil { it.loaded }.isPersistent).isFalse()
             }
         }
@@ -180,7 +181,9 @@ class SessionHistoryViewModelTest {
         runTest {
             history.put("old", listOf(stored(1, "2025-12-31T23:59:00")), host = null)
 
-            SessionHistoryViewModel(history, now = { "2026-09-25T12:00:00Z" }).uiState.testIgnoringRest {
+            SessionHistoryViewModel(history, FakeConditionsRepository(), now = {
+                "2026-09-25T12:00:00Z"
+            }).uiState.testIgnoringRest {
                 val row = awaitUntil { it.sessions.isNotEmpty() }.sessions.single()
                 assertThat(row.date).isEqualTo("Wed 31 Dec 2025")
                 assertThat(row.detailLine).isEqualTo("23:59 · Network")
@@ -192,7 +195,7 @@ class SessionHistoryViewModelTest {
         runTest {
             history.put("s1", listOf(stored(1, "2026-09-25T10:00:00")))
             history.applyWrites = false
-            val viewModel = SessionHistoryViewModel(history)
+            val viewModel = SessionHistoryViewModel(history, FakeConditionsRepository())
 
             viewModel.uiState.testIgnoringRest {
                 awaitUntil { it.sessions.size == 1 }
@@ -225,7 +228,7 @@ class SessionHistoryViewModelTest {
     fun cancellingClearAllKeepsTheHistory() =
         runTest {
             history.put("s1", listOf(stored(1, "2026-09-25T10:00:00")))
-            val viewModel = SessionHistoryViewModel(history)
+            val viewModel = SessionHistoryViewModel(history, FakeConditionsRepository())
 
             viewModel.uiState.testIgnoringRest {
                 awaitUntil { it.sessions.size == 1 }
@@ -242,7 +245,7 @@ class SessionHistoryViewModelTest {
         runTest {
             history.put("s1", listOf(stored(1, "2026-09-25T10:00:00")))
             history.applyWrites = false
-            val viewModel = SessionHistoryViewModel(history)
+            val viewModel = SessionHistoryViewModel(history, FakeConditionsRepository())
 
             viewModel.uiState.testIgnoringRest {
                 awaitUntil { it.sessions.size == 1 }

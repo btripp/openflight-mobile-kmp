@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 package dev.openflight.companion.feature.dashboard
 
+import dev.openflight.companion.core.data.DEFAULT_SHOW_TOTAL_DISTANCE
 import dev.openflight.companion.core.data.SettingsRepository
 import dev.openflight.companion.core.data.ShotRepository
 import dev.openflight.companion.core.data.TransportType
@@ -41,6 +42,12 @@ internal class FakeSettingsRepository(
 
     override suspend fun setUnits(units: UnitSystem) {
         this.units.value = units
+    }
+
+    override val showTotalDistance = MutableStateFlow(DEFAULT_SHOW_TOTAL_DISTANCE)
+
+    override suspend fun setShowTotalDistance(show: Boolean) {
+        showTotalDistance.value = show
     }
 }
 

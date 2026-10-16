@@ -492,6 +492,13 @@ struct SessionShotRowView: View {
                     .font(.of(.caption))
                     .foregroundStyle(Theme.creamDim)
                     .lineLimit(2)
+                // Plan F5b: the estimated total and roll, labelled "est.".
+                if let total = row.estimatedTotal {
+                    Text(total)
+                        .font(.of(.caption))
+                        .foregroundStyle(Theme.creamDim)
+                        .lineLimit(2)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             if row.isSwingSpeed {

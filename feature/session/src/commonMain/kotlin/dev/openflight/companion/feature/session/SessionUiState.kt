@@ -121,6 +121,8 @@ data class SessionShotRow(
     val enrichment: ShotEnrichment?,
     /** The shot's shape ("Push fade"), when its curve or start line was measured. */
     val shapeLabel: String? = null,
+    /** Plan F5b: "Total 247 yds · Roll 15 yds (est.)"; `null` when hidden or the shot can't be flown. */
+    val estimatedTotal: String? = null,
 ) {
     /** The range can fly this row (plan F8d): a ball shot with ball speed and carry. */
     val canFly: Boolean
