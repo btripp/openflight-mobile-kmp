@@ -79,6 +79,8 @@ internal class DataStoreConditionsRepository(
     override val lastLocation: StateFlow<LocationResult.Fix?> = lastLocationState.asStateFlow()
 
     override suspend fun setManual(conditions: Conditions) {
+        // Typed values replace whatever AUTO couldn't do, so its message no longer applies.
+        lastErrorState.value = null
         dataStore.edit { prefs ->
             prefs[MODE_KEY] = ConditionsMode.MANUAL.storageValue
             prefs[ALTITUDE_KEY] = conditions.altitudeMeters

@@ -11,6 +11,13 @@ tag. Plain `v0.1.0` waits on the hardware test matrix on a real Raspberry Pi.
 
 ## [Unreleased]
 
+### Added
+
+- **Automatic conditions.** My Bag's conditions card has **Use my location**: it fills altitude,
+  temperature and wind from Open-Meteo weather for your coarse location, credited on the card. The
+  location prompt appears only when you tap it; a denial or failed lookup says why and keeps your
+  manual conditions (#31).
+
 ### Changed
 
 - **Clearer connection status in Settings.** The shot stream's state is now a coloured pill like
