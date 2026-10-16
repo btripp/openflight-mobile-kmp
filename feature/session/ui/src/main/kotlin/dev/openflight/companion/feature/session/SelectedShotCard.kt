@@ -138,7 +138,7 @@ private fun previewDispersion(): SessionDispersionUiState {
         previewPoints.groupBy { it.club }.mapNotNull { (club, points) ->
             computeDispersionEllipse(
                 points.filter { !it.sideEstimated && !it.possibleBadRead }.map { it.sample },
-            )?.let { ClubDispersion(club, points.first().colorIndex, it) }
+            )?.let { ClubDispersion(club, points.first().shortLabel, points.first().colorIndex, it) }
         }
     return SessionDispersionUiState(
         points = previewPoints,

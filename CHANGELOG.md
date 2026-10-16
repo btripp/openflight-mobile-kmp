@@ -21,6 +21,8 @@ tag. Plain `v0.1.0` waits on the hardware test matrix on a real Raspberry Pi.
 
 ### Fixed
 
+- The Session dispersion chart labels each club's ellipse with the club (e.g. "D", "7i"), so
+  colour-blind golfers can tell the ellipses apart without relying on colour (#43).
 - A club change from the launch monitor no longer crashes the app when the phone can't save it
   (e.g. storage full). The club still updates for the session, and the save failure is logged (#131).
 - Session stats on a mix of shots and swing-speed reps count only the shots, so a rep no longer

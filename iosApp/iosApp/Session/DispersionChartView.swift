@@ -4,8 +4,9 @@ import SwiftUI
 
 /// The top-down dispersion chart (Android's `DispersionCard`): distance arcs around the tee, one
 /// dot per shot (club colour and short label; hollow when its side was estimated), an ellipse per
-/// club and a ring on the selected shot. Framing, arcs, ellipses and tap hit-testing all come from
-/// the shared `DispersionProjection`, so both platforms draw the same chart.
+/// club (labelled with the club, not told apart by colour alone) and a ring on the selected shot.
+/// Framing, arcs, ellipses and tap hit-testing all come from the shared `DispersionProjection`, so
+/// both platforms draw the same chart.
 struct DispersionChartView: View {
     let dispersion: SessionDispersionUiState
     let units: UnitSystem
@@ -148,14 +149,22 @@ struct DispersionChartView: View {
     private func drawEllipses(_ context: inout GraphicsContext, projection: DispersionProjection) {
         for club in dispersion.ellipses {
             let color = Theme.clubColor(Int(club.colorIndex))
-            var path = Path()
-            for (index, corner) in projection.ellipseOutline(ellipse: club.ellipse, segments: ellipseSegments).enumerated() {
-                let point = CGPoint(x: corner.first?.doubleValue ?? 0, y: corner.second?.doubleValue ?? 0)
-                if index == 0 { path.move(to: point) } else { path.addLine(to: point) }
+            let outline = projection.ellipseOutline(ellipse: club.ellipse, segments: ellipseSegments).map {
+                CGPoint(x: $0.first?.doubleValue ?? 0, y: $0.second?.doubleValue ?? 0)
             }
+            var path = Path()
+            path.addLines(outline)
             path.closeSubpath()
             context.fill(path, with: .color(color.opacity(0.08)))
             context.stroke(path, with: .color(color), lineWidth: 1.5)
+            // The club label above the ellipse's top edge, so clubs aren't told apart by colour alone.
+            if let top = outline.min(by: { $0.y < $1.y }) {
+                context.draw(
+                    Text(club.shortLabel).font(.system(size: 11, weight: .bold)).foregroundColor(color),
+                    at: CGPoint(x: top.x, y: max(top.y, 14)), // 14: about one 11pt line, so it stays on the chart
+                    anchor: .bottom
+                )
+            }
         }
     }
 
