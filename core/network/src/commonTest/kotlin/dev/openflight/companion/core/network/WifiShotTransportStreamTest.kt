@@ -238,6 +238,30 @@ class WifiShotTransportStreamTest {
         }
 
     @Test
+    fun aNonEventStreamOkIsAnErrorNotConnected() =
+        runTest {
+            // Issue #128: another LAN box serving 200 text/html for every path.
+            val engine =
+                MockEngine {
+                    respond(
+                        content = "<html></html>",
+                        status = HttpStatusCode.OK,
+                        headers = headersOf(HttpHeaders.ContentType, "text/html"),
+                    )
+                }
+            val transport = wifiShotTransport(engine, testScheduler)
+
+            transport.state.test {
+                assertThat(awaitItem()).isEqualTo(ConnectionState.Idle)
+                transport.start()
+                assertThat(awaitItem()).isEqualTo(ConnectionState.Connecting)
+                assertThat(awaitItem()).isEqualTo(ConnectionState.Error("not an OpenFlight stream"))
+                cancelAndIgnoreRemainingEvents()
+            }
+            transport.disconnect()
+        }
+
+    @Test
     fun aStockPiWithoutTheStreamIsProbedOnceUntilAnExplicitRetry() =
         runTest {
             // Plan R8j: stock upstream has no /api/shots/stream, so Flask answers 404.

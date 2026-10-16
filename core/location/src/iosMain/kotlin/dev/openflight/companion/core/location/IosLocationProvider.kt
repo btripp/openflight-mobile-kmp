@@ -39,7 +39,9 @@ internal class IosLocationProvider : LocationProvider {
             manager.delegate = delegate
             manager.desiredAccuracy =
                 if (accuracy == LocationAccuracy.FINE) kCLLocationAccuracyBest else kCLLocationAccuracyHundredMeters
-            continuation.invokeOnCancellation { manager.delegate = null }
+            // CLLocationManager holds its delegate weakly; capturing `delegate` (which holds `manager`)
+            // in this handler keeps both alive until the continuation completes (issue #127).
+            continuation.invokeOnCancellation { delegate.cancel() }
             when (manager.authorizationStatus) {
                 kCLAuthorizationStatusNotDetermined -> {
                     manager.requestWhenInUseAuthorization()
@@ -68,10 +70,15 @@ private class OneShotDelegate(
     private var finished = false
 
     fun finish(result: LocationResult) {
-        if (finished) return
+        if (cancel()) continuation.resume(result)
+    }
+
+    /** Detaches from [manager]; returns false when this request already finished. */
+    fun cancel(): Boolean {
+        if (finished) return false
         finished = true
         manager.delegate = null
-        if (continuation.isActive) continuation.resume(result)
+        return continuation.isActive
     }
 
     override fun locationManagerDidChangeAuthorization(manager: CLLocationManager) {

@@ -222,7 +222,7 @@ class WifiShotTransport(
                         socketTimeoutMillis = IDLE_TIMEOUT_MILLIS
                     }
                 }.execute { response ->
-                    streamFailure(response.status)?.let { throw it }
+                    streamFailure(response)?.let { throw it }
                     _piFeatures.value = piFeaturesOf(response.headers[PI_FEATURES_HEADER])
                     responded = true
                     onResponded()
@@ -240,14 +240,32 @@ class WifiShotTransport(
         }
     }
 
-    /** Why a stream response with [status] can't be read, or `null` for a `200`. */
-    private fun streamFailure(status: HttpStatusCode): Exception? =
-        when {
-            status == HttpStatusCode.OK -> null
-            status == HttpStatusCode.BadRequest && requestSchemaV2 -> SchemaV2Rejected()
-            status == HttpStatusCode.NotFound -> StreamNotFound()
-            else -> OpenFlightHttpError.UnexpectedStatus(status.value)
+    /** Why a stream [response] can't be read, or `null` for a `200` event stream. */
+    private fun streamFailure(response: HttpResponse): Exception? {
+        val status = response.status
+        return when {
+            // Issue #128: another LAN box answering 200 text/html must not look Connected.
+            status == HttpStatusCode.OK && response.contentType()?.match(ContentType.Text.EventStream) != true -> {
+                OpenFlightHttpError.UnexpectedStatus(status.value, "not an OpenFlight stream")
+            }
+
+            status == HttpStatusCode.OK -> {
+                null
+            }
+
+            status == HttpStatusCode.BadRequest && requestSchemaV2 -> {
+                SchemaV2Rejected()
+            }
+
+            status == HttpStatusCode.NotFound -> {
+                StreamNotFound()
+            }
+
+            else -> {
+                OpenFlightHttpError.UnexpectedStatus(status.value)
+            }
         }
+    }
 
     /**
      * Handles one parsed event. Kept separate from the network loop so it's directly testable,
