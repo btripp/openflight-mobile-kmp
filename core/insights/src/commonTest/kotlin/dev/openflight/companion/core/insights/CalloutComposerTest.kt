@@ -139,6 +139,18 @@ class CalloutComposerTest {
                 expected = "8 yards left",
             ),
             Case(
+                description = "a .5 carry rounds half to even, matching the screen",
+                input = CalloutInput(carryYards = 150.5),
+                fields = listOf(CalloutField.CARRY),
+                expected = "150 yards",
+            ),
+            Case(
+                description = "a .5 offline rounds half to even, matching the screen's \"L 2\"",
+                input = CalloutInput(offlineYards = -1.5),
+                fields = listOf(CalloutField.OFFLINE),
+                expected = "2 yards left",
+            ),
+            Case(
                 description = "offline that rounds to zero reads as on the line",
                 input = CalloutInput(offlineYards = 0.2),
                 fields = listOf(CalloutField.OFFLINE),
