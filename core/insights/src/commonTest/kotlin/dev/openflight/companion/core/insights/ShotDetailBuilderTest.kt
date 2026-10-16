@@ -5,7 +5,9 @@ import assertk.assertThat
 import assertk.assertions.contains
 import assertk.assertions.doesNotContain
 import assertk.assertions.isEqualTo
+import assertk.assertions.isFalse
 import assertk.assertions.isIn
+import assertk.assertions.isNotEqualTo
 import assertk.assertions.isNotNull
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
@@ -72,8 +74,18 @@ class ShotDetailBuilderTest {
         val state = build()
 
         assertThat(state.metric("Carry").value).isEqualTo("165")
+        assertThat(state.metric("Carry").estimated).isFalse()
         assertThat(state.metric("Total").estimated).isTrue()
         assertThat(state.metric("Offline").value).contains("R ")
+    }
+
+    @Test
+    fun aCarryAdjustedForThinAirIsBadgedAsAnEstimate() {
+        val denver = Conditions(altitudeMeters = 1609.0, temperatureC = 15.0)
+        val carry = builder.build(fade, denver, null, UnitSystem.IMPERIAL).metric("Carry")
+
+        assertThat(carry.value).isNotEqualTo("165")
+        assertThat(carry.estimated).isTrue()
     }
 
     @Test

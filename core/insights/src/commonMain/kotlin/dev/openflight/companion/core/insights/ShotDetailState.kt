@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 package dev.openflight.companion.core.insights
 
+import dev.openflight.companion.core.flight.DistanceProvenance
 import dev.openflight.companion.core.flight.FlightMeasurements
 import dev.openflight.companion.core.flight.FlightParameter
+import dev.openflight.companion.core.flight.ShotDistanceEstimate
 import dev.openflight.companion.core.flight.ShotFlightPath
 import dev.openflight.companion.core.flight.ShotFlightPlanner
 import dev.openflight.companion.core.model.Conditions
@@ -156,7 +158,7 @@ class ShotDetailBuilder(
                 if (input.swingSpeedMph != null) {
                     add(speed("Swing speed", input.swingSpeedMph, units))
                 } else {
-                    addDistances(input, planned?.estimate?.carryYards, planned?.estimate?.totalYards, flight, units)
+                    addDistances(input, planned?.estimate, flight, units)
                     addFlight(flight, heightEstimated, units)
                     addLaunch(input, units)
                 }
@@ -190,12 +192,13 @@ class ShotDetailBuilder(
 
     private fun MutableList<ShotDetailMetric>.addDistances(
         input: ShotDetailInput,
-        carryYards: Double?,
-        totalYards: Double?,
+        estimate: ShotDistanceEstimate?,
         flight: ShotFlightPath?,
         units: UnitSystem,
     ) {
-        add(distance("Carry", carryYards ?: input.carryYards, units))
+        val carryEstimated = estimate?.carryProvenance == DistanceProvenance.ESTIMATED
+        add(distance("Carry", estimate?.carryYards ?: input.carryYards, units).copy(estimated = carryEstimated))
+        val totalYards = estimate?.totalYards
         add(distance("Total", totalYards, units).copy(estimated = totalYards != null))
         val sideMeasured = input.launchAngleHorizontal != null || input.spinAxisDeg != null
         val offline = flight?.takeIf { sideMeasured }?.landing?.x

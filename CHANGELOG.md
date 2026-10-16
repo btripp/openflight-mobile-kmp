@@ -21,6 +21,8 @@ tag. Plain `v0.1.0` waits on the hardware test matrix on a real Raspberry Pi.
 
 ### Fixed
 
+- The shot detail sheet badges Carry "est." when it was adjusted for altitude, weather or wind,
+  instead of showing the adjusted number as if the radar measured it (#123).
 - The range overlay redraws a shot's tracer when the Pi's final update for it arrives, instead of
   keeping the first, provisional flight (#119).
 - The range's "This session" and "Last N" overlays move to the new session when a connect starts
