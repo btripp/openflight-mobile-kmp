@@ -21,6 +21,8 @@ tag. Plain `v0.1.0` waits on the hardware test matrix on a real Raspberry Pi.
 
 ### Fixed
 
+- Voice call-outs round a .5 the same way the screen does, so a 150.5-yard carry is spoken
+  "150", not "151" (#129).
 - A Wi-Fi address that isn't an OpenFlight Pi (another device answering web pages on that port)
   shows "not an OpenFlight stream" and backs off, instead of flashing Connected and retrying every
   second (#128).
