@@ -78,8 +78,9 @@ private const val DOT_LABEL_SP = 9
 
 /**
  * The top-down dispersion chart: distance arcs around the tee, one dot per shot (club colour and
- * short label; hollow when its side was estimated), an ellipse per club and a ring on the
- * selected shot. Tapping a dot selects it; tapping elsewhere clears the selection.
+ * short label; hollow when its side was estimated), an ellipse per club (labelled
+ * with the club, not told apart by colour alone) and a ring on the selected shot. Tapping a dot
+ * selects it; tapping elsewhere clears the selection.
  */
 @Composable
 internal fun DispersionCard(
@@ -126,7 +127,7 @@ internal fun DispersionCard(
                         onDrawBehind {
                             drawArcs(dispersion, projection, labels, unitSuffix)
                             drawCentreLine(projection)
-                            drawEllipses(dispersion, projection)
+                            drawEllipses(dispersion, projection, labels)
                             drawDots(dispersion, projection, labels, selectedId)
                         }
                     },
@@ -189,7 +190,7 @@ private class ChartLabels(
     private val measurer: TextMeasurer,
     private val fontScale: Float,
 ) {
-    private val cache = HashMap<Pair<String, Color>, TextLayoutResult>()
+    private val cache = HashMap<Triple<String, Color, Int>, TextLayoutResult>()
 
     fun layout(
         text: String,
@@ -197,7 +198,7 @@ private class ChartLabels(
         sizeSp: Int,
         scalesWithText: Boolean = true,
     ): TextLayoutResult =
-        cache.getOrPut(text to color) {
+        cache.getOrPut(Triple(text, color, sizeSp)) {
             // `sp` is multiplied by the font scale when drawn; divide it back out as needed.
             val scale = if (scalesWithText) min(fontScale, MAX_ARC_LABEL_SCALE) else 1f
             val size = (sizeSp * scale / fontScale).sp
@@ -249,6 +250,7 @@ private fun DrawScope.drawCentreLine(projection: DispersionProjection) {
 private fun DrawScope.drawEllipses(
     dispersion: SessionDispersionUiState,
     projection: DispersionProjection,
+    labels: ChartLabels,
 ) {
     for (club in dispersion.ellipses) {
         val color = OfClubPalette.color(club.colorIndex)
@@ -262,6 +264,11 @@ private fun DrawScope.drawEllipses(
             }
         drawPath(path, color.copy(alpha = ELLIPSE_FILL_ALPHA))
         drawPath(path, color, style = Stroke(EllipseStroke.toPx()))
+        // The club label above the ellipse's top edge, so clubs aren't told apart by colour alone.
+        val (topX, topY) = outline.minBy { it.second }
+        val layout = labels.layout(club.shortLabel, color, ARC_LABEL_SP)
+        val labelTop = (topY.toFloat() - layout.size.height).coerceAtLeast(0f)
+        drawText(layout, topLeft = Offset(topX.toFloat() - layout.size.width / 2f, labelTop))
     }
 }
 

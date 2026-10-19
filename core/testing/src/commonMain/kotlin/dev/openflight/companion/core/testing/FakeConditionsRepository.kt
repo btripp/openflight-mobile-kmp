@@ -33,6 +33,7 @@ class FakeConditionsRepository(
 
     override suspend fun setManual(conditions: Conditions) {
         mode.value = ConditionsMode.MANUAL
+        lastError.value = null
         this.conditions.value = conditions
     }
 

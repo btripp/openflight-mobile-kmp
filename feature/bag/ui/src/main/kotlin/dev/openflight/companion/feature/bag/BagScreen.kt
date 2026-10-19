@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 package dev.openflight.companion.feature.bag
 
+import android.Manifest
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -74,6 +77,12 @@ fun BagRoute(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var selectedClub by rememberSaveable { mutableStateOf<String?>(null) }
     var editingConditions by rememberSaveable { mutableStateOf(false) }
+    // Plan F6: the coarse-location prompt fires only from "Use my location"; a denial still goes
+    // to the ViewModel, which explains it and stays manual. Granted already = no dialog.
+    val locationPermission =
+        rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+            viewModel.onEvent(BagEvent.UseMyLocation)
+        }
     LaunchedEffect(viewModel) {
         viewModel.effects.collect { effect ->
             if (effect == BagEffect.ConditionsSaved) editingConditions = false
@@ -88,6 +97,7 @@ fun BagRoute(
         onSelectClub = { selectedClub = it },
         editingConditions = editingConditions,
         onEditConditions = { editingConditions = it },
+        onUseMyLocation = { locationPermission.launch(Manifest.permission.ACCESS_COARSE_LOCATION) },
         windowClass = windowClass,
         detail = { wireValue -> ClubDetailPane(wireValue, onViewOnRange = onViewOnRange) },
     )
@@ -111,6 +121,7 @@ fun BagScreen(
     editingConditions: Boolean,
     onEditConditions: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
+    onUseMyLocation: () -> Unit = { onEvent(BagEvent.UseMyLocation) },
     windowClass: OfWindowClass = rememberOfWindowClass(),
     detail: @Composable (wireValue: String) -> Unit = {},
 ) {
@@ -135,6 +146,7 @@ fun BagScreen(
                     selectedClub = selectedClub,
                     onSelectClub = onSelectClub,
                     onEditConditions = { onEditConditions(true) },
+                    onUseMyLocation = onUseMyLocation,
                     editMode = editMode,
                     onEditMode = { editMode = it },
                     onEditClub = { editingClubId = it },
@@ -178,6 +190,7 @@ private fun BagList(
     selectedClub: String?,
     onSelectClub: (String?) -> Unit,
     onEditConditions: () -> Unit,
+    onUseMyLocation: () -> Unit,
     editMode: Boolean,
     onEditMode: (Boolean) -> Unit,
     onEditClub: (String) -> Unit,
@@ -187,7 +200,9 @@ private fun BagList(
         contentPadding = PaddingValues(horizontal = OfSpacing.Xl, vertical = OfSpacing.Md),
         verticalArrangement = Arrangement.spacedBy(OfSpacing.Sm),
     ) {
-        item(key = "conditions") { ConditionsCard(uiState.conditions, onEdit = onEditConditions) }
+        item(key = "conditions") {
+            ConditionsCard(uiState.conditions, onEdit = onEditConditions, onUseMyLocation = onUseMyLocation)
+        }
         uiState.error?.let { error ->
             item(key = "error") {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -368,6 +383,7 @@ private fun ClubRow(
 private fun ConditionsCard(
     card: BagConditionsCardState,
     onEdit: () -> Unit,
+    onUseMyLocation: () -> Unit,
 ) {
     OfCard(modifier = Modifier.fillMaxWidth().testTag(BagTestTags.CONDITIONS_CARD)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -387,6 +403,29 @@ private fun ConditionsCard(
                 role = OfTextRole.BodySmall,
                 color = OfColorTokens.Warning,
                 modifier = Modifier.testTag(BagTestTags.WIND_NOTE),
+            )
+        }
+        card.locationLabel?.let { OfText(text = it, role = OfTextRole.BodySmall, color = OfColorTokens.CreamDim) }
+        card.autoError?.let {
+            OfText(
+                text = it,
+                role = OfTextRole.BodySmall,
+                color = OfColorTokens.Warning,
+                modifier = Modifier.testTag(BagTestTags.CONDITIONS_AUTO_ERROR),
+            )
+        }
+        OfTextButton(
+            text = if (card.locating) "Getting weather…" else "Use my location",
+            onClick = onUseMyLocation,
+            enabled = !card.locating,
+            modifier = Modifier.testTag(BagTestTags.CONDITIONS_USE_LOCATION),
+        )
+        card.attribution?.let {
+            OfText(
+                text = it,
+                role = OfTextRole.BodySmall,
+                color = OfColorTokens.CreamDim,
+                modifier = Modifier.testTag(BagTestTags.CONDITIONS_ATTRIBUTION),
             )
         }
     }
