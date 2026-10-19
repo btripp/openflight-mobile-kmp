@@ -21,6 +21,9 @@ object BagTestTags {
     const val CONDITIONS_TARGET = "bag.conditions.target"
     const val CONDITIONS_ERROR = "bag.conditions.error"
     const val WIND_NOTE = "bag.conditions.windNote"
+    const val CONDITIONS_USE_LOCATION = "bag.conditions.useLocation"
+    const val CONDITIONS_AUTO_ERROR = "bag.conditions.autoError"
+    const val CONDITIONS_ATTRIBUTION = "bag.conditions.attribution"
     const val DETAIL_PLACEHOLDER = "bag.detail.placeholder"
 
     const val ANALYSIS_DONE = "bag.analysis.done"

@@ -5,15 +5,18 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dev.openflight.companion.core.data.Bag
 import dev.openflight.companion.core.data.BagRepository
+import dev.openflight.companion.core.data.ConditionsError
 import dev.openflight.companion.core.data.ConditionsMode
 import dev.openflight.companion.core.data.ConditionsRepository
 import dev.openflight.companion.core.data.SettingsRepository
 import dev.openflight.companion.core.data.ShotHistoryRepository
 import dev.openflight.companion.core.data.ShotWindow
+import dev.openflight.companion.core.data.conditionsCardState
 import dev.openflight.companion.core.insights.GappingClub
 import dev.openflight.companion.core.insights.UnitSystem
 import dev.openflight.companion.core.insights.analyzeGapping
 import dev.openflight.companion.core.insights.summarizeShapes
+import dev.openflight.companion.core.location.LocationResult
 import dev.openflight.companion.core.model.Conditions
 import dev.openflight.companion.core.model.GolfClub
 import dev.openflight.companion.core.model.TargetBearing
@@ -45,7 +48,7 @@ sealed interface BagEffect {
 /**
  * My Bag's state holder (plan F5): the active bag (seeded with the default 14 on first open), its
  * editing (add, remove, reorder, make/model/loft), switching bags, and the conditions card, which
- * edits [ConditionsRepository] in manual mode and adjusts every carry shown.
+ * edits [ConditionsRepository] (manual values, or AUTO via "Use my location") and adjusts every carry shown.
  *
  * Carries come from the phone's stored history across every session that counts in stats (never
  * imported ones unless opted in), each adjusted for the current conditions by
@@ -62,6 +65,7 @@ class BagViewModel(
     private val distances = ClubShotDistances()
     private val error = MutableStateFlow<String?>(null)
     private val formError = MutableStateFlow<String?>(null)
+    private val locating = MutableStateFlow(false)
     private val seeded = MutableStateFlow(false)
     private val effectChannel = Channel<BagEffect>(Channel.BUFFERED)
 
@@ -75,7 +79,10 @@ class BagViewModel(
             conditionsRepository.targetBearing,
             conditionsRepository.mode,
             settings.units,
-        ) { conditions, bearing, mode, units -> Environment(conditions, bearing, mode, units) }
+            combine(conditionsRepository.lastError, conditionsRepository.lastLocation, locating, ::Triple),
+        ) { conditions, bearing, mode, units, (lastError, lastLocation, locating) ->
+            Environment(conditions, bearing, mode, units, lastError, lastLocation, locating)
+        }
 
     private val statsByClub: Flow<Map<GolfClub, ClubStatsEntry>> =
         combine(
@@ -117,6 +124,7 @@ class BagViewModel(
             is BagEvent.EditClub -> editClub(event)
             is BagEvent.SelectBag -> viewModelScope.launch { bagRepository.setActive(event.bagId) }
             is BagEvent.SaveConditions -> saveConditions(event.form)
+            BagEvent.UseMyLocation -> useMyLocation()
             BagEvent.DismissError -> error.value = null
         }
     }
@@ -177,6 +185,19 @@ class BagViewModel(
         }
     }
 
+    /** Plan F6: the only path to location and weather; the platform prompt has already run. */
+    private fun useMyLocation() {
+        if (locating.value) return
+        locating.value = true
+        viewModelScope.launch {
+            try {
+                conditionsRepository.setMode(ConditionsMode.AUTO)
+            } finally {
+                locating.value = false
+            }
+        }
+    }
+
     private fun withBag(action: suspend (Bag) -> Unit) {
         viewModelScope.launch {
             val bag = activeBag.first() ?: return@launch
@@ -193,6 +214,9 @@ class BagViewModel(
         val bearing: TargetBearing?,
         val mode: ConditionsMode,
         val units: UnitSystem,
+        val lastError: ConditionsError?,
+        val lastLocation: LocationResult.Fix?,
+        val locating: Boolean,
     )
 
     @Suppress("LongParameterList") // One state from every source.
@@ -264,6 +288,7 @@ class BagViewModel(
     ): BagConditionsCardState {
         val conditions = environment.conditions
         val units = environment.units
+        val auto = conditionsCardState(conditions, environment.mode, environment.lastError, environment.lastLocation)
         return BagConditionsCardState(
             mode = environment.mode,
             modeLabel = BagCopy.mode(environment.mode),
@@ -275,6 +300,10 @@ class BagViewModel(
             temperatureUnit = ConditionsForm.temperatureUnit(units),
             windUnit = ConditionsForm.windUnit(units),
             formError = formError,
+            locationLabel = auto.locationLabel,
+            autoError = auto.errorMessage,
+            attribution = auto.attribution.takeIf { auto.isAuto },
+            locating = environment.locating,
         )
     }
 

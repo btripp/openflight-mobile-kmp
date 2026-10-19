@@ -195,6 +195,17 @@ class DataStoreConditionsRepositoryTest {
         }
 
     @Test
+    fun savingManualConditionsClearsTheLastAutoError() =
+        runTest {
+            val repository = backgroundScope.repository(FakeLocationProvider(LocationResult.PermissionDenied))
+            repository.setMode(ConditionsMode.AUTO)
+
+            repository.setManual(Conditions.ISA)
+
+            assertThat(repository.lastError.value).isNull()
+        }
+
+    @Test
     fun disabledLocationServicesAlsoFallBackToManual() =
         runTest {
             val repository = backgroundScope.repository(FakeLocationProvider(LocationResult.Disabled))

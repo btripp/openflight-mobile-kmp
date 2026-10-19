@@ -72,7 +72,12 @@ struct BagContent: View {
     var body: some View {
         List {
             Section {
-                ConditionsCardView(card: state.conditions) { editingConditions = true }
+                ConditionsCardView(
+                    card: state.conditions,
+                    onEdit: { editingConditions = true },
+                    // Plan F6: CLLocationManager shows the location prompt on this first use.
+                    onUseMyLocation: { send(BagEventUseMyLocation.shared) }
+                )
             }
             .listRowBackground(Theme.bgCard)
 
@@ -256,10 +261,12 @@ struct ClubBadge: View {
     }
 }
 
-/// The conditions card: mode, summary, and the wind note when wind needs a target direction.
+/// The conditions card: mode, summary, the wind note when wind needs a target direction, and
+/// "Use my location" for automatic conditions (with Open-Meteo's credit while they're shown).
 struct ConditionsCardView: View {
     let card: BagConditionsCardState
     let onEdit: () -> Void
+    let onUseMyLocation: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -280,6 +287,24 @@ struct ConditionsCardView: View {
                     .font(.of(.subheadline))
                     .foregroundStyle(Theme.warning)
                     .accessibilityIdentifier(BagTestTags.shared.WIND_NOTE)
+            }
+            if let label = card.locationLabel {
+                Text(label).font(.of(.subheadline)).foregroundStyle(Theme.creamDim)
+            }
+            if let autoError = card.autoError {
+                Text(autoError)
+                    .font(.of(.subheadline))
+                    .foregroundStyle(Theme.warning)
+                    .accessibilityIdentifier(BagTestTags.shared.CONDITIONS_AUTO_ERROR)
+            }
+            Button(card.locating ? "Getting weather…" : "Use my location", action: onUseMyLocation)
+                .disabled(card.locating)
+                .accessibilityIdentifier(BagTestTags.shared.CONDITIONS_USE_LOCATION)
+            if let attribution = card.attribution {
+                Text(attribution)
+                    .font(.of(.footnote))
+                    .foregroundStyle(Theme.creamDim)
+                    .accessibilityIdentifier(BagTestTags.shared.CONDITIONS_ATTRIBUTION)
             }
         }
         .accessibilityElement(children: .contain)

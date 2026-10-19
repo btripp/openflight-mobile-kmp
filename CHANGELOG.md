@@ -11,6 +11,13 @@ tag. Plain `v0.1.0` waits on the hardware test matrix on a real Raspberry Pi.
 
 ## [Unreleased]
 
+### Added
+
+- **Automatic conditions.** My Bag's conditions card has **Use my location**: it fills altitude,
+  temperature and wind from Open-Meteo weather for your coarse location, credited on the card. The
+  location prompt appears only when you tap it; a denial or failed lookup says why and keeps your
+  manual conditions (#31).
+
 ### Changed
 
 - **Clearer connection status in Settings.** The shot stream's state is now a coloured pill like
@@ -24,6 +31,8 @@ tag. Plain `v0.1.0` waits on the hardware test matrix on a real Raspberry Pi.
 - A broken or hostile device on the network can no longer run the app out of memory by streaming
   endless data on the shot stream: an oversized line or event drops the connection and reconnects
   (#132).
+- The Session dispersion chart labels each club's ellipse with the club (e.g. "D", "7i"), so
+  colour-blind golfers can tell the ellipses apart without relying on colour (#43).
 - A club change from the launch monitor no longer crashes the app when the phone can't save it
   (e.g. storage full). The club still updates for the session, and the save failure is logged (#131).
 - Session stats on a mix of shots and swing-speed reps count only the shots, so a rep no longer
