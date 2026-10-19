@@ -506,6 +506,7 @@ class SessionViewModelTest {
                 )
                 val all = awaitUntil { it.dispersion?.points?.size == 4 }.dispersion!!
                 assertThat(all.ellipses.map { it.club }).containsExactly("driver")
+                assertThat(all.ellipses.map { it.shortLabel }).containsExactly("D")
                 assertThat(all.points.first().colorIndex).isEqualTo(1)
 
                 viewModel.onEvent(SessionEvent.SelectClub("7-iron"))

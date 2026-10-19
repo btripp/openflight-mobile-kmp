@@ -49,9 +49,10 @@ data class DispersionPoint(
     val sample: DispersionSample get() = DispersionSample(offlineYards, carryYards)
 }
 
-/** One club's typical landing area. */
+/** One club's typical landing area; [shortLabel] is drawn on it so it isn't told apart by colour alone. */
 data class ClubDispersion(
     val club: String,
+    val shortLabel: String,
     val colorIndex: Int,
     val ellipse: DispersionEllipse,
 )
@@ -208,7 +209,7 @@ internal fun dispersionState(
             .groupBy { it.club }
             .mapNotNull { (club, clubPoints) ->
                 computeDispersionEllipse(clubPoints.typical().map { it.sample })?.let {
-                    ClubDispersion(club, clubPoints.first().colorIndex, it)
+                    ClubDispersion(club, clubPoints.first().shortLabel, clubPoints.first().colorIndex, it)
                 }
             }.sortedBy { it.colorIndex }
     val viewport =
