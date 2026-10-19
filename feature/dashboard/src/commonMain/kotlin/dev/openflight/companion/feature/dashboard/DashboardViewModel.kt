@@ -11,6 +11,9 @@ import dev.openflight.companion.core.data.PiSessionRepository
 import dev.openflight.companion.core.data.SettingsRepository
 import dev.openflight.companion.core.data.ShotRepository
 import dev.openflight.companion.core.data.TransportType
+import dev.openflight.companion.core.flight.ShotDistanceEstimator
+import dev.openflight.companion.core.flight.toFlightMeasurements
+import dev.openflight.companion.core.insights.EstimatedTotal
 import dev.openflight.companion.core.insights.ShotDetailBuilder
 import dev.openflight.companion.core.insights.ShotDetailState
 import dev.openflight.companion.core.insights.ShotEnrichment
@@ -78,6 +81,7 @@ class DashboardViewModel(
 ) : ViewModel() {
     private val detailId = MutableStateFlow<String?>(null)
     private val detailBuilder = ShotDetailBuilder()
+    private val estimator = ShotDistanceEstimator()
 
     /** The host field's text while the user edits it; `null` shows the saved host. */
     private val hostDraft = MutableStateFlow<String?>(null)
@@ -197,6 +201,18 @@ class DashboardViewModel(
             if (id == null) flowOf(null) else detailFor(id).flowOn(computeDispatcher)
         }
 
+    /**
+     * Plan F5b: the latest shot's estimated total. It resolves the conditions only once there is a
+     * shot and "Show total distance" is on. One estimate (two simulations) is cheap enough to stay on
+     * the collector's thread, which keeps the dashboard's state synchronous.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val latestTotal =
+        combine(shots.history.map { it.firstOrNull() }.distinctUntilChanged(), settings.showTotalDistance, ::Pair)
+            .flatMapLatest { (shot, show) ->
+                if (shot == null || !show) flowOf(null) else latestTotalFor(shot)
+            }
+
     private val baseState: Flow<DashboardUiState> =
         combine(
             panel,
@@ -235,8 +251,8 @@ class DashboardViewModel(
         }
 
     val uiState: StateFlow<DashboardUiState> =
-        combine(baseState, shotDetail) { state, detail ->
-            if (state is DashboardUiState.Live) state.copy(shotDetail = detail) else state
+        combine(baseState, shotDetail, latestTotal) { state, detail, total ->
+            if (state is DashboardUiState.Live) state.copy(shotDetail = detail, latestTotal = total) else state
         }.stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
@@ -286,6 +302,23 @@ class DashboardViewModel(
         // Plan F14: Demo mode needs no Bluetooth or local-network permission, so none is asked for.
         combine(settings.transport, demoMode.enabled) { transport, demo -> transport.takeUnless { demo } }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS), initialValue = null)
+
+    private fun latestTotalFor(shot: ShotEvent): Flow<String?> {
+        val repository = conditions?.value
+        return combine(
+            piSession.shotDetails
+                .map { details ->
+                    // The Pi's row adds the spin-adjusted carry, the estimate's preferred anchor.
+                    details[shot.timestamp]?.toFlightMeasurements()?.copy(id = shot.eventId)
+                        ?: shot.toFlightMeasurements()
+                }.distinctUntilChanged(),
+            repository?.conditions ?: flowOf(Conditions.ISA),
+            repository?.targetBearing ?: flowOf(null),
+            settings.units,
+        ) { measurements, air, bearing, units ->
+            estimator.estimate(measurements, air, bearing)?.let(EstimatedTotal::of)?.label(units)
+        }
+    }
 
     private fun detailFor(id: String): Flow<ShotDetailState?> {
         val repository = conditions?.value

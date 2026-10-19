@@ -36,6 +36,8 @@ struct ShotCard: View {
     var demo = false
     /// Opens the shot detail sheet (flight, shape and every metric); hidden if nil.
     var onOpenDetail: (() -> Void)?
+    /// Plan F5b: "Total 247 yds · Roll 15 yds (est.)"; hidden if nil.
+    var estimatedTotal: String?
 
     private static let spinAdjusted = "spin-adjusted"
 
@@ -82,6 +84,13 @@ struct ShotCard: View {
             }
 
             primaryMetrics
+
+            if let estimatedTotal {
+                Text(estimatedTotal)
+                    .font(.of(.subheadline))
+                    .foregroundStyle(Theme.creamDim)
+                    .accessibilityIdentifier("dashboard.estimatedTotal")
+            }
 
             Divider().overlay(Theme.cream.opacity(0.12))
 

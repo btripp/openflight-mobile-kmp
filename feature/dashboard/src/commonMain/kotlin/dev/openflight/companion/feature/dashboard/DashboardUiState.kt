@@ -62,6 +62,8 @@ sealed interface DashboardUiState {
      *   has no entry; read it with [enrichmentFor] or [latestEnrichment].
      * @property shotDetail the open shot detail sheet (the latest or a previous shot); `null` when
      *   it's closed.
+     * @property latestTotal plan F5b: [latest]'s "Total 247 yds · Roll 15 yds (est.)"; `null` while
+     *   "Show total distance" is off or the shot can't be flown.
      */
     data class Live(
         override val connection: ConnectionPanelState,
@@ -75,6 +77,7 @@ sealed interface DashboardUiState {
         override val batteryWarning: PiBatteryWarning? = null,
         val shotDetail: ShotDetailState? = null,
         override val piUpdate: PiUpdateNotice? = null,
+        val latestTotal: String? = null,
     ) : DashboardUiState {
         val latestEnrichment: ShotEnrichment? get() = enrichments[latest.eventId]
 

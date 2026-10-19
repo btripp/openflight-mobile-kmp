@@ -13,6 +13,10 @@ tag. Plain `v0.1.0` waits on the hardware test matrix on a real Raspberry Pi.
 
 ### Added
 
+- **Estimated total and roll on Practice, Sessions and session history.** The latest shot card
+  and every shot row show "Total … · Roll … (est.)", using your conditions and the landing-area
+  firmness from My Bag › Conditions. "Show total distance" in Settings hides them. CSV exports add
+  `roll_est_yards` and `total_est_yards` columns (#30).
 - **Automatic conditions.** My Bag's conditions card has **Use my location**: it fills altitude,
   temperature and wind from Open-Meteo weather for your coarse location, credited on the card. The
   location prompt appears only when you tap it; a denial or failed lookup says why and keeps your
