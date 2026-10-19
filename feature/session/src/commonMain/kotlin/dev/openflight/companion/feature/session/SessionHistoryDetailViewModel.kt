@@ -8,6 +8,8 @@ import dev.openflight.companion.core.data.HistorySession
 import dev.openflight.companion.core.data.HistoryShot
 import dev.openflight.companion.core.data.SettingsRepository
 import dev.openflight.companion.core.data.ShotHistoryRepository
+import dev.openflight.companion.core.flight.toFlightMeasurements
+import dev.openflight.companion.core.insights.EstimatedTotals
 import dev.openflight.companion.core.insights.ExportShot
 import dev.openflight.companion.core.insights.ShotDetailBuilder
 import dev.openflight.companion.core.insights.buildExportCsv
@@ -15,6 +17,7 @@ import dev.openflight.companion.core.insights.buildShotsCsvFilename
 import dev.openflight.companion.core.insights.computeDetailClubChips
 import dev.openflight.companion.core.insights.computeDetailStats
 import dev.openflight.companion.core.insights.computeSwingSpeedStats
+import dev.openflight.companion.core.insights.withEstimatedTotals
 import dev.openflight.companion.core.model.GolfClub
 import dev.openflight.companion.core.model.pi.ShotDetail
 import kotlinx.coroutines.CoroutineDispatcher
@@ -33,6 +36,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
@@ -50,9 +54,9 @@ class SessionHistoryDetailViewModel(
     private val sessionId: String,
     private val history: ShotHistoryRepository,
     settings: SettingsRepository,
-    conditions: ConditionsRepository,
+    private val conditions: ConditionsRepository,
     private val now: () -> String = { Clock.System.now().toString() },
-    computeDispatcher: CoroutineDispatcher = Dispatchers.Default,
+    private val computeDispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) : ViewModel() {
     private val filter = MutableStateFlow(Filter(profileId = null, club = null))
     private val action = MutableStateFlow<SessionActionState>(SessionActionState.Idle)
@@ -75,14 +79,36 @@ class SessionHistoryDetailViewModel(
             .flowOn(computeDispatcher)
 
     private val shapes = DispersionCalculator()
+    private val totals = EstimatedTotals()
 
     /** Off the main thread: naming each row's shape flies every stored shot (once; it's cached). */
     private val baseState =
-        combine(shots, settings.units, filter, heading, action) { stored, units, picked, head, action ->
+        combine(
+            shots,
+            rowDisplay(settings, conditions),
+            filter,
+            heading,
+            action,
+        ) { stored, show, picked, head, action ->
             detailState(stored, picked, head).let {
-                val points = shapes.piPoints(stored.map(HistoryShot::detail))
+                val details = stored.map(HistoryShot::detail)
+                val points = shapes.piPoints(details)
+                val estimated =
+                    if (show.showTotal) {
+                        totals.of(
+                            details.mapNotNull(ShotDetail::toFlightMeasurements),
+                            show.conditions,
+                            show.targetBearing,
+                        )
+                    } else {
+                        emptyMap()
+                    }
+                val rows =
+                    it.session.shots
+                        .withShapes(points)
+                        .withTotals(estimated, show.units)
                 it.copy(
-                    session = it.session.copy(units = units, shots = it.session.shots.withShapes(points)),
+                    session = it.session.copy(units = show.units, shots = rows),
                     action = action,
                 )
             }
@@ -195,9 +221,10 @@ class SessionHistoryDetailViewModel(
             val stored = shots.first()
             if (stored.isEmpty()) return@launch
             val rows = stored.asReversed().map { ExportShot.of(it.detail, it.eventId) }
-            detailEffects.send(
-                SessionEffect.CsvReady(buildExportCsv(rows), buildShotsCsvFilename(stored.last().detail.timestamp)),
-            )
+            val air = conditions.conditions.value
+            val bearing = conditions.targetBearing.value
+            val csv = withContext(computeDispatcher) { buildExportCsv(rows.withEstimatedTotals(air, bearing)) }
+            detailEffects.send(SessionEffect.CsvReady(csv, buildShotsCsvFilename(stored.last().detail.timestamp)))
         }
     }
 

@@ -14,6 +14,7 @@ import assertk.assertions.isLessThan
 import assertk.assertions.isNotNull
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
+import assertk.assertions.matches
 import dev.openflight.companion.core.data.TransportType
 import dev.openflight.companion.core.insights.ClubChip
 import dev.openflight.companion.core.insights.ConfidenceLevel
@@ -201,9 +202,25 @@ class SessionViewModelTest {
                 // the "7-iron" tab selection, matching the web UI's export.
                 assertThat(lines[1].startsWith("1,${shotId(1)}")).isTrue()
                 assertThat(lines[2].startsWith("2,${shotId(2)}")).isTrue()
-                // No Pi detail known: the R5a columns only.
-                assertThat(lines[0].endsWith("spin_axis_deg")).isTrue()
+                // No Pi detail known: the R5a columns, then plan F5b's estimates.
+                assertThat(lines[0].endsWith("spin_axis_deg,roll_est_yards,total_est_yards")).isTrue()
                 assertThat(effect.filename).isEqualTo("openflight-shots-2026-09-24T18-30-05-123Z.csv")
+            }
+        }
+
+    @Test
+    fun eachRowShowsItsEstimatedTotalUntilShowTotalDistanceIsTurnedOff() =
+        runTest {
+            shots.setHistory(listOf(shot(2), shot(1)))
+
+            viewModel.uiState.testIgnoringRest {
+                val shown = awaitUntil { it.shots.size == 2 && it.shots.all { row -> row.estimatedTotal != null } }
+                assertThat(
+                    shown.shots.first().estimatedTotal!!,
+                ).matches(Regex("Total \\d+ yds · Roll \\d+ yds \\(est\\.\\)"))
+
+                settings.setShowTotalDistance(false)
+                awaitUntil { state -> state.shots.size == 2 && state.shots.all { it.estimatedTotal == null } }
             }
         }
 
@@ -321,7 +338,7 @@ class SessionViewModelTest {
                 assertThat(
                     lines[0].endsWith(
                         "profile,mode,implement,openflight_speed_mph,reading_count," +
-                            "trigger_speed_mph,duration_ms,peak_magnitude",
+                            "trigger_speed_mph,duration_ms,peak_magnitude,roll_est_yards,total_est_yards",
                     ),
                 ).isTrue()
                 // Row 1 is the oldest, and keeps the phone's event id for the shot it also received.
@@ -329,7 +346,7 @@ class SessionViewModelTest {
                 assertThat(lines[2]).isEqualTo(
                     "2,,${timestamp(
                         2,
-                    )},Swing Speed,97.4,97.4,,,,,,,,Ann,swing-speed,Stack 100g,97.4,5,80.1,1200.0,210.5",
+                    )},Swing Speed,97.4,97.4,,,,,,,,Ann,swing-speed,Stack 100g,97.4,5,80.1,1200.0,210.5,,",
                 )
             }
         }

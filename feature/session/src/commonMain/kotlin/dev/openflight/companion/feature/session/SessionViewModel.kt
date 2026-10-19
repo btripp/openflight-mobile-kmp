@@ -8,7 +8,10 @@ import dev.openflight.companion.core.data.PiSessionRepository
 import dev.openflight.companion.core.data.SettingsRepository
 import dev.openflight.companion.core.data.ShotRepository
 import dev.openflight.companion.core.data.TransportType
+import dev.openflight.companion.core.flight.toFlightMeasurements
 import dev.openflight.companion.core.insights.ClubChip
+import dev.openflight.companion.core.insights.EstimatedTotal
+import dev.openflight.companion.core.insights.EstimatedTotals
 import dev.openflight.companion.core.insights.ExportShot
 import dev.openflight.companion.core.insights.ShotDetailBuilder
 import dev.openflight.companion.core.insights.buildExportCsv
@@ -19,6 +22,7 @@ import dev.openflight.companion.core.insights.computeDetailClubChips
 import dev.openflight.companion.core.insights.computeDetailStats
 import dev.openflight.companion.core.insights.computeSwingSpeedStats
 import dev.openflight.companion.core.insights.forProfile
+import dev.openflight.companion.core.insights.withEstimatedTotals
 import dev.openflight.companion.core.model.ConnectionState
 import dev.openflight.companion.core.model.GolfClub
 import dev.openflight.companion.core.model.ShotEvent
@@ -48,6 +52,7 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
@@ -72,15 +77,17 @@ class SessionViewModel(
     private val shots: ShotRepository,
     private val settings: SettingsRepository,
     private val piSession: PiSessionRepository,
-    conditions: ConditionsRepository,
+    private val conditions: ConditionsRepository,
     private val now: () -> String = { Clock.System.now().toString() },
-    computeDispatcher: CoroutineDispatcher = Dispatchers.Default,
+    private val computeDispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) : ViewModel() {
     /** The club tab and the selected shot change together, so one state never mixes old and new. */
     private val selection = MutableStateFlow(Selection(club = null, shotId = null, following = true))
     private val dispersion = DispersionCalculator()
     private val detailId = MutableStateFlow<String?>(null)
     private val detailBuilder = ShotDetailBuilder()
+    private val totals = EstimatedTotals()
+    private val display = rowDisplay(settings, conditions)
 
     /** The delete or clear in progress (plan R8f), and whether its request went to the Pi. */
     private val action = MutableStateFlow(ActionRecord())
@@ -123,7 +130,8 @@ class SessionViewModel(
         }.flowOn(computeDispatcher)
 
     private val baseState =
-        combine(shots.history, settings.units, controls, piView, piFlags) { history, units, control, pi, flags ->
+        combine(shots.history, display, controls, piView, piFlags) { history, show, control, pi, flags ->
+            val units = show.units
             val picked = control.selection
             val base =
                 if (pi.connected) {
@@ -140,7 +148,7 @@ class SessionViewModel(
             val chart = dispersionState(points, base.selectedClub, units)
             base.copy(
                 units = units,
-                shots = base.shots.withShapes(points),
+                shots = base.shots.withShapes(points).withTotals(estimatedTotals(history, pi, show), units),
                 dispersion = chart,
                 selectedShot = selectedShotCard(picked.shotId, chart, base.shots),
                 showSimulateShot = flags.mockMode == true,
@@ -505,8 +513,27 @@ class SessionViewModel(
                 } else {
                     history.asReversed().map { ExportShot.of(it, piSession.detailFor(it)) }
                 }
-            sessionEffects.send(SessionEffect.CsvReady(buildExportCsv(rows), buildShotsCsvFilename(now())))
+            val air = conditions.conditions.value
+            val bearing = conditions.targetBearing.value
+            val csv = withContext(computeDispatcher) { buildExportCsv(rows.withEstimatedTotals(air, bearing)) }
+            sessionEffects.send(SessionEffect.CsvReady(csv, buildShotsCsvFilename(now())))
         }
+    }
+
+    /** Plan F5b: every shown shot's estimated total, or none while "Show total distance" is off. */
+    private fun estimatedTotals(
+        history: List<ShotEvent>,
+        pi: PiView,
+        show: RowDisplay,
+    ): Map<String, EstimatedTotal> {
+        if (!show.showTotal) return emptyMap()
+        val flights =
+            if (pi.connected) {
+                pi.activeSession.mapNotNull(ShotDetail::toFlightMeasurements)
+            } else {
+                localFlights(history, pi.details)
+            }
+        return totals.of(flights, show.conditions, show.targetBearing)
     }
 
     private fun localState(

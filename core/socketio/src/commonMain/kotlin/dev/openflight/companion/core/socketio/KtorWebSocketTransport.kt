@@ -25,6 +25,8 @@ import kotlinx.coroutines.launch
 class KtorWebSocketTransport(
     httpClient: HttpClient,
 ) : EngineIoTransport {
+    // shortcut: no incoming frame-size cap (issue #132). Ktor's OkHttp engine throws on any
+    // `maxFrameSize`, and OkHttp has no limit of its own; add one if the engine ever supports it.
     private val client = httpClient.config { install(WebSockets) }
 
     /**

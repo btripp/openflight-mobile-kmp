@@ -17,7 +17,7 @@ val sessionModule: Module =
     module {
         viewModel { SessionViewModel(shots = get(), settings = get(), piSession = get(), conditions = get()) }
         // Plan R8h: the stored session list, and one stored session (its id as the parameter).
-        viewModel { SessionHistoryViewModel(history = get()) }
+        viewModel { SessionHistoryViewModel(history = get(), conditions = get()) }
         viewModel { params ->
             SessionHistoryDetailViewModel(
                 sessionId = params.get(),

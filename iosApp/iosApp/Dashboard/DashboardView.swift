@@ -160,7 +160,8 @@ struct DashboardContent: View {
                 enrichment: live.latestEnrichment,
                 onViewOnRange: openRange.map { open in { open(.liveShot(live.latest.eventId)) } },
                 demo: connection.demo,
-                onOpenDetail: { send(DashboardEventOpenShotDetail(eventId: live.latest.eventId)) }
+                onOpenDetail: { send(DashboardEventOpenShotDetail(eventId: live.latest.eventId)) },
+                estimatedTotal: live.latestTotal
             )
                 .id(live.latest.eventId)
                 .overlay { ShotFlash(trigger: shotFlashes) }

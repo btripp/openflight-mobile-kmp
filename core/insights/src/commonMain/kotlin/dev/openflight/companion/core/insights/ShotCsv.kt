@@ -1,9 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 package dev.openflight.companion.core.insights
 
+import dev.openflight.companion.core.flight.FlightMeasurements
+import dev.openflight.companion.core.flight.ShotDistanceEstimator
+import dev.openflight.companion.core.flight.toFlightMeasurements
+import dev.openflight.companion.core.model.Conditions
 import dev.openflight.companion.core.model.ShotEvent
 import dev.openflight.companion.core.model.ShotMetricFormatter
+import dev.openflight.companion.core.model.TargetBearing
 import dev.openflight.companion.core.model.pi.ShotDetail
+import kotlin.math.round
 
 /**
  * CSV export, ported from the web UI's shot export (`ShotList.tsx`'s `buildValidationCsv` +
@@ -15,6 +21,9 @@ import dev.openflight.companion.core.model.pi.ShotDetail
  * Pi's Socket.IO [ShotDetail] (plan R6b), the web export's session columns are appended too
  * ([DETAIL_HEADERS]: profile, mode, implement, the swing speed as `openflight_speed_mph`, and the
  * swing-speed/peak-magnitude values); rows without a detail leave them empty.
+ *
+ * Plan F5b: rows given an estimate ([withEstimatedTotals]) add `roll_est_yards` and
+ * `total_est_yards` at the end; the `_est` names mark them as the app's estimates, not the Pi's.
  *
  * Rows are numbered in list order (`shot_number` = index + 1); pass the list oldest-first, the
  * way the web UI's underlying shot array is ordered, so shot 1 is the oldest -- callers reading
@@ -51,6 +60,9 @@ private val DETAIL_HEADERS =
         "peak_magnitude",
     )
 
+/** Plan F5b's estimated columns, appended when any row has an estimate. */
+private val ESTIMATE_HEADERS = listOf("roll_est_yards", "total_est_yards")
+
 /**
  * One exported row: an SSE/BLE shot, a Pi session row, or both joined on the timestamp.
  * [eventId] is `null` for a Pi session row the phone never received over SSE/BLE.
@@ -72,7 +84,27 @@ data class ExportShot(
     val spinAxisDeg: Double?,
     val detail: ShotDetail?,
     val session: String? = null,
+    val rollEstYards: Double? = null,
+    val totalEstYards: Double? = null,
 ) {
+    /** What the estimator needs: the Pi's row when known (it has the spin-adjusted carry), else the shot's own. */
+    internal val measurements: FlightMeasurements?
+        get() {
+            if (detail != null) return detail.toFlightMeasurements()
+            val speed = ballSpeedMph ?: return null
+            val carry = estimatedCarryYards ?: return null
+            return FlightMeasurements(
+                id = eventId ?: timestamp,
+                club = club,
+                ballSpeedMph = speed,
+                carryYards = carry,
+                launchAngleVertical = launchAngleVertical,
+                launchAngleHorizontal = launchAngleHorizontal,
+                spinRpm = spinRpm,
+                spinAxisDeg = spinAxisDeg,
+            )
+        }
+
     companion object {
         /** An SSE/BLE shot, with the Pi's detail for it when known. */
         fun of(
@@ -118,6 +150,24 @@ data class ExportShot(
     }
 }
 
+/** [this] with each row's estimated roll and total in [conditions] (plan F5b); rows that can't be flown keep none. */
+fun List<ExportShot>.withEstimatedTotals(
+    conditions: Conditions,
+    targetBearing: TargetBearing?,
+): List<ExportShot> {
+    val estimator = ShotDistanceEstimator()
+    return map { shot ->
+        val measurements = shot.measurements ?: return@map shot
+        val estimate = estimator.estimate(measurements, conditions, targetBearing) ?: return@map shot
+        shot.copy(rollEstYards = estimate.rollYards.tenths(), totalEstYards = estimate.totalYards.tenths())
+    }
+}
+
+// Rounded to 0.1 yd: the estimate is nowhere near that precise, and the cells stay readable.
+private fun Double.tenths(): Double = round(this * TENTHS) / TENTHS
+
+private const val TENTHS = 10.0
+
 /** Builds the CSV document's full text for SSE/BLE shots only, including the header row, `\n`-joined. */
 fun buildShotsCsv(shots: List<ShotEvent>): String = buildExportCsv(shots.map { ExportShot.of(it, null) })
 
@@ -129,9 +179,11 @@ fun buildShotsCsv(shots: List<ShotEvent>): String = buildExportCsv(shots.map { E
 fun buildExportCsv(shots: List<ExportShot>): String {
     val withDetail = shots.any { it.detail != null }
     val withSession = shots.any { it.session != null }
+    val withEstimate = shots.any { it.totalEstYards != null }
     val headers =
         (if (withSession) listOf(SESSION_HEADER) else emptyList()) +
-            (if (withDetail) CSV_HEADERS + DETAIL_HEADERS else CSV_HEADERS)
+            (if (withDetail) CSV_HEADERS + DETAIL_HEADERS else CSV_HEADERS) +
+            (if (withEstimate) ESTIMATE_HEADERS else emptyList())
     val numbers = shotNumbers(shots, withSession)
     val rows =
         shots.mapIndexed { index, shot ->
@@ -151,7 +203,17 @@ fun buildExportCsv(shots: List<ExportShot>): String {
                     shot.clubPathDeg.cell(),
                     shot.spinAxisDeg.cell(),
                 )
-            val cells = if (withDetail) base + detailCells(shot) else base
+            val detailed = if (withDetail) base + detailCells(shot) else base
+            val cells =
+                if (withEstimate) {
+                    detailed +
+                        listOf(
+                            shot.rollEstYards.cell(),
+                            shot.totalEstYards.cell(),
+                        )
+                } else {
+                    detailed
+                }
             if (withSession) listOf(shot.session.orEmpty()) + cells else cells
         }
     return (listOf(headers) + rows).joinToString("\n") { row -> row.joinToString(",", transform = ::csvField) }

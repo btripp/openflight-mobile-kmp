@@ -13,6 +13,10 @@ tag. Plain `v0.1.0` waits on the hardware test matrix on a real Raspberry Pi.
 
 ### Added
 
+- **Estimated total and roll on Practice, Sessions and session history.** The latest shot card
+  and every shot row show "Total … · Roll … (est.)", using your conditions and the landing-area
+  firmness from My Bag › Conditions. "Show total distance" in Settings hides them. CSV exports add
+  `roll_est_yards` and `total_est_yards` columns (#30).
 - **Automatic conditions.** My Bag's conditions card has **Use my location**: it fills altitude,
   temperature and wind from Open-Meteo weather for your coarse location, credited on the card. The
   location prompt appears only when you tap it; a denial or failed lookup says why and keeps your
@@ -30,6 +34,9 @@ tag. Plain `v0.1.0` waits on the hardware test matrix on a real Raspberry Pi.
 
 - When the Pi's two shot streams connect at the same moment, they now share one session, so the
   current-session view no longer comes up empty while shots are saved somewhere else (#135).
+- A broken or hostile device on the network can no longer run the app out of memory by streaming
+  endless data on the shot stream: an oversized line or event drops the connection and reconnects
+  (#132).
 - The Session dispersion chart labels each club's ellipse with the club (e.g. "D", "7i"), so
   colour-blind golfers can tell the ellipses apart without relying on colour (#43).
 - A club change from the launch monitor no longer crashes the app when the phone can't save it

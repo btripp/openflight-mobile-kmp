@@ -211,6 +211,7 @@ private fun MetricsContent(
                     onViewOnRange = onViewOnRange?.let { view -> { view(uiState.latest.eventId) } },
                     demo = uiState.connection.demo,
                     onOpenDetail = { onEvent(DashboardEvent.OpenShotDetail(uiState.latest.eventId)) },
+                    estimatedTotal = uiState.latestTotal,
                 )
                 ShotFlash(trigger = shotFlashes, modifier = Modifier.matchParentSize())
             }

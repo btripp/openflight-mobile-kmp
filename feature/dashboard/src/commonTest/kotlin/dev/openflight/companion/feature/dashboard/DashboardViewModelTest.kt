@@ -5,6 +5,7 @@ import app.cash.turbine.ReceiveTurbine
 import app.cash.turbine.test
 import assertk.assertThat
 import assertk.assertions.containsExactly
+import assertk.assertions.endsWith
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
@@ -93,6 +94,20 @@ class DashboardViewModelTest {
 
                 detailViewModel.onEvent(DashboardEvent.CloseShotDetail)
                 awaitUntil { (it as? DashboardUiState.Live)?.shotDetail == null }
+            }
+        }
+
+    @Test
+    fun theLatestShotShowsItsEstimatedTotalUntilShowTotalDistanceIsTurnedOff() =
+        runTest {
+            viewModel.uiState.testIgnoringRest {
+                shots.history.value = listOf(shot(1))
+
+                val shown = awaitUntil { (it as? DashboardUiState.Live)?.latestTotal != null } as DashboardUiState.Live
+                assertThat(shown.latestTotal!!).endsWith("(est.)")
+
+                settings.setShowTotalDistance(false)
+                awaitUntil { it is DashboardUiState.Live && it.latestTotal == null }
             }
         }
 
