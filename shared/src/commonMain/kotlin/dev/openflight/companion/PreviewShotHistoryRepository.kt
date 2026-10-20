@@ -106,6 +106,8 @@ internal class PreviewShotHistoryRepository(
 
     override fun record(shot: PiLiveShot) = Unit
 
+    override fun backfill(rows: List<ShotDetail>) = Unit
+
     override fun deleteShots(timestamps: Collection<String>) =
         write {
             stored.update { sessions ->

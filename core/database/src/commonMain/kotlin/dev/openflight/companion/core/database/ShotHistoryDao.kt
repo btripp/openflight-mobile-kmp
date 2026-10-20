@@ -274,6 +274,18 @@ abstract class ShotHistoryDao {
         return stored != null
     }
 
+    /** Which of [timestamps] any of [world]'s sessions stores a shot for (#168: backfill skips those). */
+    @Query(
+        """
+        SELECT DISTINCT shots.timestamp FROM shots JOIN sessions ON sessions.id = shots.session_id
+        WHERE shots.timestamp IN (:timestamps) AND sessions.source = :world
+        """,
+    )
+    abstract suspend fun storedTimestampsIn(
+        timestamps: List<String>,
+        world: String,
+    ): List<String>
+
     @Query(
         """
         SELECT shots.* FROM shots JOIN sessions ON sessions.id = shots.session_id

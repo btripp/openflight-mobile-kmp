@@ -19,6 +19,7 @@ import dev.openflight.companion.core.model.pi.SimState
 import dev.openflight.companion.core.model.pi.SwingSpeedReading
 import dev.openflight.companion.core.model.pi.TrainingImplement
 import dev.openflight.companion.core.model.pi.TriggerStatus
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
@@ -58,6 +59,10 @@ internal class PiSessionStore(
 
     /** Every live `shot` and `shot_update`, in arrival order (plan R8h: the history writes them). */
     val liveShots = MutableSharedFlow<PiLiveShot>(extraBufferCapacity = LIVE_SHOT_BUFFER)
+
+    /** #168: every row of each `session_state`/`session_cleared`, oldest first; only the newest is kept. */
+    val snapshots =
+        MutableSharedFlow<List<ShotDetail>>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
     /**
      * #68: the timestamps of rows that left the Pi's session, whoever deleted or cleared them (the
@@ -373,6 +378,7 @@ internal class PiSessionStore(
     /** The server lists the session oldest first; the app shows newest first. */
     private fun replaceSession(oldestFirst: List<ShotDetail>) {
         onSnapshot(oldestFirst)
+        snapshots.tryEmit(oldestFirst)
         sessionShots.value = oldestFirst.asReversed().take(PiSessionRepository.MAX_SESSION_SHOTS)
         remember(oldestFirst)
     }
