@@ -149,6 +149,8 @@ class FakeShotHistoryRepository : ShotHistoryRepository {
 
     override fun record(shot: PiLiveShot) = Unit
 
+    override fun backfill(rows: List<ShotDetail>) = Unit
+
     override fun deleteShots(timestamps: Collection<String>) {
         deletedTimestamps += timestamps
         write {

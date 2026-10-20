@@ -20,6 +20,8 @@ kotlin {
             implementation(projects.core.database)
             implementation(libs.kotlinx.serialization.json)
             implementation(libs.kotlinx.coroutines.core)
+            // #168: a backfilled row from an earlier day is filed by its own date, in the phone's time zone.
+            implementation(libs.kotlinx.datetime)
             implementation(libs.androidx.datastore.preferences.core)
             implementation(libs.okio)
             // WifiShotTransport's constructor takes an HttpClient; core:network keeps Ktor as implementation.

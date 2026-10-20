@@ -81,6 +81,14 @@ interface ShotHistoryRepository {
     /** Files a live Socket.IO `shot`/`shot_update` ([PiSessionRepository.liveShots]). */
     fun record(shot: PiLiveShot)
 
+    /**
+     * #168: files the rows of a `session_state` snapshot ([PiSessionRepository.sessionSnapshots])
+     * that no session stores yet, so shots taken while the phone was locked still count. A row
+     * already stored (by its timestamp) is left as it is. Rows from the phone's today go into the
+     * current session; an earlier day's rows (a Pi not restarted since) into one new session per day.
+     */
+    fun backfill(rows: List<ShotDetail>)
+
     /** Mirrors a delete of the shot the Pi keys by [timestamp], in every session. */
     fun deleteShot(timestamp: String) = deleteShots(listOf(timestamp))
 

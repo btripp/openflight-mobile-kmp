@@ -21,8 +21,13 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toInstant
+import kotlinx.datetime.toLocalDateTime
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
+import kotlin.time.Instant
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 
@@ -49,6 +54,7 @@ internal class DefaultShotHistoryRepository(
     private val newSessionId: () -> String = { Uuid.random().toString() },
     private val log: (String) -> Unit = ::println,
     private val demoWorld: Boolean = false,
+    private val timeZone: TimeZone = TimeZone.currentSystemDefault(),
 ) : ShotHistoryRepository {
     /** A repository with a [HistoryDatabase] of its own (tests). */
     constructor(
@@ -60,7 +66,15 @@ internal class DefaultShotHistoryRepository(
         now: () -> Long = { Clock.System.now().toEpochMilliseconds() },
         newSessionId: () -> String = { Uuid.random().toString() },
         log: (String) -> Unit = ::println,
-    ) : this(HistoryDatabase(openDatabase, scope, fallbackDatabase, log), scope, now, newSessionId, log)
+        timeZone: TimeZone = TimeZone.currentSystemDefault(),
+    ) : this(
+        HistoryDatabase(openDatabase, scope, fallbackDatabase, log),
+        scope,
+        now,
+        newSessionId,
+        log,
+        timeZone = timeZone,
+    )
 
     override val isPersistent: StateFlow<Boolean> = database.isPersistent
 
@@ -75,6 +89,18 @@ internal class DefaultShotHistoryRepository(
      */
     private val rolledOver = mutableMapOf<String, CurrentSession>()
     private val mutableCurrentSessionId = MutableStateFlow<String?>(null)
+
+    /**
+     * #168: rows deleted here (any screen, or mirrored from the Pi), newest last, which [backfill]
+     * must not file again while the Pi still holds them. Read and written only by the write queue's consumer.
+     *
+     * shortcut: in memory only, so after an app restart a snapshot can restore a row deleted before
+     * it; upgrade to a persisted tombstone table (schema migration) if testers hit it.
+     */
+    private val deletedRows = LinkedHashSet<String>()
+
+    /** #168: [clearAll]'s time on the phone's clock: [backfill] files no row from before it. */
+    private var clearedAt: LocalDateTime? = null
     override val currentSessionId: StateFlow<String?> = mutableCurrentSessionId.asStateFlow()
 
     /** Each entry gets the DAO, or `null` when there is no database at all. */
@@ -167,10 +193,52 @@ internal class DefaultShotHistoryRepository(
 
     override fun record(shot: PiLiveShot) = upsert(shot.toEntity())
 
+    override fun backfill(rows: List<ShotDetail>) {
+        if (rows.isEmpty()) return
+        // Captured now, like upsert: the session this snapshot arrived in.
+        val filed = currentSession.value ?: startUnknownSession()
+        val today = localTime(now()).date
+        enqueue { dao ->
+            val stored =
+                rows
+                    .map { it.timestamp }
+                    .chunked(MAX_QUERY_TIMESTAMPS)
+                    .flatMapTo(HashSet()) { dao.storedTimestampsIn(it, world) }
+            val cleared = clearedAt
+            rows
+                .filterNot { it.timestamp in stored || it.timestamp in deletedRows }
+                .filterNot { row -> cleared != null && row.shotTime()?.let { it <= cleared } == true }
+                // A row without a readable time stays with the current session.
+                .groupBy { row -> row.shotTime()?.date?.takeIf { it != today } }
+                .forEach { (earlierDay, dayRows) ->
+                    val shots = dayRows.map { PiLiveShot(it, rawJson = null).toEntity() }
+                    if (earlierDay == null) {
+                        shots.forEach { fileShot(dao, filed, it) }
+                    } else {
+                        val startedAt = dayRows.firstNotNullOf { it.shotTime() }.toInstant(timeZone)
+                        val session =
+                            newSession(filed.session.host, filed.session.transport, startedAt.toEpochMilliseconds())
+                        shots.forEach { dao.upsert(session, it) }
+                    }
+                }
+        }
+    }
+
+    /** The Pi's naive local timestamp, or `null` when it can't be read. */
+    private fun ShotDetail.shotTime(): LocalDateTime? =
+        try {
+            LocalDateTime.parse(timestamp)
+        } catch (_: IllegalArgumentException) {
+            null
+        }
+
     override fun deleteShots(timestamps: Collection<String>) {
         if (timestamps.isEmpty()) return
         val list = timestamps.toList()
-        enqueue { it.deleteByTimestampsIn(list, world) }
+        enqueue {
+            forget(list)
+            it.deleteByTimestampsIn(list, world)
+        }
     }
 
     override fun clearProfile(profileId: String) {
@@ -181,7 +249,23 @@ internal class DefaultShotHistoryRepository(
         enqueue { dao -> dao.clearProfile((rolledOver[filed.session.id] ?: filed).session.id, profileId) }
     }
 
-    override fun clearAll() = enqueue { if (demoWorld) it.clearDemo() else it.clearAll() }
+    override fun clearAll() {
+        val time = localTime(now())
+        enqueue {
+            clearedAt = time
+            if (demoWorld) it.clearDemo() else it.clearAll()
+        }
+    }
+
+    private fun forget(timestamps: List<String>) {
+        deletedRows.removeAll(timestamps.toSet())
+        deletedRows.addAll(timestamps)
+        val overflow = deletedRows.size - MAX_DELETED_ROWS
+        if (overflow > 0) deletedRows.take(overflow).forEach(deletedRows::remove)
+    }
+
+    private fun localTime(epochMillis: Long): LocalDateTime =
+        Instant.fromEpochMilliseconds(epochMillis).toLocalDateTime(timeZone)
 
     override fun clearImported() {
         // Imports belong to the phone's own history; Demo mode has none to delete.
@@ -379,6 +463,12 @@ internal class DefaultShotHistoryRepository(
         const val SESSION_IDLE_GAP_MILLIS = 30 * 60 * 1_000L
 
         private const val UNKNOWN = "UNKNOWN"
+
+        /** The newest deletes [backfill] remembers; a Pi session rarely holds more rows. */
+        private const val MAX_DELETED_ROWS = 2_000
+
+        /** Bound parameters per `IN (...)` query, well under SQLite's variable limit. */
+        private const val MAX_QUERY_TIMESTAMPS = 500
 
         /** SQLite's `LIMIT -1`: no limit. */
         private const val NO_LIMIT = -1

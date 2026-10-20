@@ -32,6 +32,10 @@ tag. Plain `v0.1.0` waits on the hardware test matrix on a real Raspberry Pi.
 
 ### Fixed
 
+- Shots taken while the phone was locked or the app was in the background are now saved to History
+  and counted in My Bag once the app reconnects, on any Pi. Before, they showed on the Session
+  screen but were never stored. Shots you deleted stay deleted, and shots from an earlier day get a
+  session of their own (#168).
 - When the Pi's two shot streams connect at the same moment, they now share one session, so the
   current-session view no longer comes up empty while shots are saved somewhere else (#135).
 - A broken or hostile device on the network can no longer run the app out of memory by streaming
