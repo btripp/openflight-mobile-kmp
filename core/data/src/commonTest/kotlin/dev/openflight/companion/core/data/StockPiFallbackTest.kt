@@ -596,13 +596,16 @@ class StockPiFallbackTest {
             // The Pi wasn't restarted since yesterday's session; this morning's shot came after it.
             h.nowMillis = epochMillis("2026-09-26T12:00:00")
             val today = "2026-09-26T09:00:00.000001"
-            h.connect(fork).serverFrame(
+            val snapshot =
                 PiFixtures.sessionStateFrame(
                     PiFixtures.SHOT_FRAME,
                     PiFixtures.SECOND_SHOT_FRAME,
                     PiFixtures.shotFrame(3, today),
-                ),
-            )
+                )
+            val socket = h.connect(fork)
+            // Every reconnect resends it: the earlier day's session is filed once.
+            socket.serverFrame(snapshot)
+            socket.serverFrame(snapshot)
 
             assertThat(h.storedTimestamps()).containsExactly(today)
             assertThat(h.storedSessions()).containsExactly(
@@ -610,6 +613,49 @@ class StockPiFallbackTest {
                 epochMillis(PiFixtures.SHOT_TIMESTAMP) to
                     listOf(PiFixtures.SECOND_SHOT_TIMESTAMP, PiFixtures.SHOT_TIMESTAMP),
             )
+        }
+
+    @Test
+    fun stockPiRowDeletedOnTheHistoryScreenIsNotRestored() = rowDeletedOnTheHistoryScreenIsNotRestored(fork = false)
+
+    @Test
+    fun forkPiRowDeletedOnTheHistoryScreenIsNotRestored() = rowDeletedOnTheHistoryScreenIsNotRestored(fork = true)
+
+    private fun rowDeletedOnTheHistoryScreenIsNotRestored(fork: Boolean) =
+        runStockPiTest { h ->
+            val socket = h.connect(fork)
+            val snapshot = PiFixtures.sessionStateFrame(PiFixtures.SHOT_FRAME, PiFixtures.SECOND_SHOT_FRAME)
+            socket.serverFrame(snapshot)
+            // SessionHistoryDetailViewModel's delete: the stored copy only, the Pi keeps the row.
+            h.history.deleteShot(PiFixtures.SHOT_TIMESTAMP)
+            socket.serverFrame(snapshot)
+
+            assertThat(h.storedSessions().flatMap { it.second }).containsExactly(PiFixtures.SECOND_SHOT_TIMESTAMP)
+        }
+
+    @Test
+    fun stockPiClearedHistoryIsNotRestored() = clearedHistoryIsNotRestored(fork = false)
+
+    @Test
+    fun forkPiClearedHistoryIsNotRestored() = clearedHistoryIsNotRestored(fork = true)
+
+    private fun clearedHistoryIsNotRestored(fork: Boolean) =
+        runStockPiTest { h ->
+            val socket = h.connect(fork)
+            socket.serverFrame(PiFixtures.sessionStateFrame(PiFixtures.SHOT_FRAME, PiFixtures.SECOND_SHOT_FRAME))
+            h.nowMillis = epochMillis("2026-09-25T12:30:00")
+            h.history.clearAll()
+            // The Pi still holds both rows; a shot after the clear is stored as usual.
+            val later = "2026-09-25T13:00:00.000001"
+            socket.serverFrame(
+                PiFixtures.sessionStateFrame(
+                    PiFixtures.SHOT_FRAME,
+                    PiFixtures.SECOND_SHOT_FRAME,
+                    PiFixtures.shotFrame(3, later),
+                ),
+            )
+
+            assertThat(h.storedSessions().flatMap { it.second }).containsExactly(later)
         }
 
     // The mapping.

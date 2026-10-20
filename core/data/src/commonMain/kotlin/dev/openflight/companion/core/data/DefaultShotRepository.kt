@@ -144,7 +144,12 @@ internal class DefaultShotRepository(
 
     private val mutableLiveShotSource = MutableStateFlow(LiveShotSource.NONE)
 
-    /** The newest rows deleted or cleared here or on the Pi, oldest first: [record] skips a replay of one (#116). */
+    /**
+     * The newest rows deleted or cleared here or on the Pi, oldest first: [record] skips a replay of one (#116).
+     *
+     * shortcut: in memory only, so a row deleted while offline can be replayed after an app restart;
+     * the persistent history keeps its own deletes for backfill (#168), upgrade both to a stored tombstone.
+     */
     private val forgottenRows = MutableStateFlow(emptySet<String>())
 
     /** Plan R8j: where [history]'s live shots come from right now (for tests and MockServerIT). */
