@@ -137,12 +137,27 @@ internal class DefaultShotHistoryRepository(
     ) {
         val sessionHost = host?.takeIf { transport == TransportType.WIFI }
         val time = now()
-        val current = currentSession.value
-        if (current != null && current.isContinuedBy(sessionHost, transport.name, time)) {
-            currentSession.value = current.copy(continued = true)
-            return
+        // Issue #135: Socket.IO and SSE connect at once, so decide atomically, then publish the stored id.
+        currentSession.update { current ->
+            if (current != null && current.isContinuedBy(sessionHost, transport.name, time)) {
+                current.copy(continued = true)
+            } else {
+                CurrentSession(
+                    newSession(sessionHost, transport.name, time),
+                    continued = false,
+                    lastActivityMillis = time,
+                )
+            }
         }
-        makeCurrent(newSession(sessionHost, transport.name, time))
+        publishCurrentSessionId()
+    }
+
+    /** Copies [currentSession]'s id out, re-checking so a racing caller's stale write never wins. */
+    private fun publishCurrentSessionId() {
+        do {
+            val id = currentSession.value?.session?.id
+            mutableCurrentSessionId.value = id
+        } while (currentSession.value?.session?.id != id)
     }
 
     override fun record(
@@ -316,12 +331,6 @@ internal class DefaultShotHistoryRepository(
         transport = transport,
         source = world,
     )
-
-    private fun makeCurrent(session: SessionEntity) {
-        currentSession.value =
-            CurrentSession(session, continued = false, lastActivityMillis = session.startedAtEpochMillis)
-        mutableCurrentSessionId.value = session.id
-    }
 
     /**
      * The session shots are filed under.

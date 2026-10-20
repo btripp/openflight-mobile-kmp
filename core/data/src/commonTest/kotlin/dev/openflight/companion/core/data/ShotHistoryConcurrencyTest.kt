@@ -3,6 +3,10 @@ package dev.openflight.companion.core.data
 
 import assertk.assertThat
 import assertk.assertions.containsExactlyInAnyOrder
+import assertk.assertions.isEqualTo
+import assertk.assertions.single
+import dev.openflight.companion.core.database.buildShotHistoryDatabase
+import dev.openflight.companion.core.database.inMemoryShotHistoryDatabaseBuilder
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -28,6 +32,37 @@ class ShotHistoryConcurrencyTest {
         runTest(timeout = 60.seconds) {
             withContext(Dispatchers.Default) {
                 repeat(ROUNDS) { round -> raceOneRound(round) }
+            }
+        }
+
+    /**
+     * Issue #135: Socket.IO and SSE connect to the same Pi at nearly the same time, each starting a
+     * session. They must agree on one, and [ShotHistoryRepository.currentSessionId] must name the
+     * session shots are filed under.
+     */
+    @Test
+    fun simultaneousConnectsShareOneCurrentSession() =
+        runTest(timeout = 60.seconds) {
+            withContext(Dispatchers.Default) {
+                repeat(SESSION_ROUNDS) {
+                    val scope = CoroutineScope(Dispatchers.Default + Job())
+                    try {
+                        val history =
+                            DefaultShotHistoryRepository(
+                                openDatabase = { inMemoryShotHistoryDatabaseBuilder().buildShotHistoryDatabase() },
+                                scope = scope,
+                            )
+                        List(CONNECTS) { scope.launch { history.startSession("pi.local:8080", TransportType.WIFI) } }
+                            .joinAll()
+                        history.record(shot(1))
+                        history.awaitWrites()
+
+                        val session = history.sessions().first().single()
+                        assertThat(history.currentSessionId.value).isEqualTo(session.id)
+                    } finally {
+                        scope.cancel()
+                    }
+                }
             }
         }
 
@@ -82,6 +117,8 @@ class ShotHistoryConcurrencyTest {
         fun uniqueShot(number: Int) = shot(number).copy(timestamp = "2026-08-05T23:54:00.$number")
 
         const val ROUNDS = 200
+        const val SESSION_ROUNDS = 100
+        const val CONNECTS = 8
         const val SEEDED = 40
         const val ADDED = 40
         val WAIT = 5.seconds
