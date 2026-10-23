@@ -29,7 +29,7 @@ kable = "0.45.0"
 koin = "4.2.2"
 kotlin = "2.4.21"
 kotlinx-coroutines = "1.11.0"
-kotlinx-serialization = "1.11.0"
+kotlinx-serialization = "1.12.0"
 ktlint = "1.8.0"
 # Compose lint rules run as a ktlint custom rule set through Spotless (Compose modules only).
 # 0.6.7 is built against ktlint 1.8.0 (its POM and docs/ktlint.md matrix); bump both together.
