@@ -32,6 +32,10 @@ tag. Plain `v0.1.0` waits on the hardware test matrix on a real Raspberry Pi.
 
 ### Fixed
 
+- Clearing a profile's session on the Pi over Bluetooth now also removes its earlier shots from
+  History and My Bag after the app was restarted. Reopening the app within 30 minutes and
+  reconnecting to the same Pi the same way now continues the session instead of starting a new one
+  (#148).
 - Shots taken while the phone was locked or the app was in the background are now saved to History
   and counted in My Bag once the app reconnects, on any Pi. Before, they showed on the Session
   screen but were never stored. Shots you deleted stay deleted, and shots from an earlier day get a

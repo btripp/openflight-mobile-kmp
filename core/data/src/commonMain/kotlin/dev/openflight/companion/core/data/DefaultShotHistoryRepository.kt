@@ -1,6 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 package dev.openflight.companion.core.data
 
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.longPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
 import dev.openflight.companion.core.database.SessionEntity
 import dev.openflight.companion.core.database.ShotEntity
 import dev.openflight.companion.core.database.ShotHistoryDao
@@ -18,6 +23,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -44,6 +50,9 @@ import kotlin.uuid.Uuid
  * Plan F14: with [demoWorld] this is Demo mode's history instead, over the same database: its
  * sessions are written with `source = 'DEMO'`, and every list, stat, delete and clear sees only
  * those, while the phone's own history (the default) never sees them.
+ *
+ * #148: with [savedSession], the current session survives an app restart, so a connect within
+ * [SESSION_IDLE_GAP_MILLIS] continues it and [clearProfile] still reaches its earlier shots.
  */
 @OptIn(ExperimentalTime::class, ExperimentalUuidApi::class)
 @Suppress("TooManyFunctions") // The repository surface plus the queue helpers.
@@ -55,6 +64,7 @@ internal class DefaultShotHistoryRepository(
     private val log: (String) -> Unit = ::println,
     private val demoWorld: Boolean = false,
     private val timeZone: TimeZone = TimeZone.currentSystemDefault(),
+    private val savedSession: DataStore<Preferences>? = null,
 ) : ShotHistoryRepository {
     /** A repository with a [HistoryDatabase] of its own (tests). */
     constructor(
@@ -67,6 +77,7 @@ internal class DefaultShotHistoryRepository(
         newSessionId: () -> String = { Uuid.random().toString() },
         log: (String) -> Unit = ::println,
         timeZone: TimeZone = TimeZone.currentSystemDefault(),
+        savedSession: DataStore<Preferences>? = null,
     ) : this(
         HistoryDatabase(openDatabase, scope, fallbackDatabase, log),
         scope,
@@ -74,6 +85,7 @@ internal class DefaultShotHistoryRepository(
         newSessionId,
         log,
         timeZone = timeZone,
+        savedSession = savedSession,
     )
 
     override val isPersistent: StateFlow<Boolean> = database.isPersistent
@@ -155,7 +167,8 @@ internal class DefaultShotHistoryRepository(
      * Tester report 2026-09-30: a reconnect to the same Pi over the same transport within
      * [SESSION_IDLE_GAP_MILLIS] of the session's last shot (or its start) continues it, so
      * switching apps, locking the screen or a Wi-Fi blip doesn't split a practice session.
-     * Otherwise a new session starts.
+     * Otherwise a new session starts. #148: the first connect after an app restart may continue
+     * the session saved before it ([resumeSavedSession]).
      */
     override fun startSession(
         host: String?,
@@ -163,6 +176,7 @@ internal class DefaultShotHistoryRepository(
     ) {
         val sessionHost = host?.takeIf { transport == TransportType.WIFI }
         val time = now()
+        val firstConnect = currentSession.value == null
         // Issue #135: Socket.IO and SSE connect at once, so decide atomically, then publish the stored id.
         currentSession.update { current ->
             if (current != null && current.isContinuedBy(sessionHost, transport.name, time)) {
@@ -176,6 +190,61 @@ internal class DefaultShotHistoryRepository(
             }
         }
         publishCurrentSessionId()
+        val started = currentSession.value ?: return
+        enqueue {
+            if (firstConnect) resumeSavedSession(started, sessionHost, transport.name, time)
+            saveCurrentSession()
+        }
+    }
+
+    /**
+     * Runs on the write queue, so every shot or clear queued after the connect follows it. When the
+     * session saved before an app restart is continued by this connect ([CurrentSession.isContinuedBy]),
+     * [started] is redirected to it, the way [fileShot] redirects a rolled-over session.
+     */
+    private suspend fun resumeSavedSession(
+        started: CurrentSession,
+        host: String?,
+        transport: String,
+        time: Long,
+    ) {
+        val saved = savedSession?.data?.first()?.toSavedSession()
+        if (saved == null || !saved.isContinuedBy(host, transport, time)) return
+        rolledOver[started.session.id] = saved
+        currentSession.update { if (it?.session?.id == started.session.id) saved else it }
+        publishCurrentSessionId()
+    }
+
+    /** The session [saveCurrentSession] stored, or `null` when none (or only part of one) is. */
+    private fun Preferences.toSavedSession(): CurrentSession? {
+        val id = this[SAVED_ID]
+        val startedAt = this[SAVED_STARTED_AT]
+        val transport = this[SAVED_TRANSPORT]
+        val lastActivity = this[SAVED_LAST_ACTIVITY]
+        val complete = startedAt != null && transport != null && lastActivity != null
+        return if (id == null || !complete) {
+            null
+        } else {
+            CurrentSession(
+                SessionEntity(id, startedAt, this[SAVED_HOST], transport, source = world),
+                true,
+                lastActivity,
+            )
+        }
+    }
+
+    /** Runs on the write queue: saves the session shots are filed under, for [resumeSavedSession]. */
+    private suspend fun saveCurrentSession() {
+        val store = savedSession ?: return
+        val current = currentSession.value ?: return
+        val session = (rolledOver[current.session.id] ?: current).session
+        store.edit { prefs ->
+            prefs[SAVED_ID] = session.id
+            prefs[SAVED_STARTED_AT] = session.startedAtEpochMillis
+            session.host?.let { prefs[SAVED_HOST] = it } ?: prefs.remove(SAVED_HOST)
+            prefs[SAVED_TRANSPORT] = session.transport
+            prefs[SAVED_LAST_ACTIVITY] = current.lastActivityMillis
+        }
     }
 
     /** Copies [currentSession]'s id out, re-checking so a racing caller's stale write never wins. */
@@ -242,8 +311,7 @@ internal class DefaultShotHistoryRepository(
     }
 
     override fun clearProfile(profileId: String) {
-        // shortcut: only the current session, so a clear after an app restart misses the Pi
-        // session's earlier rows (they sit in the previous phone session); upgrade with #148.
+        // Only the current session; #148 keeps it across an app restart within the idle gap.
         val filed = currentSession.value ?: return
         // On the queue, so it follows a rollover ([fileShot]) to where this Pi session's shots went.
         enqueue { dao -> dao.clearProfile((rolledOver[filed.session.id] ?: filed).session.id, profileId) }
@@ -367,7 +435,10 @@ internal class DefaultShotHistoryRepository(
         val filed = currentSession.value ?: startUnknownSession()
         val time = now()
         currentSession.update { if (it?.session?.id == filed.session.id) it.copy(lastActivityMillis = time) else it }
-        enqueue { fileShot(it, filed, shot) }
+        enqueue {
+            fileShot(it, filed, shot)
+            saveCurrentSession()
+        }
     }
 
     /**
@@ -463,6 +534,13 @@ internal class DefaultShotHistoryRepository(
         const val SESSION_IDLE_GAP_MILLIS = 30 * 60 * 1_000L
 
         private const val UNKNOWN = "UNKNOWN"
+
+        // #148: the current session, in the settings DataStore.
+        private val SAVED_ID = stringPreferencesKey("history_session_id")
+        private val SAVED_STARTED_AT = longPreferencesKey("history_session_started_at")
+        private val SAVED_HOST = stringPreferencesKey("history_session_host")
+        private val SAVED_TRANSPORT = stringPreferencesKey("history_session_transport")
+        private val SAVED_LAST_ACTIVITY = longPreferencesKey("history_session_last_activity")
 
         /** The newest deletes [backfill] remembers; a Pi session rarely holds more rows. */
         private const val MAX_DELETED_ROWS = 2_000
