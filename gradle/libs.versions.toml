@@ -11,25 +11,25 @@
 #   iosArm64/iosSimulatorArm64). Versions checked on 2026-09-24 against Google Maven.
 # - detekt 2.x is still alpha, so we use 1.23.8 (latest stable).
 [versions]
-agp = "9.3.3"
+agp = "9.4.1"
 android-compileSdk = "37"
 android-minSdk = "26"
 android-targetSdk = "37"
 androidx-activity = "1.13.0"
 # FileProvider for the CSV share sheet (R5b); the version activity-compose already resolves.
-androidx-core = "1.18.0"
+androidx-core = "1.19.1"
 androidx-test-runner = "1.7.0"
 androidx-test-extJunit = "1.3.0"
 # ui-test-junit4 pulls an older Espresso that cannot inject input on API 36+ (no InputManager.getInstance).
 androidx-test-espresso = "3.7.0"
 assertk = "0.28.1"
-datastore = "1.2.1"
+datastore = "1.3.0"
 detekt = "1.23.8"
 kable = "0.45.0"
 koin = "4.2.2"
 kotlin = "2.4.21"
 kotlinx-coroutines = "1.11.0"
-kotlinx-serialization = "1.11.0"
+kotlinx-serialization = "1.12.0"
 kotlinx-datetime = "0.8.0"
 ktlint = "1.8.0"
 # Compose lint rules run as a ktlint custom rule set through Spotless (Compose modules only).
