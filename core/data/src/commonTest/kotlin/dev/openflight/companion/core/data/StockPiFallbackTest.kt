@@ -30,6 +30,9 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runTest
+import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toInstant
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlin.test.Test
@@ -43,6 +46,8 @@ class StockPiFallbackTest {
     private class Harness(
         scope: CoroutineScope,
     ) {
+        /** The phone's clock: the fixtures' day (2026-09-25) unless a test moves it. */
+        var nowMillis = epochMillis("2026-09-25T12:00:00")
         val settings =
             FakeSettingsRepository(transport = TransportType.WIFI, host = HOST, club = GolfClub.PITCHING_WEDGE)
         val ble = FakeShotTransport("ble")
@@ -59,7 +64,9 @@ class StockPiFallbackTest {
             DefaultShotHistoryRepository(
                 openDatabase = { inMemoryShotHistoryDatabaseBuilder().buildShotHistoryDatabase() },
                 scope = scope,
+                now = { nowMillis },
                 log = {},
+                timeZone = TimeZone.UTC,
             )
         val repository =
             DefaultShotRepository(
@@ -104,6 +111,20 @@ class StockPiFallbackTest {
             history.awaitWrites()
             val session = checkNotNull(history.currentSessionId.value)
             return history.shots(session).first().map { it.detail.timestamp }
+        }
+
+        /** Every stored session, newest first, as (started at, its shots' timestamps). */
+        suspend fun storedSessions(): List<Pair<Long, List<String>>> {
+            history.awaitWrites()
+            return history.sessions().first().map { session ->
+                session.startedAtEpochMillis to history.shots(session.id).first().map { it.detail.timestamp }
+            }
+        }
+
+        /** Connected to a stock Pi (SSE 404, Socket.IO only) or, with [fork], to one with SSE too. */
+        fun connect(fork: Boolean): FakePiSocket {
+            if (fork) wifi.state.value = ConnectionState.Connected else sseMissing()
+            return piConnected()
         }
     }
 
@@ -490,6 +511,153 @@ class StockPiFallbackTest {
             assertThat(h.repository.liveShotSource.value).isEqualTo(LiveShotSource.NONE)
         }
 
+    // #168: rows only the Pi's session_state holds (the phone was locked) reach stored history.
+
+    @Test
+    fun stockPiSnapshotOnlyRowsAreStoredAndCountInTheBag() = snapshotOnlyRowsAreStoredAndCountInTheBag(fork = false)
+
+    @Test
+    fun forkPiSnapshotOnlyRowsAreStoredAndCountInTheBag() = snapshotOnlyRowsAreStoredAndCountInTheBag(fork = true)
+
+    private fun snapshotOnlyRowsAreStoredAndCountInTheBag(fork: Boolean) =
+        runStockPiTest { h ->
+            h
+                .connect(
+                    fork,
+                ).serverFrame(PiFixtures.sessionStateFrame(PiFixtures.SHOT_FRAME, PiFixtures.SECOND_SHOT_FRAME))
+
+            assertThat(h.storedTimestamps())
+                .containsExactly(PiFixtures.SECOND_SHOT_TIMESTAMP, PiFixtures.SHOT_TIMESTAMP)
+            // Both profiles' rows, as the live path keeps them.
+            assertThat(h.history.shotsForClub(GolfClub.DRIVER).first()).hasSize(1)
+            assertThat(h.history.shotsForClub(GolfClub.IRON_7).first()).hasSize(1)
+        }
+
+    @Test
+    fun stockPiRowReceivedLiveIsNotDoubled() =
+        runStockPiTest { h ->
+            val socket = h.connect(fork = false)
+            socket.serverFrame(PiFixtures.SHOT_FRAME)
+            // A reconnect's snapshot holds the live shot again, and one the phone missed.
+            socket.serverFrame(PiFixtures.sessionStateFrame(PiFixtures.SHOT_FRAME, PiFixtures.SECOND_SHOT_FRAME))
+            socket.serverFrame(PiFixtures.sessionStateFrame(PiFixtures.SHOT_FRAME, PiFixtures.SECOND_SHOT_FRAME))
+
+            assertThat(h.storedSessions().map { it.second })
+                .containsExactly(listOf(PiFixtures.SECOND_SHOT_TIMESTAMP, PiFixtures.SHOT_TIMESTAMP))
+        }
+
+    @Test
+    fun forkPiRowReceivedOverSseIsNotDoubled() =
+        runStockPiTest { h ->
+            val socket = h.connect(fork = true)
+            h.wifi.shots.emit(
+                ShotEvent(
+                    schemaVersion = 1,
+                    eventId = shotId(7),
+                    timestamp = PiFixtures.SHOT_TIMESTAMP,
+                    club = "driver",
+                    ballSpeedMph = 116.2,
+                    estimatedCarryYards = 179.0,
+                ),
+            )
+            socket.serverFrame(PiFixtures.sessionStateFrame(PiFixtures.SHOT_FRAME, PiFixtures.SECOND_SHOT_FRAME))
+
+            assertThat(h.storedSessions().map { it.second })
+                .containsExactly(listOf(PiFixtures.SECOND_SHOT_TIMESTAMP, PiFixtures.SHOT_TIMESTAMP))
+        }
+
+    @Test
+    fun stockPiDeletedRowIsNotRestored() = deletedRowIsNotRestored(fork = false)
+
+    @Test
+    fun forkPiDeletedRowIsNotRestored() = deletedRowIsNotRestored(fork = true)
+
+    private fun deletedRowIsNotRestored(fork: Boolean) =
+        runStockPiTest { h ->
+            val socket = h.connect(fork)
+            socket.serverFrame(PiFixtures.sessionStateFrame(PiFixtures.SHOT_FRAME))
+            // Deleted while the link is down: only the phone forgets it, the Pi still holds it.
+            socket.state.value = SocketConnectionState.Connecting(2)
+            h.repository.deleteShotByTimestamp(PiFixtures.SHOT_TIMESTAMP)
+            socket.serverAcks()
+            socket.serverFrame(PiFixtures.sessionStateFrame(PiFixtures.SHOT_FRAME, PiFixtures.SECOND_SHOT_FRAME))
+
+            assertThat(h.storedSessions().flatMap { it.second }).containsExactly(PiFixtures.SECOND_SHOT_TIMESTAMP)
+        }
+
+    @Test
+    fun stockPiRowsFromAnEarlierDayFileUnderTheirOwnDate() = rowsFromAnEarlierDayFileUnderTheirOwnDate(fork = false)
+
+    @Test
+    fun forkPiRowsFromAnEarlierDayFileUnderTheirOwnDate() = rowsFromAnEarlierDayFileUnderTheirOwnDate(fork = true)
+
+    private fun rowsFromAnEarlierDayFileUnderTheirOwnDate(fork: Boolean) =
+        runStockPiTest { h ->
+            // The Pi wasn't restarted since yesterday's session; this morning's shot came after it.
+            h.nowMillis = epochMillis("2026-09-26T12:00:00")
+            val today = "2026-09-26T09:00:00.000001"
+            val snapshot =
+                PiFixtures.sessionStateFrame(
+                    PiFixtures.SHOT_FRAME,
+                    PiFixtures.SECOND_SHOT_FRAME,
+                    PiFixtures.shotFrame(3, today),
+                )
+            val socket = h.connect(fork)
+            // Every reconnect resends it: the earlier day's session is filed once.
+            socket.serverFrame(snapshot)
+            socket.serverFrame(snapshot)
+
+            assertThat(h.storedTimestamps()).containsExactly(today)
+            assertThat(h.storedSessions()).containsExactly(
+                epochMillis("2026-09-26T12:00:00") to listOf(today),
+                epochMillis(PiFixtures.SHOT_TIMESTAMP) to
+                    listOf(PiFixtures.SECOND_SHOT_TIMESTAMP, PiFixtures.SHOT_TIMESTAMP),
+            )
+        }
+
+    @Test
+    fun stockPiRowDeletedOnTheHistoryScreenIsNotRestored() = rowDeletedOnTheHistoryScreenIsNotRestored(fork = false)
+
+    @Test
+    fun forkPiRowDeletedOnTheHistoryScreenIsNotRestored() = rowDeletedOnTheHistoryScreenIsNotRestored(fork = true)
+
+    private fun rowDeletedOnTheHistoryScreenIsNotRestored(fork: Boolean) =
+        runStockPiTest { h ->
+            val socket = h.connect(fork)
+            val snapshot = PiFixtures.sessionStateFrame(PiFixtures.SHOT_FRAME, PiFixtures.SECOND_SHOT_FRAME)
+            socket.serverFrame(snapshot)
+            // SessionHistoryDetailViewModel's delete: the stored copy only, the Pi keeps the row.
+            h.history.deleteShot(PiFixtures.SHOT_TIMESTAMP)
+            socket.serverFrame(snapshot)
+
+            assertThat(h.storedSessions().flatMap { it.second }).containsExactly(PiFixtures.SECOND_SHOT_TIMESTAMP)
+        }
+
+    @Test
+    fun stockPiClearedHistoryIsNotRestored() = clearedHistoryIsNotRestored(fork = false)
+
+    @Test
+    fun forkPiClearedHistoryIsNotRestored() = clearedHistoryIsNotRestored(fork = true)
+
+    private fun clearedHistoryIsNotRestored(fork: Boolean) =
+        runStockPiTest { h ->
+            val socket = h.connect(fork)
+            socket.serverFrame(PiFixtures.sessionStateFrame(PiFixtures.SHOT_FRAME, PiFixtures.SECOND_SHOT_FRAME))
+            h.nowMillis = epochMillis("2026-09-25T12:30:00")
+            h.history.clearAll()
+            // The Pi still holds both rows; a shot after the clear is stored as usual.
+            val later = "2026-09-25T13:00:00.000001"
+            socket.serverFrame(
+                PiFixtures.sessionStateFrame(
+                    PiFixtures.SHOT_FRAME,
+                    PiFixtures.SECOND_SHOT_FRAME,
+                    PiFixtures.shotFrame(3, later),
+                ),
+            )
+
+            assertThat(h.storedSessions().flatMap { it.second }).containsExactly(later)
+        }
+
     // The mapping.
 
     @Test
@@ -511,6 +679,9 @@ class StockPiFallbackTest {
     }
 
     private companion object {
+        fun epochMillis(localTime: String): Long =
+            LocalDateTime.parse(localTime).toInstant(TimeZone.UTC).toEpochMilliseconds()
+
         const val HOST = "192.168.1.20:8080"
         val MEASUREMENT =
             PhoneOrientationMeasurement(

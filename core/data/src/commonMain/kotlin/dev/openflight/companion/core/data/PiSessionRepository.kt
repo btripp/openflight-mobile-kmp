@@ -154,6 +154,14 @@ interface PiSessionRepository {
      */
     val removedRows: Flow<Set<String>> get() = emptyFlow()
 
+    /**
+     * #168: the whole session (every profile, uncapped, oldest first) each time a `session_state`
+     * or `session_cleared` replaces it, one-shot. The persistent history backfills from it the rows
+     * the phone missed while locked or in the background. Defaults to none so fakes stay
+     * source-compatible.
+     */
+    val sessionSnapshots: Flow<List<ShotDetail>> get() = emptyFlow()
+
     /** The Socket.IO detail for an SSE/BLE shot, matched on timestamp. */
     fun detailFor(shot: ShotEvent): ShotDetail? = shotDetails.value[shot.timestamp]
 

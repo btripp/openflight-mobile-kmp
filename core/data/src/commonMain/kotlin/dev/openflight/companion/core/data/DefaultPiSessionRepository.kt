@@ -105,6 +105,7 @@ internal class DefaultPiSessionRepository(
     override val notices: SharedFlow<PiNotice> = store.notices.asSharedFlow()
     override val liveShots: Flow<PiLiveShot> = store.liveShots.asSharedFlow()
     override val removedRows: Flow<Set<String>> = store.removedRows.asSharedFlow()
+    override val sessionSnapshots: Flow<List<ShotDetail>> = store.snapshots.asSharedFlow()
 
     private val activeSocket = MutableStateFlow<PiSocket?>(null)
     private var currentKey: SessionKey? = null

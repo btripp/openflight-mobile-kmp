@@ -144,7 +144,12 @@ internal class DefaultShotRepository(
 
     private val mutableLiveShotSource = MutableStateFlow(LiveShotSource.NONE)
 
-    /** The newest rows deleted or cleared here or on the Pi, oldest first: [record] skips a replay of one (#116). */
+    /**
+     * The newest rows deleted or cleared here or on the Pi, oldest first: [record] skips a replay of one (#116).
+     *
+     * shortcut: in memory only, so a row deleted while offline can be replayed after an app restart;
+     * the persistent history keeps its own deletes for backfill (#168), upgrade both to a stored tombstone.
+     */
     private val forgottenRows = MutableStateFlow(emptySet<String>())
 
     /** Plan R8j: where [history]'s live shots come from right now (for tests and MockServerIT). */
@@ -161,6 +166,13 @@ internal class DefaultShotRepository(
                 if (pi != null) launch { pi.removedRows.collect(::forgetPiRows) }
                 if (pi != null && history != null) {
                     launch { pi.liveShots.collect(history::record) }
+                    // #168: rows the phone missed (locked, backgrounded) reach the history from the
+                    // Pi's snapshot, on a stock and a fork Pi alike; deleted or cleared ones stay gone.
+                    launch {
+                        pi.sessionSnapshots.collect { rows ->
+                            history.backfill(rows.filterNot { it.timestamp in forgottenRows.value })
+                        }
+                    }
                     // A current Pi (backend main) has no SSE stream, so on Wi-Fi its Socket.IO link
                     // is the connection that counts: each (re)connect of it starts a session too.
                     // An extra start before any shot is harmless (a session is stored with its first shot).
