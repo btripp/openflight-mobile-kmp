@@ -8,7 +8,6 @@ import assertk.assertions.isFalse
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
 import dev.openflight.companion.core.model.ShotEvent
-import dev.openflight.companion.core.model.pi.SessionStats
 import dev.openflight.companion.core.model.pi.ShotDetail
 import kotlin.test.Test
 
@@ -50,7 +49,6 @@ class SessionInsightsTest {
         assertThat(enrichment.launchAngleConfidence).isNull()
         assertThat(enrichment.spinQuality).isNull()
         assertThat(enrichment.spinSource).isNull()
-        assertThat(enrichment.hasCarryRange).isFalse()
         assertThat(enrichment.carryRangeText(UnitSystem.IMPERIAL)).isNull()
     }
 
@@ -140,15 +138,6 @@ class SessionInsightsTest {
         assertThat(chips).containsExactly(ClubChip("7-iron", 2), ClubChip("driver", 1))
     }
 
-    @Test
-    fun serverStatsConvertWithNullAveragesAsZero() {
-        val stats = SessionStats(shotCount = 0, avgBallSpeed = null, avgClubSpeed = null).toClubStats()
-
-        assertThat(stats.shotCount).isEqualTo(0)
-        assertThat(stats.avgBallSpeedMph).isEqualTo(0.0)
-        assertThat(stats.avgClubSpeedMph).isNull()
-    }
-
     // endregion
 
     // region CSV with detail (ShotList.tsx buildValidationCsv)
@@ -187,7 +176,6 @@ class SessionInsightsTest {
         val csv = buildExportCsv(listOf(ExportShot.of(event(), null)))
 
         assertThat(csv.lines()[0].endsWith("spin_axis_deg")).isTrue()
-        assertThat(csv).isEqualTo(buildShotsCsv(listOf(event())))
     }
 
     // endregion

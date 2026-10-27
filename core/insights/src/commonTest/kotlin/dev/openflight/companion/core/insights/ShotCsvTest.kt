@@ -13,7 +13,7 @@ import kotlin.test.Test
 class ShotCsvTest {
     @Test
     fun headerRowHasNoComparatorColumns() {
-        val csv = buildShotsCsv(emptyList())
+        val csv = csvOf(emptyList())
 
         assertThat(csv).isEqualTo(
             "shot_number,event_id,timestamp,club,ball_speed_mph,club_speed_mph,smash_factor," +
@@ -78,7 +78,7 @@ class ShotCsvTest {
     @Test
     fun oneRowPerShotNumberedFromOne() {
         val csv =
-            buildShotsCsv(
+            csvOf(
                 listOf(
                     shot(eventId = "00000000-0000-4000-8000-000000000001", club = "driver", ballSpeedMph = 151.4),
                     shot(eventId = "00000000-0000-4000-8000-000000000002", club = "7-iron", ballSpeedMph = 120.2),
@@ -97,7 +97,7 @@ class ShotCsvTest {
     @Test
     fun nullFieldsRenderAsEmptyColumns() {
         val csv =
-            buildShotsCsv(
+            csvOf(
                 listOf(
                     shot(
                         clubSpeedMph = 103.2,
@@ -119,7 +119,7 @@ class ShotCsvTest {
 
     @Test
     fun aClubValueContainingACommaIsQuotedAndEscaped() {
-        val csv = buildShotsCsv(listOf(shot(club = "driver, \"pro\"")))
+        val csv = csvOf(listOf(shot(club = "driver, \"pro\"")))
 
         assertThat(csv.lines()[1]).isEqualTo(
             "1,00000000-0000-4000-8000-000000000000,2026-08-05T23:54:00,\"driver, \"\"pro\"\"\",140.0,,,240.0,,,,,",
@@ -133,6 +133,9 @@ class ShotCsvTest {
         assertThat(filename).isEqualTo("openflight-shots-2026-09-24T18-30-05-123Z.csv")
     }
 }
+
+/** A live-shots-only export, as the screens build it ([ExportShot] without a Pi detail). */
+private fun csvOf(shots: List<ShotEvent>): String = buildExportCsv(shots.map { ExportShot.of(it, null) })
 
 private fun shot(
     eventId: String = "00000000-0000-4000-8000-000000000000",

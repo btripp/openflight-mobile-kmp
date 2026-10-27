@@ -88,7 +88,7 @@ class ShotHistoryDaoTest {
 
             assertThat(
                 dao
-                    .observeSessions()
+                    .observeSessionsOf(SessionEntity.SOURCE_LOCAL, includeImported = false)
                     .first()
                     .first()
                     .shotCount,
@@ -115,7 +115,7 @@ class ShotHistoryDaoTest {
             dao.upsert(session("newer"), fullShot(shotNumber = 1, timestamp = "2026-09-14T09:00:00Z"))
             dao.upsert(session("newer"), fullShot(shotNumber = 2, timestamp = "2026-09-14T09:30:00Z"))
 
-            val sessions = dao.observeSessions().first()
+            val sessions = dao.observeSessionsOf(SessionEntity.SOURCE_LOCAL, includeImported = false).first()
             assertThat(sessions.map { it.id }).containsExactly("newer", "older")
             assertThat(sessions[0].shotCount).isEqualTo(2)
             assertThat(sessions[0].firstShotAt).isEqualTo("2026-09-14T09:00:00Z")
@@ -127,7 +127,11 @@ class ShotHistoryDaoTest {
         runTest {
             dao.upsert(session("with-shot"), fullShot())
 
-            assertThat(dao.observeSessions().first().map { it.id }).containsExactly("with-shot")
+            assertThat(
+                dao.observeSessionsOf(SessionEntity.SOURCE_LOCAL, includeImported = false).first().map {
+                    it.id
+                },
+            ).containsExactly("with-shot")
             assertThat(dao.observeShots("never-used").first()).isEmpty()
         }
 
@@ -181,7 +185,7 @@ class ShotHistoryDaoTest {
 
             assertThat(
                 dao
-                    .observeSessions()
+                    .observeSessionsOf(SessionEntity.SOURCE_LOCAL, includeImported = false)
                     .first()
                     .single()
                     .shotCount,
@@ -263,14 +267,14 @@ class ShotHistoryDaoTest {
             dao.upsert(session("session-1"), fullShot(shotNumber = 1, timestamp = "2026-09-14T10:00:00"))
             dao.upsert(session("session-1"), fullShot(shotNumber = 2, timestamp = "2026-09-14T10:05:00"))
 
-            dao.deleteByTimestamps(listOf("2026-09-14T10:00:00"))
+            dao.deleteByTimestampsIn(listOf("2026-09-14T10:00:00"), SessionEntity.SOURCE_LOCAL)
 
             assertThat(
                 dao.observeShots("session-1").first().map { it.timestamp },
             ).containsExactly("2026-09-14T10:05:00")
             assertThat(
                 dao
-                    .observeSessions()
+                    .observeSessionsOf(SessionEntity.SOURCE_LOCAL, includeImported = false)
                     .first()
                     .single()
                     .shotCount,
@@ -285,7 +289,7 @@ class ShotHistoryDaoTest {
             dao.upsert(session("session-2"), fullShot(shotNumber = 4, timestamp = "2026-09-14T10:00:00"))
             dao.upsert(session("session-2"), fullShot(shotNumber = 5, timestamp = "2026-09-14T10:09:00"))
 
-            dao.deleteByTimestamps(listOf("2026-09-14T10:00:00"))
+            dao.deleteByTimestampsIn(listOf("2026-09-14T10:00:00"), SessionEntity.SOURCE_LOCAL)
 
             assertThat(dao.observeShots("session-1").first()).isEmpty()
             assertThat(dao.observeShots("session-2").first()).hasSize(1)
@@ -298,9 +302,13 @@ class ShotHistoryDaoTest {
             dao.upsert(session("older"), fullShot(shotNumber = 1, timestamp = "2026-09-13T09:00:00"))
             dao.upsert(session("newer"), fullShot(shotNumber = 1, timestamp = "2026-09-14T09:00:00"))
 
-            dao.deleteByTimestamps(listOf("2026-09-14T09:00:00"))
+            dao.deleteByTimestampsIn(listOf("2026-09-14T09:00:00"), SessionEntity.SOURCE_LOCAL)
 
-            assertThat(dao.observeSessions().first().map { it.id }).containsExactly("older")
+            assertThat(
+                dao.observeSessionsOf(SessionEntity.SOURCE_LOCAL, includeImported = false).first().map {
+                    it.id
+                },
+            ).containsExactly("older")
         }
 
     // Expo feat/delete-shot: "leaves history untouched when no stored shot has that timestamp"
@@ -309,7 +317,7 @@ class ShotHistoryDaoTest {
         runTest {
             dao.upsert(session("session-1"), fullShot(timestamp = "2026-09-14T10:00:00"))
 
-            dao.deleteByTimestamps(listOf("2026-09-14T10:00:00.000001"))
+            dao.deleteByTimestampsIn(listOf("2026-09-14T10:00:00.000001"), SessionEntity.SOURCE_LOCAL)
 
             assertThat(dao.observeShots("session-1").first()).hasSize(1)
         }
@@ -322,14 +330,14 @@ class ShotHistoryDaoTest {
 
             dao.clearAll()
 
-            assertThat(dao.observeSessions().first()).isEmpty()
+            assertThat(dao.observeSessionsOf(SessionEntity.SOURCE_LOCAL, includeImported = false).first()).isEmpty()
             assertThat(dao.shotCount()).isEqualTo(0)
         }
 
     @Test
     fun observersSeeEveryWrite() =
         runTest {
-            dao.observeSessions().test {
+            dao.observeSessionsOf(SessionEntity.SOURCE_LOCAL, includeImported = false).test {
                 assertThat(awaitItem()).isEmpty()
 
                 dao.upsert(session("session-1"), fullShot(shotNumber = 1, timestamp = "2026-09-14T10:00:00"))

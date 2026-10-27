@@ -284,7 +284,7 @@ class AccurateFlightTest {
                 ),
             )
 
-        assertThat(estimate.spinEstimated).isTrue()
+        assertThat(estimate.flightProvenance.estimatedParameters).contains(FlightParameter.SPIN_RATE)
     }
 
     @Test
