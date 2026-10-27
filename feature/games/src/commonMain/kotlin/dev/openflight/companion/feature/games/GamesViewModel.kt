@@ -173,9 +173,7 @@ class GamesViewModel(
                 removePlayer(event.playerId)
             }
 
-            else -> {
-                Unit
-            }
+            else -> {}
         }
     }
 

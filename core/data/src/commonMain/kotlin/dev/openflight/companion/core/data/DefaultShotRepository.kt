@@ -533,9 +533,7 @@ internal class DefaultShotRepository(
                 persistentHistory?.clearProfile(profileId)
             }
 
-            else -> {
-                Unit
-            }
+            else -> {}
         }
     }
 
@@ -639,13 +637,9 @@ internal class DefaultShotRepository(
                     syncedThisConnection = false
                 }
 
-                syncedThisConnection -> {
-                    Unit
-                }
+                syncedThisConnection -> {}
 
-                type == TransportType.BLUETOOTH && !controls -> {
-                    Unit
-                }
+                type == TransportType.BLUETOOTH && !controls -> {}
 
                 else -> {
                     syncedThisConnection = true

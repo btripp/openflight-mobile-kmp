@@ -11,6 +11,7 @@ import dev.openflight.companion.core.database.buildShotHistoryDatabase
 import dev.openflight.companion.core.database.inMemoryShotHistoryDatabaseBuilder
 import dev.openflight.companion.core.model.GolfClub
 import dev.openflight.companion.core.model.pi.ShotDetail
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -22,6 +23,7 @@ import kotlin.test.Test
  * sessions are tagged `DEMO`, listed and counted only in the demo world, and "Clear demo data"
  * leaves the player's sessions alone (and the other way round).
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 class DemoShotHistoryRepositoryTest {
     private class Harness(
         scope: TestScope,

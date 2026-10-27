@@ -17,6 +17,7 @@ import dev.openflight.companion.core.model.pi.ShotDetail
 import dev.openflight.companion.core.protocol.SchemaV2Event
 import dev.openflight.companion.core.socketio.SocketConnectionState
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.TestScope
@@ -28,6 +29,7 @@ import kotlin.test.Test
  * [DefaultShotRepository] writing through to the persistent history (plan R8h): the in-memory
  * `history` stays the current session's cache, and the stored history follows it.
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 class ShotHistoryWriteThroughTest {
     private class Harness(
         scope: CoroutineScope,

@@ -11,11 +11,13 @@ import dev.openflight.companion.core.network.LocalNetworkDenial
 import dev.openflight.companion.core.socketio.EngineIoConnection
 import dev.openflight.companion.core.socketio.EngineIoTransport
 import dev.openflight.companion.core.socketio.SocketConnectionState
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 
 /** Plan R8d in the Pi session: the endpoint policy, the local-network flag and the last-good host. */
+@OptIn(ExperimentalCoroutinesApi::class)
 class PiSessionEndpointTest {
     private class RecordingTransport : EngineIoTransport {
         val urls = mutableListOf<String>()

@@ -34,13 +34,14 @@ internal class GeodataCache(
         key: String,
         body: String,
     ) {
-        runCatching {
-            fileSystem.createDirectories(directory)
-            fileSystem.write(pathFor(key)) {
-                writeUtf8("${now()}\n")
-                writeUtf8(body)
+        val _ =
+            runCatching {
+                fileSystem.createDirectories(directory)
+                fileSystem.write(pathFor(key)) {
+                    writeUtf8("${now()}\n")
+                    writeUtf8(body)
+                }
             }
-        }
     }
 
     private fun pathFor(key: String): Path = directory / "$FILE_PREFIX${key.fileSafe()}.cache"

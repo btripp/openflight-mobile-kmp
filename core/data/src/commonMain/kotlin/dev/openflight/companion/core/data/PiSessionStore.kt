@@ -192,9 +192,7 @@ internal class PiSessionStore(
                 deletion.update { it.fail(event.error ?: DeletionState.SERVER_REFUSED) }
             }
 
-            else -> {
-                Unit
-            }
+            else -> {}
         }
     }
 
@@ -211,9 +209,7 @@ internal class PiSessionStore(
                 sessionShots.update { shots -> shots.filterNot { it.timestamp == event.timestamp } }
             }
 
-            else -> {
-                Unit
-            }
+            else -> {}
         }
     }
 
@@ -236,9 +232,7 @@ internal class PiSessionStore(
                 trainingImplement.value = event.implement
             }
 
-            else -> {
-                Unit
-            }
+            else -> {}
         }
     }
 
@@ -272,9 +266,7 @@ internal class PiSessionStore(
                 radarConfig.value = event.config
             }
 
-            else -> {
-                Unit
-            }
+            else -> {}
         }
     }
 
@@ -300,9 +292,7 @@ internal class PiSessionStore(
                 cloudUploadStatus.value = event.status
             }
 
-            else -> {
-                Unit
-            }
+            else -> {}
         }
     }
 

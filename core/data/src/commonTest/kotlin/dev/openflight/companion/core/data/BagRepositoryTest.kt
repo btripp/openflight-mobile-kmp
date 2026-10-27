@@ -15,6 +15,7 @@ import dev.openflight.companion.core.database.ShotHistoryDatabase
 import dev.openflight.companion.core.database.buildShotHistoryDatabase
 import dev.openflight.companion.core.database.inMemoryShotHistoryDatabaseBuilder
 import dev.openflight.companion.core.model.GolfClub
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -22,6 +23,7 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 
 /** [DefaultBagRepository] over a real in-memory database (plan F3). */
+@OptIn(ExperimentalCoroutinesApi::class)
 class BagRepositoryTest {
     private class Harness(
         scope: TestScope,

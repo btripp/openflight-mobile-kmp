@@ -14,6 +14,7 @@ import dev.openflight.companion.core.database.buildShotHistoryDatabase
 import dev.openflight.companion.core.database.inMemoryShotHistoryDatabaseBuilder
 import dev.openflight.companion.core.model.GolfClub
 import dev.openflight.companion.core.model.pi.ShotDetail
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -24,6 +25,7 @@ import kotlin.test.Test
  * [DefaultShotHistoryRepository]'s schema v2 surface (plan F3) over a real in-memory database:
  * imported sessions, the user's star and note, and one club's shots across sessions.
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 class ShotHistoryV2RepositoryTest {
     private class Harness(
         scope: TestScope,

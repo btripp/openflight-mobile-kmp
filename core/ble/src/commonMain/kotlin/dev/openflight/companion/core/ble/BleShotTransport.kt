@@ -521,9 +521,7 @@ class BleShotTransport internal constructor(
                 recoverFromDecodeError()
             }
 
-            ControlInbound.Consumed -> {
-                Unit
-            }
+            ControlInbound.Consumed -> {}
         }
     }
 

@@ -274,9 +274,7 @@ private fun ReplaysCard(
                 )
             }
 
-            else -> {
-                Unit
-            }
+            else -> {}
         }
     }
 }

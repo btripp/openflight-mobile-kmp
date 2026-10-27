@@ -5,6 +5,7 @@ import dev.openflight.companion.core.model.pi.CameraPreview
 import dev.openflight.companion.core.model.pi.CameraReplay
 import dev.openflight.companion.core.socketio.SocketConnectionState
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
@@ -43,6 +44,7 @@ internal class PiHarness(
     }
 }
 
+@OptIn(ExperimentalCoroutinesApi::class)
 internal fun runPiTest(
     transport: TransportType = TransportType.WIFI,
     host: String = "pi.local:8080",
