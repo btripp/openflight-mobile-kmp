@@ -32,6 +32,7 @@ tag. Plain `v0.1.0` waits on the hardware test matrix on a real Raspberry Pi.
 
 ### Fixed
 
+- Voice call-outs say "1 yard right" and "1 degree" instead of "1 yards" and "1 degrees" (#137).
 - Shots taken while the phone was locked or the app was in the background are now saved to History
   and counted in My Bag once the app reconnects, on any Pi. Before, they showed on the Session
   screen but were never stored. Shots you deleted stay deleted, and shots from an earlier day get a
