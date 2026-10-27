@@ -33,12 +33,15 @@ paths:
 - `commonTest`: `kotlin.test` + assertk, Turbine for flows, `runTest`, fakes from `core:testing`.
   These run on both the Android host and the iOS simulator (`allTests`), so no JVM-only APIs.
 
-## Pi backend compatibility (stock upstream vs the phone-connectivity fork)
+## Pi backend compatibility (stock upstream vs #297)
 
-Testers run **stock upstream** Pis. Stock has Socket.IO only: no SSE `/api/shots/stream`, no
-`/api/club`, no `/api/calibration/iwr6843/orientation`, no Bluetooth. Those arrive with the fork's
-phone-connectivity PR (open-flight/openflight#282). Every app feature must work on stock or say in
-plain words why it can't. Never show a raw status code, and never wait or spin forever.
+Testers run **stock upstream** Pis. The README's "Backend compatibility" table is the source of
+truth. Stock has Socket.IO and Bluetooth LE schema 2 (open-flight/openflight#285, Pi started with
+`--ble`), but no BLE reconnect catch-up, no SSE `/api/shots/stream` and no `/api/club`. Those three
+arrive with open-flight/openflight#297, not merged yet. Phone calibration
+(`/api/calibration/iwr6843/orientation`) is on neither; it's open-flight/openflight#298. Every app
+feature must work on stock or say in plain words why it can't. Never show a raw status code, and
+never wait or spin forever.
 
 - A missing route on stock answers **GET 404 but POST 405**, because the GET-only static catch-all
   `/<path:path>` still matches. Detect absence with `OpenFlightHttpError.UnexpectedStatus.isRouteAbsent`,
@@ -46,7 +49,7 @@ plain words why it can't. Never show a raw status code, and never wait or spin f
   "OpenFlight returned HTTP 405.")
 - A fake's status codes and payloads must be copied from a real server response, with the backend
   commit it came from. Don't write down what you assume the server returns. `MockServerIT`'s
-  route contract pins the real matrix (stock: 404/405/405; fork: 200/400/409).
+  route contract pins the real matrix (stock: 404/405/405; #297: 200/400 for `/api/club`, calibration still 405 until #298).
 - An integration test drives the data layer in the **app's real call order**. Don't add setup
   calls the app never makes (a `currentClub()` read in `MockServerIT` hid the 405 by enabling
   the fallback early).
