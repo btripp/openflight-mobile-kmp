@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 package dev.openflight.companion.core.insights
 
+import dev.openflight.companion.core.model.METERS_PER_YARD
 import dev.openflight.companion.core.model.ShotMetricFormatter
 
 /**
@@ -15,7 +16,6 @@ enum class UnitSystem {
 }
 
 private const val MPH_TO_KMH = 1.60934
-private const val YARDS_TO_METERS = 0.9144
 
 /** Mirrors `convertSpeedFromMph` (`units.ts`). */
 fun convertSpeedFromMph(
@@ -27,7 +27,7 @@ fun convertSpeedFromMph(
 fun convertDistanceFromYards(
     distanceYards: Double,
     unitSystem: UnitSystem,
-): Double = if (unitSystem == UnitSystem.METRIC) distanceYards * YARDS_TO_METERS else distanceYards
+): Double = if (unitSystem == UnitSystem.METRIC) distanceYards * METERS_PER_YARD else distanceYards
 
 /** Mirrors `getSpeedUnit` (`units.ts`). */
 fun speedUnitLabel(unitSystem: UnitSystem): String = if (unitSystem == UnitSystem.METRIC) "km/h" else "mph"

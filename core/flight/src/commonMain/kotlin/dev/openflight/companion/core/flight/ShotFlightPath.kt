@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 package dev.openflight.companion.core.flight
 
+import dev.openflight.companion.core.model.METERS_PER_YARD
 import kotlin.math.PI
 import kotlin.math.atan2
 import kotlin.math.sqrt
@@ -69,7 +70,6 @@ data class ShotFlightPath(
             )
         }
 
-        private const val METERS_PER_YARD = 0.9144
         private const val RADIANS_TO_DEGREES = 180.0 / PI
     }
 }

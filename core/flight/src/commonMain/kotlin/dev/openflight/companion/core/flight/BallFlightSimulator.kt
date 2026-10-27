@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 package dev.openflight.companion.core.flight
 
+import dev.openflight.companion.core.model.METERS_PER_YARD
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.cos
@@ -417,7 +418,7 @@ class BallFlightSimulator(
         const val DRAG_SCALE_MAX = 1.25
 
         /** The drag fit stops within 0.1 yd of the target carry. */
-        const val CARRY_FIT_TOLERANCE_METERS = 0.1 * 0.9144
+        const val CARRY_FIT_TOLERANCE_METERS = 0.1 * METERS_PER_YARD
 
         private const val MAXIMUM_FIT_ITERATIONS = 20
 

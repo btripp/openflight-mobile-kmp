@@ -205,7 +205,7 @@ struct CameraContent: View {
             }
             ForEach(state.replays, id: \.replayId) { row in
                 HStack {
-                    Text(label(row)).font(.of(.subheadline))
+                    Text(row.label).font(.of(.subheadline))
                     Spacer()
                     if let preparing = state.replay as? CameraReplayStatePreparing, preparing.replayId == row.replayId {
                         ProgressView().tint(Theme.gold)
@@ -226,14 +226,6 @@ struct CameraContent: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .card()
-    }
-
-    private func label(_ row: ReplayRow) -> String {
-        var parts: [String] = []
-        if let number = row.shotNumber { parts.append("#\(number.intValue)") }
-        if let club = row.club { parts.append(club) }
-        if let speed = row.ballSpeedMph { parts.append(String(format: "%.1f mph", speed.doubleValue)) }
-        return parts.joined(separator: " · ")
     }
 }
 
