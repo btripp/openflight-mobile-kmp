@@ -16,6 +16,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
@@ -38,6 +39,7 @@ import dev.openflight.companion.core.model.ShotMetricFormatter
 import dev.openflight.companion.core.model.pi.PiFeatureAvailability
 
 private const val CLOCK_LENGTH = 8
+private const val LARGE_FONT_SCALE = 1.5f
 
 /**
  * One `ShotList.tsx` row, deleted by an end-to-start swipe (or TalkBack's "Delete" action). Without
@@ -96,54 +98,29 @@ private fun ShotRowContent(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(OfSpacing.Md),
     ) {
-        OfText(text = "#${shot.shotNumber}", role = OfTextRole.Label, color = OfColorTokens.Gold)
-        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            // Two lines, so large text wraps instead of cutting the club or the time off.
-            OfText(text = shot.implementLabel ?: clubLabel(shot.club), role = OfTextRole.TitleSmall, maxLines = 2)
-            OfText(
-                text = listOfNotNull(clockTime(shot.timestamp), shot.profileName, shot.shapeLabel).joinToString(" · "),
-                role = OfTextRole.BodySmall,
-                color = OfColorTokens.CreamDim,
-                maxLines = 2,
-            )
-            // Plan F5b: the estimated total and roll, labelled "est.".
-            shot.estimatedTotal?.let {
-                OfText(text = it, role = OfTextRole.BodySmall, color = OfColorTokens.CreamDim, maxLines = 2)
+        // At a large font scale the metrics and Range beside the club and time left them a sliver
+        // ("Driv" / "er", "Total" / "29…"), so they move under them and the text lines lose their cap.
+        if (LocalDensity.current.fontScale >= LARGE_FONT_SCALE) {
+            Column(verticalArrangement = Arrangement.spacedBy(OfSpacing.Sm)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(OfSpacing.Md)) {
+                    ShotNumber(shot)
+                    ShotDetails(shot, maxLines = Int.MAX_VALUE, modifier = Modifier.weight(1f))
+                }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(OfSpacing.Lg),
+                ) {
+                    ShotMetrics(shot, units)
+                    ViewOnRange(shot, onViewOnRange)
+                }
             }
-        }
-        if (shot.isSwingSpeed) {
-            RowMetric(shot.swingSpeedMph?.let { speedValue(it, units) } ?: ShotMetricFormatter.MISSING, "SWING")
         } else {
-            RowMetric(
-                shot.ballSpeedMph?.let {
-                    speedValue(it, units)
-                } ?: ShotMetricFormatter.MISSING,
-                speedUnitLabel(units).uppercase(),
-            )
-            RowMetric(
-                ShotMetricFormatter.number(shot.carryYards?.let { convertDistanceFromYards(it, units) }, 0),
-                distanceUnitLabel(units).uppercase(),
-            )
+            ShotNumber(shot)
+            // Two lines, so large text wraps instead of cutting the club or the time off.
+            ShotDetails(shot, maxLines = 2, modifier = Modifier.weight(1f))
+            ShotMetrics(shot, units)
+            ViewOnRange(shot, onViewOnRange)
         }
-        // Plan F8d: only a shot with the ball speed and carry a flight needs can be viewed.
-        if (onViewOnRange != null && shot.canFly) {
-            OfTextButton(
-                text = "Range",
-                onClick = onViewOnRange,
-                modifier = Modifier.testTag(SessionTestTags.viewOnRange(shot.id)),
-            )
-        }
-    }
-}
-
-@Composable
-private fun RowMetric(
-    value: String,
-    unit: String,
-) {
-    Column(modifier = Modifier.widthIn(min = 56.dp), horizontalAlignment = Alignment.End) {
-        OfText(text = value, role = OfTextRole.TitleSmall, maxLines = 1)
-        OfText(text = unit, role = OfTextRole.Label, color = OfColorTokens.CreamDim)
     }
 }
 
