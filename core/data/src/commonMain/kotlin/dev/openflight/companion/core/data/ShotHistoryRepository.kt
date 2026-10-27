@@ -29,7 +29,8 @@ import kotlinx.coroutines.flow.StateFlow
  *   [HistorySession.includeInStats] is on (off for an import until the user opts it in).
  *
  * Writes never throw and never block the caller: they are applied in order on the repository's
- * own scope. If the database can't be opened, it logs once and keeps this launch's history in
+ * own scope. The user's deletes ([deleteShot], [clearAll]) suspend until theirs was applied and
+ * say whether it was. If the database can't be opened, it logs once and keeps this launch's history in
  * memory instead ([isPersistent] is then `false`); a failing read degrades to an empty list.
  */
 @Suppress("TooManyFunctions") // Reads, live writes, and the user's edits (R8h, F3).
@@ -89,8 +90,13 @@ interface ShotHistoryRepository {
      */
     fun backfill(rows: List<ShotDetail>)
 
-    /** Mirrors a delete of the shot the Pi keys by [timestamp], in every session. */
-    fun deleteShot(timestamp: String) = deleteShots(listOf(timestamp))
+    /**
+     * Deletes the shot the Pi keys by [timestamp], in every session, like [deleteShots], and
+     * suspends until it was applied.
+     *
+     * @return `false` when there is no database or the write failed.
+     */
+    suspend fun deleteShot(timestamp: String): Boolean
 
     /** Mirrors a delete of several shots, e.g. a profile's rows after `session_cleared`. */
     fun deleteShots(timestamps: Collection<String>)
@@ -101,8 +107,13 @@ interface ShotHistoryRepository {
      */
     fun clearProfile(profileId: String)
 
-    /** Deletes the phone's own sessions and their shots, never an imported one. The UI confirms first. */
-    fun clearAll()
+    /**
+     * Deletes the phone's own sessions and their shots, never an imported one, and suspends until
+     * it was applied. The UI confirms first.
+     *
+     * @return `false` when there is no database or the write failed.
+     */
+    suspend fun clearAll(): Boolean
 
     /** Deletes every imported session and its shots. The UI confirms first. */
     fun clearImported()

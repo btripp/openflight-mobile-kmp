@@ -12,6 +12,7 @@ import dev.openflight.companion.core.data.TransportType
 import dev.openflight.companion.core.model.GolfClub
 import dev.openflight.companion.core.model.ShotEvent
 import dev.openflight.companion.core.model.pi.ShotDetail
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -40,9 +41,9 @@ class FakeShotHistoryRepository : ShotHistoryRepository {
     private var importCount = 0
 
     /**
-     * `false` holds back [deleteShots] and [clearAll] (still counted) until [applyPendingWrites], like
-     * a store that hasn't written yet, so a test can see the pending state or a store that never
-     * answers.
+     * `false` holds back [deleteShots], [deleteShot] and [clearAll] (still counted, and the suspending
+     * ones still waiting) until [applyPendingWrites], like a store that hasn't written yet, so a test
+     * can see the pending state or a store that never answers.
      */
     var applyWrites = true
     private val pendingWrites = mutableListOf<() -> Unit>()
@@ -56,6 +57,16 @@ class FakeShotHistoryRepository : ShotHistoryRepository {
 
     private fun write(change: () -> Unit) {
         if (applyWrites) change() else pendingWrites += change
+    }
+
+    /** [write], then waits until it was applied. */
+    private suspend fun applied(change: () -> Unit): Boolean {
+        val done = CompletableDeferred<Boolean>()
+        write {
+            change()
+            done.complete(true)
+        }
+        return done.await()
     }
 
     /** Adds (or replaces) a session with [shots] (newest first). */
@@ -153,12 +164,19 @@ class FakeShotHistoryRepository : ShotHistoryRepository {
 
     override fun deleteShots(timestamps: Collection<String>) {
         deletedTimestamps += timestamps
-        write {
-            sessionsById.update { sessions ->
-                sessions.mapValues { (_, data) ->
-                    if (data.source != SessionSource.LOCAL) return@mapValues data
-                    data.copy(shots = data.shots.filterNot { it.detail.timestamp in timestamps })
-                }
+        write { removeLocal(timestamps) }
+    }
+
+    override suspend fun deleteShot(timestamp: String): Boolean {
+        deletedTimestamps += timestamp
+        return applied { removeLocal(listOf(timestamp)) }
+    }
+
+    private fun removeLocal(timestamps: Collection<String>) {
+        sessionsById.update { sessions ->
+            sessions.mapValues { (_, data) ->
+                if (data.source != SessionSource.LOCAL) return@mapValues data
+                data.copy(shots = data.shots.filterNot { it.detail.timestamp in timestamps })
             }
         }
     }
@@ -173,9 +191,13 @@ class FakeShotHistoryRepository : ShotHistoryRepository {
         }
     }
 
-    override fun clearAll() {
+    override suspend fun clearAll(): Boolean {
         clearAllCount++
-        write { sessionsById.update { sessions -> sessions.filterValues { it.source != SessionSource.LOCAL } } }
+        return applied {
+            sessionsById.update { sessions ->
+                sessions.filterValues { it.source != SessionSource.LOCAL }
+            }
+        }
     }
 
     override fun clearImported() {

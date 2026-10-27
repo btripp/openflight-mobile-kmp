@@ -114,6 +114,13 @@ internal class PiSessionStore(
         }
     }
 
+    /** A pending deletion of [timestamp] got no reply in time. */
+    fun deletionTimedOut(timestamp: String) {
+        deletion.update {
+            if (it is DeletionState.Pending && it.timestamp == timestamp) it.fail(DeletionState.NO_CONFIRMATION) else it
+        }
+    }
+
     /** A pending clear of [profileId] got no confirmation in time. */
     fun clearTimedOut(profileId: String) {
         clear.update {

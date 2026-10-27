@@ -316,7 +316,7 @@ internal class DefaultShotRepository(
         if (pi == null) {
             removeLocally(matches)
             remember(listOf(timestamp))
-            persistentHistory?.deleteShot(timestamp)
+            persistentHistory?.deleteShots(listOf(timestamp))
             return
         }
         onPi("delete_shot") {

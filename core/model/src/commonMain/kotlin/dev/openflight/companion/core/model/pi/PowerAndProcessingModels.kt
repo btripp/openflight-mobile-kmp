@@ -68,7 +68,8 @@ enum class ShotProcessingState {
  *
  * The server answers `delete_shot` with a broadcast that names no shot: `session_state` on
  * success, `delete_shot_error` otherwise. So only one deletion is in flight at a time and a reply
- * is matched to it by whether the shot is still in the session.
+ * is matched to it by whether the shot is still in the session. A deletion that is never answered
+ * fails after [TIMEOUT_MILLIS].
  */
 sealed interface DeletionState {
     data object Idle : DeletionState
@@ -82,7 +83,7 @@ sealed interface DeletionState {
         val timestamp: String,
     ) : DeletionState
 
-    /** The server refused ([reason] is its text), or the link dropped before it answered. */
+    /** The server refused ([reason] is its text), the link dropped, or no reply came in time. */
     data class Failed(
         val timestamp: String,
         val reason: String,
@@ -111,6 +112,11 @@ sealed interface DeletionState {
 
         /** The link dropped (or the host changed) before the server answered. */
         const val CONNECTION_DROPPED: String = "The connection dropped before the server replied."
+
+        const val TIMEOUT_MILLIS: Long = 10_000
+
+        /** Neither `session_state` nor `delete_shot_error` arrived within [TIMEOUT_MILLIS]. */
+        const val NO_CONFIRMATION: String = "The Pi didn't confirm the delete. The list shows what it last reported."
     }
 }
 

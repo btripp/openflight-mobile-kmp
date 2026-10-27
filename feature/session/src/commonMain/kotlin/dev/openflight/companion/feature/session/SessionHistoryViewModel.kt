@@ -32,9 +32,9 @@ import kotlin.time.ExperimentalTime
  * The session history list (plan R8h, the Expo app's Shots tab session list): every stored
  * session, newest first, with its day, shot count, first/last shot time and how it was recorded.
  *
- * Plan R8f: "Clear all history" asks first, then shows pending until the stored sessions are gone
- * (the repository writes in the background), then done; storage that never reflects it fails after
- * [HISTORY_TIMEOUT_MILLIS] with a retry.
+ * Plan R8f: "Clear all history" asks first, then shows pending until the repository says the clear
+ * was applied, then done; storage that fails it, or doesn't answer within [HISTORY_TIMEOUT_MILLIS],
+ * fails with a retry.
  *
  * Select mode picks several sessions to export as one CSV ([SessionHistoryEvent.ExportSelected]).
  */
@@ -194,24 +194,16 @@ class SessionHistoryViewModel(
         val ids: Set<String> = emptySet(),
     )
 
-    /** Done once none of the sessions listed when it was confirmed is left. */
+    /** Done once the repository applied the clear. */
     private fun clearAll() {
         val target = SessionAction.ClearAllHistory
-        val cleared =
-            uiState.value.sessions
-                .map { it.id }
-                .toSet()
         action.value = SessionActionState.Pending(target, SessionActionCopy.pending(target))
-        history.clearAll()
         actionJob?.cancel()
         actionJob =
             viewModelScope.launch {
-                val gone =
-                    withTimeoutOrNull(HISTORY_TIMEOUT_MILLIS) {
-                        history.sessions().first { sessions -> sessions.none { it.id in cleared } }
-                    }
+                val cleared = withTimeoutOrNull(HISTORY_TIMEOUT_MILLIS) { history.clearAll() }
                 action.value =
-                    if (gone != null) {
+                    if (cleared == true) {
                         SessionActionState.Done(target, SessionActionCopy.done(target))
                     } else {
                         SessionActionState.Failed(
@@ -225,7 +217,7 @@ class SessionHistoryViewModel(
     }
 
     companion object {
-        /** How long the history store may take to reflect a local delete or clear. */
+        /** How long the history store may take to apply a local delete or clear. */
         const val HISTORY_TIMEOUT_MILLIS: Long = 10_000
         private const val STOP_TIMEOUT_MILLIS = 5_000L
         private const val YEAR_LENGTH = 4
