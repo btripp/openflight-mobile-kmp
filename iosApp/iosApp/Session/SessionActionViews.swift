@@ -43,14 +43,11 @@ struct SessionActionPanel: View {
                         .font(.of(.subheadline))
                         .foregroundStyle(Theme.creamDim)
                         .fixedSize(horizontal: false, vertical: true)
-                    HStack(spacing: 12) {
-                        if failed.canRetry {
-                            Button(SessionActionCopy.shared.RETRY, action: onRetry)
-                                .buttonStyle(.goldProminent)
-                                .controlSize(.large)
-                                .accessibilityIdentifier(SessionActionTestTags.shared.RETRY)
-                        }
-                        dismissButton
+                    // One row when both labels fit, stacked when they don't (Android's FlowRow):
+                    // side by side at an accessibility text size, "Try again" was cut to "Try a…".
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 12) { failedActions(failed) }
+                        VStack(alignment: .leading, spacing: 12) { failedActions(failed) }
                     }
                 }
                 .accessibilityElement(children: .contain)
@@ -58,6 +55,17 @@ struct SessionActionPanel: View {
                 .onAppear { announce("\(failed.title). \(failed.message)") }
             }
         }
+    }
+
+    @ViewBuilder
+    private func failedActions(_ failed: SessionActionStateFailed) -> some View {
+        if failed.canRetry {
+            Button(SessionActionCopy.shared.RETRY, action: onRetry)
+                .buttonStyle(.goldProminent)
+                .controlSize(.large)
+                .accessibilityIdentifier(SessionActionTestTags.shared.RETRY)
+        }
+        dismissButton
     }
 
     private var dismissButton: some View {
