@@ -13,6 +13,7 @@ import assertk.assertions.isTrue
 import dev.openflight.companion.core.data.AppLifecycle
 import dev.openflight.companion.core.data.LandingEffect
 import dev.openflight.companion.core.data.RangeThemeSetting
+import dev.openflight.companion.core.data.SettingsRepository
 import dev.openflight.companion.core.data.ShotTrailStyle
 import dev.openflight.companion.core.data.TransportType
 import dev.openflight.companion.core.insights.CalloutField
@@ -34,6 +35,7 @@ import dev.openflight.companion.core.testing.FakeScreenReaderMonitor
 import dev.openflight.companion.core.testing.FakeSettingsRepository
 import dev.openflight.companion.core.testing.FakeShotRepository
 import dev.openflight.companion.core.testing.FakeSpeechEngine
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -350,6 +352,42 @@ class SettingsViewModelTest {
             viewModel.onEvent(SettingsEvent.MoveCalloutField(CalloutField.BALL_SPEED, up = true))
 
             assertThat(settings.calloutFields.value).containsExactly(CalloutField.BALL_SPEED, CalloutField.CARRY)
+        }
+
+    @Test
+    fun aQuickSecondTapWaitsForTheFirstWriteInsteadOfReadingTheSameList() =
+        runTest {
+            // A real store suspends while writing; hold every write open until all taps are in.
+            val writeGate = CompletableDeferred<Unit>()
+            val slowSettings =
+                object : SettingsRepository by settings {
+                    override suspend fun setCalloutFields(fields: List<CalloutField>) {
+                        writeGate.await()
+                        settings.setCalloutFields(fields)
+                    }
+                }
+            val slowViewModel =
+                SettingsViewModel(
+                    shots,
+                    slowSettings,
+                    piSession,
+                    AppLifecycle().apply { onForeground() },
+                    speech,
+                    screenReader,
+                )
+
+            slowViewModel.onEvent(SettingsEvent.ToggleCalloutField(CalloutField.SMASH))
+            slowViewModel.onEvent(SettingsEvent.ToggleCalloutField(CalloutField.SPIN))
+            slowViewModel.onEvent(SettingsEvent.MoveCalloutField(CalloutField.SPIN, up = true))
+            slowViewModel.onEvent(SettingsEvent.MoveCalloutField(CalloutField.SPIN, up = true))
+            writeGate.complete(Unit)
+
+            assertThat(settings.calloutFields.value).containsExactly(
+                CalloutField.CARRY,
+                CalloutField.SPIN,
+                CalloutField.BALL_SPEED,
+                CalloutField.SMASH,
+            )
         }
 
     @Test

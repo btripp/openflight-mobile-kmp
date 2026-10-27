@@ -38,6 +38,8 @@ tag. Plain `v0.1.0` waits on the hardware test matrix on a real Raspberry Pi.
   session of their own (#168).
 - When the Pi's two shot streams connect at the same moment, they now share one session, so the
   current-session view no longer comes up empty while shots are saved somewhere else (#135).
+- In Settings › Audio call-outs, quick repeated taps on a field's toggle or its move buttons now all
+  take effect. Before, a second tap could be lost (#136).
 - A broken or hostile device on the network can no longer run the app out of memory by streaming
   endless data on the shot stream: an oversized line or event drops the connection and reconnects
   (#132).
