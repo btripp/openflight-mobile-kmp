@@ -40,7 +40,8 @@ tag. Plain `v0.1.0` waits on the hardware test matrix on a real Raspberry Pi.
   current-session view no longer comes up empty while shots are saved somewhere else (#135).
 - A broken or hostile device on the network can no longer run the app out of memory by streaming
   endless data on the shot stream: an oversized line or event drops the connection and reconnects
-  (#132).
+  (#132). The same now holds for the Pi's live-session socket: a message over 1 MB is refused
+  instead of buffered (#166).
 - The Session dispersion chart labels each club's ellipse with the club (e.g. "D", "7i"), so
   colour-blind golfers can tell the ellipses apart without relying on colour (#43).
 - A club change from the launch monitor no longer crashes the app when the phone can't save it
