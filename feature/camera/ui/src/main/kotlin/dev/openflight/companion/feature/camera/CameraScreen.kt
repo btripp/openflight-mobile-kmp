@@ -37,7 +37,6 @@ import dev.openflight.companion.core.designsystem.OfSpinner
 import dev.openflight.companion.core.designsystem.OfText
 import dev.openflight.companion.core.designsystem.OfTextRole
 import dev.openflight.companion.core.designsystem.OfTopBar
-import dev.openflight.companion.core.model.ShotMetricFormatter
 
 private const val FEED_ASPECT = 4f / 3f
 
@@ -294,7 +293,7 @@ private fun ReplayRowItem(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(OfSpacing.Md),
     ) {
-        OfText(text = replayLabel(row), role = OfTextRole.BodySmall, modifier = Modifier.weight(1f))
+        OfText(text = row.label, role = OfTextRole.BodySmall, modifier = Modifier.weight(1f))
         OfButton(
             text = "Play",
             onClick = { onEvent(CameraEvent.PlayReplay(row.replayId)) },
@@ -304,10 +303,3 @@ private fun ReplayRowItem(
         )
     }
 }
-
-private fun replayLabel(row: ReplayRow): String =
-    listOfNotNull(
-        row.shotNumber?.let { "#$it" },
-        row.club,
-        row.ballSpeedMph?.let { "${ShotMetricFormatter.number(it, 1)} mph" },
-    ).joinToString(" · ")

@@ -6,6 +6,7 @@ import dev.openflight.companion.core.flight.FlightTrajectory
 import dev.openflight.companion.core.flight.RangeSceneDescription
 import dev.openflight.companion.core.flight.Vec3
 import dev.openflight.companion.core.model.GolfClub
+import dev.openflight.companion.core.model.METERS_PER_YARD
 import dev.openflight.companion.core.model.ShotEvent
 import kotlin.math.sqrt
 
@@ -94,7 +95,7 @@ fun rollOutEnd(
     val landing = trajectory.points.lastOrNull() ?: return Vec3.ZERO
     val velocity = landing.velocityMetersPerSecond
     val horizontal = sqrt(velocity.x * velocity.x + velocity.z * velocity.z)
-    val rollMeters = rollYards.coerceAtLeast(0.0) * RangeSceneDescription.YARDS_TO_METERS
+    val rollMeters = rollYards.coerceAtLeast(0.0) * METERS_PER_YARD
     val directionX = if (horizontal > MIN_HORIZONTAL_SPEED) velocity.x / horizontal else 0.0
     val directionZ = if (horizontal > MIN_HORIZONTAL_SPEED) velocity.z / horizontal else 1.0
     val position = landing.positionMeters
