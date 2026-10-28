@@ -107,7 +107,7 @@ class FlightPathProjectorTest {
     @Test
     fun markersNeverCrowdEachOther() {
         FlightView.entries.forEach { view ->
-            project(view).markers.zipWithNext { a, b ->
+            project(view).markers.zipWithNext().forEach { (a, b) ->
                 val gap = kotlin.math.hypot(b.position.x - a.position.x, b.position.y - a.position.y)
                 assertThat(gap).isGreaterThan(17f)
             }

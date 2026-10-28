@@ -111,9 +111,9 @@ class DemoModeTest {
             return true
         }
 
-        override fun clearAll() {
+        override suspend fun clearAll(): Boolean {
             seeded.clear()
-            inner.clearAll()
+            return inner.clearAll()
         }
     }
 

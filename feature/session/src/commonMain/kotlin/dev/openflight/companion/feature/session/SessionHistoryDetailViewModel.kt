@@ -189,20 +189,17 @@ class SessionHistoryDetailViewModel(
         action.value = SessionActionCopy.confirmHistoryDelete(target)
     }
 
-    /** Done once the stored shot is gone; the store writes in the background. */
+    /** Done once the repository applied the delete. */
     private fun delete(target: SessionAction) {
         if (target !is SessionAction.DeleteShot) return
         action.value = SessionActionState.Pending(target, SessionActionCopy.pending(target))
-        history.deleteShot(target.id)
         actionJob?.cancel()
         actionJob =
             viewModelScope.launch {
-                val gone =
-                    withTimeoutOrNull(SessionHistoryViewModel.HISTORY_TIMEOUT_MILLIS) {
-                        shots.first { stored -> stored.none { it.detail.timestamp == target.id } }
-                    }
+                val deleted =
+                    withTimeoutOrNull(SessionHistoryViewModel.HISTORY_TIMEOUT_MILLIS) { history.deleteShot(target.id) }
                 action.value =
-                    if (gone != null) {
+                    if (deleted == true) {
                         SessionActionState.Done(target, SessionActionCopy.done(target))
                     } else {
                         SessionActionState.Failed(

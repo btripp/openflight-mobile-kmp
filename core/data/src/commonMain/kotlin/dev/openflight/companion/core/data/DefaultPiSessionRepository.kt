@@ -110,6 +110,7 @@ internal class DefaultPiSessionRepository(
     private val activeSocket = MutableStateFlow<PiSocket?>(null)
     private var currentKey: SessionKey? = null
     private var sessionJob: Job? = null
+    private var deletionTimeout: Job? = null
     private var clearTimeout: Job? = null
 
     override fun start() {
@@ -146,6 +147,12 @@ internal class DefaultPiSessionRepository(
             store.deletion.value = previous
             throw failure
         }
+        deletionTimeout?.cancel()
+        deletionTimeout =
+            scope.launch {
+                delay(DeletionState.TIMEOUT_MILLIS)
+                store.deletionTimedOut(timestamp)
+            }
     }
 
     override fun dismissDeletion() {

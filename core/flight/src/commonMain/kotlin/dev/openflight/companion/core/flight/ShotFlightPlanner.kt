@@ -2,6 +2,7 @@
 package dev.openflight.companion.core.flight
 
 import dev.openflight.companion.core.model.Conditions
+import dev.openflight.companion.core.model.METERS_PER_YARD
 import dev.openflight.companion.core.model.TargetBearing
 
 /**
@@ -39,14 +40,10 @@ class ShotFlightPlanner(
         val adjusted = result.adjusted
         val input =
             result.input.copy(
-                targetCarryMeters = result.estimate.carryYards * YARDS_TO_METERS,
+                targetCarryMeters = result.estimate.carryYards * METERS_PER_YARD,
                 windMetersPerSecond = adjusted.windMetersPerSecond,
             )
         val simulator = BallFlightSimulator(renderConfiguration.copy(airDensity = adjusted.airDensity))
         return PlannedShot(result.estimate, simulator.fitToCarry(input, adjusted.run), input)
-    }
-
-    private companion object {
-        const val YARDS_TO_METERS = 0.9144
     }
 }

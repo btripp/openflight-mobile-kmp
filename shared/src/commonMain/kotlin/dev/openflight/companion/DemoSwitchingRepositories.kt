@@ -265,7 +265,9 @@ internal class DemoSwitchingShotHistoryRepository(
 
     override fun clearProfile(profileId: String) = active().clearProfile(profileId)
 
-    override fun clearAll() = active().clearAll()
+    override suspend fun deleteShot(timestamp: String) = active().deleteShot(timestamp)
+
+    override suspend fun clearAll() = active().clearAll()
 
     override fun clearImported() = real.clearImported()
 

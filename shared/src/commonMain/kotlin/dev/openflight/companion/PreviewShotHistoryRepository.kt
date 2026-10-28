@@ -14,6 +14,7 @@ import dev.openflight.companion.core.model.pi.ShotDetail
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -108,24 +109,20 @@ internal class PreviewShotHistoryRepository(
 
     override fun backfill(rows: List<ShotDetail>) = Unit
 
-    override fun deleteShots(timestamps: Collection<String>) =
-        write {
-            stored.update { sessions ->
-                sessions.map { session ->
-                    session.copy(
-                        shots =
-                            session.shots.filterNot {
-                                it.detail.timestamp in
-                                    timestamps
-                            },
-                    )
-                }
+    override fun deleteShots(timestamps: Collection<String>) = write { remove(timestamps) }
+
+    override suspend fun deleteShot(timestamp: String): Boolean = applied { remove(listOf(timestamp)) }
+
+    private fun remove(timestamps: Collection<String>) =
+        stored.update { sessions ->
+            sessions.map { session ->
+                session.copy(shots = session.shots.filterNot { it.detail.timestamp in timestamps })
             }
         }
 
     override fun clearProfile(profileId: String) = Unit
 
-    override fun clearAll() = write { stored.value = emptyList() }
+    override suspend fun clearAll(): Boolean = applied { stored.value = emptyList() }
 
     override fun clearImported() = Unit
 
@@ -153,6 +150,13 @@ internal class PreviewShotHistoryRepository(
 
     private fun updateShots(change: (HistoryShot) -> HistoryShot) =
         stored.update { sessions -> sessions.map { session -> session.copy(shots = session.shots.map(change)) } }
+
+    /** Like [write], but in the caller and returning once it landed; a stuck store never returns. */
+    private suspend fun applied(change: () -> Unit): Boolean {
+        delay(writeDelayMillis ?: awaitCancellation())
+        change()
+        return true
+    }
 
     private fun write(change: () -> Unit) {
         val delayMillis = writeDelayMillis ?: return

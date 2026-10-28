@@ -39,18 +39,19 @@ internal class GeodataCache(
         key: String,
         body: String,
     ) {
-        runCatching {
-            fileSystem.createDirectories(directory)
-            val path = pathFor(key)
-            fileSystem.write(path) {
-                writeUtf8("${now()}\n")
-                writeUtf8(body)
+        val _ =
+            runCatching {
+                fileSystem.createDirectories(directory)
+                val path = pathFor(key)
+                fileSystem.write(path) {
+                    writeUtf8("${now()}\n")
+                    writeUtf8(body)
+                }
+                fileSystem
+                    .list(directory)
+                    .filter { it != path && it.name.startsWith(FILE_PREFIX) }
+                    .forEach { fileSystem.delete(it) }
             }
-            fileSystem
-                .list(directory)
-                .filter { it != path && it.name.startsWith(FILE_PREFIX) }
-                .forEach { fileSystem.delete(it) }
-        }
     }
 
     private fun pathFor(key: String): Path = directory / "$FILE_PREFIX${key.fileSafe()}.cache"

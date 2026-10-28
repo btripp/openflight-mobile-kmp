@@ -323,7 +323,7 @@ internal class DefaultShotRepository(
         if (pi == null) {
             removeLocally(matches)
             remember(listOf(timestamp))
-            persistentHistory?.deleteShot(timestamp)
+            persistentHistory?.deleteShots(listOf(timestamp))
             return
         }
         onPi("delete_shot") {
@@ -545,9 +545,7 @@ internal class DefaultShotRepository(
                 persistentHistory?.clearProfile(profileId)
             }
 
-            else -> {
-                Unit
-            }
+            else -> {}
         }
     }
 
@@ -669,13 +667,9 @@ internal class DefaultShotRepository(
                     syncedThisConnection = false
                 }
 
-                syncedThisConnection -> {
-                    Unit
-                }
+                syncedThisConnection -> {}
 
-                type == TransportType.BLUETOOTH && !controls -> {
-                    Unit
-                }
+                type == TransportType.BLUETOOTH && !controls -> {}
 
                 else -> {
                     syncedThisConnection = true

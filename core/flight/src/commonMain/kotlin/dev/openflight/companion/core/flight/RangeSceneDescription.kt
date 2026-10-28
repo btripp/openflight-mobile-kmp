@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 package dev.openflight.companion.core.flight
 
+import dev.openflight.companion.core.model.METERS_PER_YARD
+
 /**
  * A single yardage marker on the range. Ported from `RangeSceneDescription.swift`'s
  * `RangeMarkerDescription`.
@@ -37,13 +39,12 @@ data class RangeSceneDescription(
     val markerScenePositions: List<Vec3> =
         markers.mapIndexed { index, marker ->
             val side = if (index % 2 == 0) -1.0 else 1.0
-            Vec3(side * MARKER_LATERAL_OFFSET_METERS, 0.0, -marker.yards * YARDS_TO_METERS)
+            Vec3(side * MARKER_LATERAL_OFFSET_METERS, 0.0, -marker.yards * METERS_PER_YARD)
         }
 
     companion object {
         /** The yardage markers' distance left or right of the target line. */
         const val MARKER_LATERAL_OFFSET_METERS = 9.0
-        const val YARDS_TO_METERS = 0.9144
         private const val FIRST_MARKER_YARDS = 50
         private const val LAST_MARKER_YARDS = 350
         private const val MARKER_YARDS_STEP = 50

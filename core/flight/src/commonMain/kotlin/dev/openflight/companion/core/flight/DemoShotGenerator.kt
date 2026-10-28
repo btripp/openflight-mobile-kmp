@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 package dev.openflight.companion.core.flight
 
+import dev.openflight.companion.core.model.METERS_PER_YARD
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.ln
@@ -74,7 +75,7 @@ class DemoShotGenerator(
             spinRpm = round(spin),
             spinAxisDeg = tenths(axis),
             clubPathDeg = tenths(horizontal - axis),
-            carryYards = tenths(carryMeters / YARDS_TO_METERS),
+            carryYards = tenths(carryMeters / METERS_PER_YARD),
         )
     }
 
@@ -114,7 +115,6 @@ class DemoShotGenerator(
         private const val TENTHS = 10.0
         private const val HUNDREDTHS = 100.0
         private const val MPH_TO_METERS_PER_SECOND = 0.44704
-        private const val YARDS_TO_METERS = 0.9144
 
         /**
          * Typical amateur smash factors (ball speed ÷ club speed), falling from the driver to the

@@ -85,9 +85,6 @@ object SessionActionCopy {
     const val RETRY: String = "Try again"
     const val DISMISS: String = "OK"
 
-    /** The Pi answered neither `session_state` nor `delete_shot_error` in time. */
-    const val DELETE_NOT_CONFIRMED: String = "The Pi didn't confirm the delete. The list shows what it last reported."
-
     /** Shown instead of Retry while the Pi's link is down. */
     const val RECONNECT_TO_RETRY: String = "Reconnect to the Pi to try again."
 

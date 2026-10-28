@@ -97,7 +97,7 @@ class EndpointPolicyGateTest {
     fun theSameHostOverHttpsIsAllowedThrough() =
         runTest {
             val client = PiControlClient(HttpClient(engine) { installOpenFlightDefaults() })
-            runCatching { client.shutdown("https://$PUBLIC_IP") }
+            val _ = runCatching { client.shutdown("https://$PUBLIC_IP") }
             assertThat(requests).isEqualTo(1)
         }
 

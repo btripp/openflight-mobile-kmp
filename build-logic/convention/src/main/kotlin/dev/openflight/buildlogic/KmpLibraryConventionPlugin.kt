@@ -59,6 +59,7 @@ class KmpLibraryConventionPlugin : Plugin<Project> {
 
             registerNoComposeInCommonMainCheck()
             configureBundledSqliteHostTests()
+            configureKotlinCompilerChecks()
         }
     }
 }

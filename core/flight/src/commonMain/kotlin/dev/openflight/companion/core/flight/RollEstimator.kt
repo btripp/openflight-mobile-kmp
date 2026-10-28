@@ -2,6 +2,7 @@
 package dev.openflight.companion.core.flight
 
 import dev.openflight.companion.core.model.Firmness
+import dev.openflight.companion.core.model.METERS_PER_YARD
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
@@ -87,7 +88,7 @@ class RollEstimator {
                 Firmness.NORMAL -> run(horizontal, descending, backspin, NATURAL_TURF)
                 Firmness.FIRM -> run(horizontal, descending, backspin, ARTIFICIAL_TURF)
             }
-        return RollEstimate(rollYards = maxOf(runMeters, 0.0) * METERS_TO_YARDS)
+        return RollEstimate(rollYards = maxOf(runMeters, 0.0) / METERS_PER_YARD)
     }
 
     private fun run(
@@ -184,6 +185,5 @@ class RollEstimator {
         const val BALL_RADIUS_METERS = 0.02135
         const val RPM_TO_RADIANS_PER_SECOND = 2.0 * PI / 60.0
         const val DEGREES_TO_RADIANS = PI / 180.0
-        const val METERS_TO_YARDS = 1.0 / 0.9144
     }
 }

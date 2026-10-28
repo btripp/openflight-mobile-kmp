@@ -231,9 +231,7 @@ class ShotTrail<P : PathSink>(
                 detail.visible = writeSparkles(detail.path, projection, landing.x, landing.z, phase, eased)
             }
 
-            LandingEffect.OFF -> {
-                Unit
-            }
+            LandingEffect.OFF -> {}
         }
     }
 

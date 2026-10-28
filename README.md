@@ -650,6 +650,7 @@ trust the folder the first time you run `claude` here.
 | [`.claude/settings.json`](.claude/settings.json) | Pre-approves `./gradlew`, `xcodebuild` and read-only git commands. Asks before `git commit` and `git push`. Blocks Gradle publish tasks and init scripts, force-push, `reset --hard`, and reading signing keys or `.env` files. |
 | [`.claude/hooks/commit-gate.sh`](.claude/hooks/commit-gate.sh) | Before any `git commit` Claude makes, runs `spotlessCheck detekt allTests :androidApp:assembleDebug` (plus the iOS framework link on macOS) and blocks the commit unless Gradle exits 0. Markdown-only commits skip the build. Set `OPENFLIGHT_SKIP_COMMIT_GATE=1` to bypass it. |
 | [`.claude/skills/verify`](.claude/skills/verify/SKILL.md) | `/verify` runs the same chain on demand, and the Xcode build too when iOS code changed. |
+| [`.claude/skills/edge-to-edge`](.claude/skills/edge-to-edge/SKILL.md), [`r8-analyzer`](.claude/skills/r8-analyzer/SKILL.md), [`android-permissions-security`](.claude/skills/android-permissions-security/SKILL.md) | Three of Google's [android/skills](https://github.com/android/skills) (Apache-2.0), copied in with a note on what this repo does differently. Each SKILL.md names the upstream commit it came from. |
 
 It also enables two plugins:
 - **`swift-lsp`**, from Anthropic's official marketplace. It gives Claude Swift diagnostics

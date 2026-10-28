@@ -11,12 +11,14 @@ import dev.openflight.companion.core.database.buildShotHistoryDatabase
 import dev.openflight.companion.core.database.inMemoryShotHistoryDatabaseBuilder
 import dev.openflight.companion.core.model.CalloutContext
 import dev.openflight.companion.core.model.pi.ShotDetail
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 
 /** [DefaultActivityRepository] over a real in-memory database, and [DefaultActiveGameRepository] (plan F3). */
+@OptIn(ExperimentalCoroutinesApi::class)
 class ActivityAndGameRepositoryTest {
     @Test
     fun activitiesAreRecordedListedNewestFirstFilteredAndDeleted() =

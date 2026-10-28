@@ -26,7 +26,7 @@ class WebSocketFrameCapTest {
     fun aFrameOverTheCapClosesTheSocketWithoutBufferingIt() =
         runTest {
             ServerSocket(0, 1, InetAddress.getLoopbackAddress()).use { server ->
-                thread(isDaemon = true) { serveOversizedFrame(server) }
+                val _ = thread(isDaemon = true) { serveOversizedFrame(server) }
                 val transport = KtorWebSocketTransport(HttpClient(MockEngine { respond("") }))
 
                 // Real sockets: wait on the wall clock, not runTest's virtual one.
@@ -69,7 +69,7 @@ class WebSocketFrameCapTest {
             out.flush()
             // Never send the body; hold the socket open until the client hangs up.
             try {
-                while (input.read() >= 0) Unit
+                input.readAllBytes()
             } catch (_: IOException) {
                 // The client reset the connection: done.
             }

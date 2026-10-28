@@ -121,6 +121,33 @@ class PiSessionDeleteAndClearTest {
         }
 
     @Test
+    fun aDeletionWithoutAReplyGivesUpAfterTenSeconds() =
+        runSessionTest { h ->
+            h.repository.deleteShot(PiFixtures.SHOT_TIMESTAMP)
+
+            advanceTimeBy(DeletionState.TIMEOUT_MILLIS - 1)
+            runCurrent()
+            assertThat(h.deletion).isEqualTo(DeletionState.Pending(PiFixtures.SHOT_TIMESTAMP))
+
+            advanceTimeBy(1)
+            runCurrent()
+            assertThat(h.deletion)
+                .isEqualTo(DeletionState.Failed(PiFixtures.SHOT_TIMESTAMP, DeletionState.NO_CONFIRMATION))
+        }
+
+    @Test
+    fun aConfirmedDeletionIsNotFailedByTheOldTimeout() =
+        runSessionTest { h ->
+            h.repository.deleteShot(PiFixtures.SHOT_TIMESTAMP)
+            h.socket.serverFrame(PiFixtures.SESSION_STATE_AFTER_DELETE_FRAME)
+
+            advanceTimeBy(DeletionState.TIMEOUT_MILLIS + 1)
+            runCurrent()
+
+            assertThat(h.deletion).isEqualTo(DeletionState.Deleted(PiFixtures.SHOT_TIMESTAMP))
+        }
+
+    @Test
     fun aSessionStateThatStillHoldsTheShotKeepsItWaiting() =
         runSessionTest { h ->
             h.repository.deleteShot(PiFixtures.SHOT_TIMESTAMP)

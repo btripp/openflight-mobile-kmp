@@ -189,6 +189,37 @@ class CalloutComposerTest {
                 expected = "Carry about 152 yards",
             ),
             Case(
+                description = "offline that rounds to 1 uses the singular unit",
+                input = CalloutInput(offlineYards = 1.2),
+                fields = listOf(CalloutField.OFFLINE),
+                expected = "1 yard right",
+            ),
+            Case(
+                description = "TARGET_DELTA that rounds to -1 uses the singular unit",
+                input = CalloutInput(targetDeltaYards = -0.8),
+                fields = listOf(CalloutField.TARGET_DELTA),
+                expected = "1 yard short",
+            ),
+            Case(
+                description = "a 1 degree launch uses the singular unit",
+                input = CalloutInput(launchAngleDegrees = 1.0),
+                fields = listOf(CalloutField.LAUNCH),
+                expected = "1 degree",
+            ),
+            Case(
+                description = "a metric distance of 1 uses the singular unit",
+                input = CalloutInput(carryYards = 1.0),
+                fields = listOf(CalloutField.CARRY),
+                units = UnitSystem.METRIC,
+                expected = "1 meter",
+            ),
+            Case(
+                description = "a speed of 1 uses the singular unit",
+                input = CalloutInput(ballSpeedMph = 1.0),
+                fields = listOf(CalloutField.BALL_SPEED),
+                expected = "1 mile per hour",
+            ),
+            Case(
                 description = "fields are spoken in the order requested, not enum order",
                 input = CalloutInput(carryYards = 152.0, ballSpeedMph = 118.0),
                 fields = listOf(CalloutField.BALL_SPEED, CalloutField.CARRY),

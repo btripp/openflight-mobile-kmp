@@ -10,6 +10,7 @@ import dev.openflight.companion.core.model.pi.ClearState
 import dev.openflight.companion.core.model.pi.DeletionState
 import dev.openflight.companion.core.model.pi.PiLinkState
 import dev.openflight.companion.core.socketio.SocketConnectionState
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -21,6 +22,7 @@ import kotlin.test.Test
  * in the foreground, and anything still waiting for the Pi fails with "connection dropped". A fake
  * lifecycle source drives real repositories over fake transports and sockets.
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 class AppLifecycleTest {
     private class Harness(
         scope: TestScope,
