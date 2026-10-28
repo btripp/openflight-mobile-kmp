@@ -4,7 +4,6 @@ package dev.openflight.companion.core.socketio
 import dev.openflight.companion.core.network.EndpointUrl
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.websocket.DefaultClientWebSocketSession
-import io.ktor.client.plugins.websocket.WebSockets
 import io.ktor.client.plugins.websocket.webSocketSession
 import io.ktor.websocket.Frame
 import io.ktor.websocket.close
@@ -19,15 +18,13 @@ import kotlinx.coroutines.launch
  * server (Flask-SocketIO in `threading` mode with `simple-websocket` installed) accepts
  * `transport=websocket` directly, verified live against `openflight-server --mock`.
  *
- * [httpClient] is the app's shared client (OkHttp on Android, Darwin on iOS; both support
- * WebSockets). A derived client with the [WebSockets] plugin shares its engine.
+ * [httpClient] is the app's shared client (OkHttp on Android, Darwin on iOS). The socket runs on
+ * [cappedWebSocketClient], which refuses an incoming frame over [MAX_FRAME_BYTES] (issue #166).
  */
 class KtorWebSocketTransport(
     httpClient: HttpClient,
 ) : EngineIoTransport {
-    // shortcut: no incoming frame-size cap (issue #132). Ktor's OkHttp engine throws on any
-    // `maxFrameSize`, and OkHttp has no limit of its own; add one if the engine ever supports it.
-    private val client = httpClient.config { install(WebSockets) }
+    private val client = cappedWebSocketClient(httpClient)
 
     /**
      * @throws dev.openflight.companion.core.network.OpenFlightHttpError.InvalidHost when
