@@ -10,6 +10,7 @@ import dev.openflight.companion.core.database.buildShotHistoryDatabase
 import dev.openflight.companion.core.database.inMemoryShotHistoryDatabaseBuilder
 import dev.openflight.companion.core.model.pi.ShotDetail
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.TestScope
@@ -25,6 +26,7 @@ import kotlin.test.Test
  * #148: the current session survives an app restart (a second repository over the same database
  * and settings DataStore), so a BLE `session_cleared` after the restart still reaches its shots.
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 class ShotHistoryRestartTest {
     private val directory: Path =
         FileSystem.SYSTEM_TEMPORARY_DIRECTORY / "openflight-restart-${Random.nextLong().toULong()}"
