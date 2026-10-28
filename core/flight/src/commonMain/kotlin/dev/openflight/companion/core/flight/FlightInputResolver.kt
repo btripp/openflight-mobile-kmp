@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 package dev.openflight.companion.core.flight
 
+import dev.openflight.companion.core.model.METERS_PER_YARD
 import dev.openflight.companion.core.model.ShotEvent
 
 /**
@@ -56,7 +57,7 @@ class FlightInputResolver {
             horizontalLaunchDegrees = measurements.horizontalDegrees,
             spinRpm = measurements.spinRpm,
             spinAxisDegrees = measurements.spinAxisDegrees,
-            targetCarryMeters = shot.carryYards * YARDS_TO_METERS,
+            targetCarryMeters = shot.carryYards * METERS_PER_YARD,
             windMetersPerSecond = Vec3.ZERO,
             provenance = measurements.provenance,
         )
@@ -153,7 +154,6 @@ class FlightInputResolver {
 
     private companion object {
         const val MILES_PER_HOUR_TO_METERS_PER_SECOND = 0.44704
-        const val YARDS_TO_METERS = 0.9144
 
         const val LAUNCH_ANGLE_MIN_DEGREES = 1.0
         const val LAUNCH_ANGLE_MAX_DEGREES = 55.0

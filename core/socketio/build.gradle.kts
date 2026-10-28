@@ -15,6 +15,10 @@ kotlin {
             implementation(projects.core.network)
             implementation(libs.kotlinx.coroutines.core)
         }
+        androidMain.dependencies {
+            // Issue #166: CIO honours the WebSocket maxFrameSize cap; Ktor's OkHttp engine can't.
+            implementation(libs.ktor.client.cio)
+        }
         commonTest.dependencies {
             implementation(libs.ktor.client.mock)
         }

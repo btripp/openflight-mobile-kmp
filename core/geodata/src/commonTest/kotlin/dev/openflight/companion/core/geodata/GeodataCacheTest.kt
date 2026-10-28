@@ -2,6 +2,7 @@
 package dev.openflight.companion.core.geodata
 
 import assertk.assertThat
+import assertk.assertions.containsExactly
 import assertk.assertions.isEqualTo
 import assertk.assertions.isNull
 import okio.FileSystem
@@ -72,5 +73,33 @@ class GeodataCacheTest {
         instance.write("lat39.74_lon-104.99", "denver")
 
         assertThat(instance.read("lat39.74_lon-104.99")).isEqualTo("denver")
+    }
+
+    @Test
+    fun anEntryStampedInTheFutureReadsAsNull() {
+        clockMillis = 1.minutes.inWholeMilliseconds
+        val instance = cache()
+        instance.write("denver", "the body")
+
+        clockMillis = 0L
+
+        assertThat(instance.read("denver")).isNull()
+    }
+
+    @Test
+    fun writingAKeyDeletesEveryOtherEntry() {
+        val instance = cache()
+        instance.write("denver", "denver")
+        instance.write("boulder", "boulder")
+        FileSystem.SYSTEM.write(directory / "unrelated.txt") { writeUtf8("keep") }
+
+        assertThat(instance.read("denver")).isNull()
+        assertThat(instance.read("boulder")).isEqualTo("boulder")
+        assertThat(
+            FileSystem.SYSTEM
+                .list(directory)
+                .map { it.name }
+                .sorted(),
+        ).containsExactly("geodata-boulder.cache", "unrelated.txt")
     }
 }

@@ -9,6 +9,7 @@ import dev.openflight.companion.core.flight.ShotFlightPath
 import dev.openflight.companion.core.flight.ShotFlightPlanner
 import dev.openflight.companion.core.model.Conditions
 import dev.openflight.companion.core.model.GolfClub
+import dev.openflight.companion.core.model.METERS_PER_YARD
 import dev.openflight.companion.core.model.ShotEvent
 import dev.openflight.companion.core.model.ShotMetricFormatter
 import dev.openflight.companion.core.model.TargetBearing
@@ -217,7 +218,7 @@ class ShotDetailBuilder(
         units: UnitSystem,
     ) {
         val metric = units == UnitSystem.METRIC
-        val apex = flight?.apexYards?.let { if (metric) it * YARDS_TO_METERS else it * FEET_PER_YARD }
+        val apex = flight?.apexYards?.let { if (metric) it * METERS_PER_YARD else it * FEET_PER_YARD }
         val flown = flight != null && estimated
         add(ShotDetailMetric("Apex", ShotMetricFormatter.number(apex, 0), if (metric) "m" else "ft", flown))
         add(ShotDetailMetric("Descent", flight?.let { formatDegrees(it.descentDegrees, 0) } ?: MISSING, "", flown))
@@ -314,7 +315,6 @@ class ShotDetailBuilder(
     private companion object {
         const val MISSING = ShotMetricFormatter.MISSING
         const val TIMESTAMP_MINUTES = 16
-        const val YARDS_TO_METERS = 0.9144
         const val FEET_PER_YARD = 3.0
         val ESTIMATED_SPIN_SOURCES = setOf("calculated", "club_typical")
     }

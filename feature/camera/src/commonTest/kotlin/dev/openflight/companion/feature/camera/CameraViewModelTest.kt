@@ -239,6 +239,19 @@ class CameraViewModelTest {
         assertThat(rows.map { it.club }).isEqualTo(listOf("Pitching Wedge", null))
     }
 
+    @Test
+    fun replayRowLabelJoinsNumberClubAndSpeedSkippingWhatIsMissing() {
+        val rows =
+            CameraViewModel.replayRows(
+                listOf(
+                    shot(2, CameraReplay(id = "r2")).copy(club = "pw", ballSpeedMph = 98.3),
+                    shot(1, CameraReplay(id = "r1")).copy(club = null, shotNumber = null),
+                ),
+            )
+
+        assertThat(rows.map { it.label }).isEqualTo(listOf("#2 · Pitching Wedge · 98.3 mph", "150.0 mph"))
+    }
+
     /** Plan F14: Demo mode has no camera, so the screen shows a placeholder. */
     @Test
     fun demoModeShowsTheCameraPlaceholder() =

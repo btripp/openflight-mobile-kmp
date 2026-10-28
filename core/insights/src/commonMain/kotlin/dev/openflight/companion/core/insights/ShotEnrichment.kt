@@ -87,8 +87,6 @@ data class ShotEnrichment(
     val carrySpinAdjustedYards: Double?,
     val profileName: String?,
 ) {
-    val hasCarryRange: Boolean get() = carryRangeLowYards != null && carryRangeHighYards != null
-
     /** `"231-255 yds"` (`formatCarryRange`, `units.ts`), or `null` without a range. */
     fun carryRangeText(units: UnitSystem): String? {
         val low = carryRangeLowYards

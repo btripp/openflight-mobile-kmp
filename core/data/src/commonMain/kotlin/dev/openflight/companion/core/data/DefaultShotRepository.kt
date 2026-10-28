@@ -31,6 +31,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
@@ -92,7 +94,8 @@ internal fun interface WifiTransportFactory {
  *
  * Plan R8j (stock upstream Pi: no `/api/shots/stream`, no `/api/club`): when the Wi-Fi stream
  * answers 404 ([ConnectionErrorKind.STREAM_UNAVAILABLE]; the transport then stops probing until a
- * retry, a host change or the next start) and the Pi's Socket.IO link is connected, the Pi's live
+ * retry, a Socket.IO reconnect (#46, quietly), a host change or the next start) and the Pi's
+ * Socket.IO link is connected, the Pi's live
  * `shot`/`shot_update` feed [history] and [latestShot] (stored once, by the [PiSessionRepository.liveShots]
  * collector), [connectionState] shows the link's state instead of the 404, and the club follows the
  * Pi's `session_state`/`club_changed`. A club call that gets 404/405 from `/api/club` switches to
@@ -141,6 +144,9 @@ internal class DefaultShotRepository(
 
     /** R8j: this connection's `/api/club` answered 404, so club calls go over Socket.IO. */
     private val clubApiAbsent = MutableStateFlow(false)
+
+    /** #46: a quiet re-probe of a missing stream is running; its Idle/Connecting isn't shown. */
+    private val reprobingStream = MutableStateFlow(false)
 
     private val mutableLiveShotSource = MutableStateFlow(LiveShotSource.NONE)
 
@@ -201,6 +207,7 @@ internal class DefaultShotRepository(
     }
 
     override fun retry() {
+        reprobingStream.value = false
         val transport = activeTransport.value
         if (transport == null) start() else transport.retry()
         // Issue #6: the Socket.IO link retries too, or it waits out a stuck attempt and its backoff.
@@ -463,6 +470,7 @@ internal class DefaultShotRepository(
             activeTransport.value = transport
             activeTransportType.value = key.type
             clubApiAbsent.value = false
+            reprobingStream.value = false
             // R8j: the Socket.IO fallbacks only exist for a Wi-Fi transport with a Pi session.
             val pi = piSession?.takeIf { key.type == TransportType.WIFI }
             try {
@@ -472,6 +480,10 @@ internal class DefaultShotRepository(
                     launch(start = CoroutineStart.UNDISPATCHED) {
                         var previous: ConnectionState = ConnectionState.Idle
                         transport.state.collect { state ->
+                            if (reprobingStream.value) {
+                                if (state == ConnectionState.Idle || state == ConnectionState.Connecting) return@collect
+                                reprobingStream.value = false
+                            }
                             // R8h: every successful (re)connect starts a history session, or continues
                             // the current one after a short gap (ShotHistoryRepository.startSession).
                             if (state == ConnectionState.Connected && previous != state) {
@@ -482,7 +494,7 @@ internal class DefaultShotRepository(
                             publishConnectionState(pi)
                         }
                     }
-                    if (pi != null) followPiFallback(pi)
+                    if (pi != null) followPiFallback(pi, transport)
                     launch(start = CoroutineStart.UNDISPATCHED) {
                         transport.schemaEvents.collect { applySchemaEvent(it) }
                     }
@@ -573,7 +585,7 @@ internal class DefaultShotRepository(
         transport: ShotTransport,
         overWifi: Boolean,
     ) = launch(start = CoroutineStart.UNDISPATCHED) {
-        combine(transport.piFeatures, transport.state) { features, state ->
+        combine(transport.piFeatures, transportState) { features, state ->
             piUpdateNoticeFor(features, overWifi = overWifi, stockPi = overWifi && state.isStreamUnavailable())
         }.collect { mutablePiUpdateNotice.value = it }
     }
@@ -585,8 +597,26 @@ internal class DefaultShotRepository(
      * club from its `session_state`/`club_changed`. With a working stream (fork backend) the stream
      * stays the only source and Socket.IO only enriches.
      */
-    private fun CoroutineScope.followPiFallback(pi: PiSessionRepository) {
+    private fun CoroutineScope.followPiFallback(
+        pi: PiSessionRepository,
+        transport: ShotTransport,
+    ) {
         launch(start = CoroutineStart.UNDISPATCHED) { pi.linkState.collect { publishConnectionState(pi) } }
+        // #46: the Pi may have been upgraded to a backend with SSE, so each Socket.IO reconnect
+        // re-probes a missing stream, quietly: the 404 (and Socket.IO's shots) stay until it settles.
+        launch(start = CoroutineStart.UNDISPATCHED) {
+            pi.linkState
+                .map { it == PiLinkState.Connected }
+                .distinctUntilChanged()
+                .filter { it }
+                .drop(1)
+                .collect {
+                    if (transportState.value.isStreamUnavailable()) {
+                        reprobingStream.value = true
+                        transport.retry()
+                    }
+                }
+        }
         launch(start = CoroutineStart.UNDISPATCHED) {
             pi.liveShots.collect { live ->
                 if (liveShotSource.value == LiveShotSource.SOCKET_IO) recordLiveShot(live)
