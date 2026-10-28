@@ -88,9 +88,7 @@ object SocketIoCodec {
                 packet.data?.let { builder.append(it.toString()) }
             }
 
-            is SocketIoPacket.Disconnect -> {
-                Unit
-            }
+            is SocketIoPacket.Disconnect -> {}
 
             is SocketIoPacket.Event -> {
                 packet.ackId?.let(builder::append)

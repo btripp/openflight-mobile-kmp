@@ -24,6 +24,7 @@ import dev.openflight.companion.core.model.pi.PiUpdateNotice
 import dev.openflight.companion.core.network.OpenFlightHttpError
 import dev.openflight.companion.core.socketio.SocketConnectionState
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -43,6 +44,7 @@ import kotlin.test.Test
  * backend (both), through the real [DefaultShotRepository] and [DefaultPiSessionRepository] over a
  * fake Wi-Fi transport and a fake Socket.IO socket.
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 class StockPiFallbackTest {
     private class Harness(
         scope: CoroutineScope,

@@ -18,6 +18,7 @@ import dev.openflight.companion.core.database.ShotHistoryDatabase
 import dev.openflight.companion.core.database.buildShotHistoryDatabase
 import dev.openflight.companion.core.database.inMemoryShotHistoryDatabaseBuilder
 import dev.openflight.companion.core.model.pi.ShotDetail
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -30,6 +31,7 @@ import kotlin.test.Test
  * cover what the repository adds: sessions per connect, the model mapping, and the
  * "unavailable database" contract.
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 class ShotHistoryRepositoryTest {
     private class Harness(
         scope: TestScope,

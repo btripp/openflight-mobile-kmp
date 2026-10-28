@@ -7,6 +7,7 @@ import assertk.assertions.containsExactly
 import assertk.assertions.isEqualTo
 import dev.openflight.companion.core.model.ShotEvent
 import dev.openflight.companion.core.model.ShotHistory
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
@@ -16,6 +17,7 @@ import kotlin.test.Test
  * [DefaultFinalShotStream] over a history flow fed through the real [ShotHistory.record] (plan F3,
  * A2), so a v2 final replaces its provisional version in place exactly as in [ShotRepository].
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 class FinalShotStreamTest {
     private class Harness {
         private var shots = ShotHistory()

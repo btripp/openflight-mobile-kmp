@@ -202,9 +202,7 @@ private fun SubmissionCard(
                 )
             }
 
-            SubmitUiState.Idle, SubmitUiState.Submitting -> {
-                Unit
-            }
+            SubmitUiState.Idle, SubmitUiState.Submitting -> {}
         }
     }
 }

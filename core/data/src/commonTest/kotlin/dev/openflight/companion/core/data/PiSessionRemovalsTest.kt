@@ -13,6 +13,7 @@ import dev.openflight.companion.core.model.ShotEvent
 import dev.openflight.companion.core.protocol.SchemaV2Event
 import dev.openflight.companion.core.socketio.SocketConnectionState
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -24,6 +25,7 @@ import kotlin.test.Test
  * kiosk included) leave the phone's history and its stored history too, and nothing else does:
  * not a reconnect to a Pi that restarted with a fresh session, not a profile switch.
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 class PiSessionRemovalsTest {
     private class Harness(
         scope: CoroutineScope,

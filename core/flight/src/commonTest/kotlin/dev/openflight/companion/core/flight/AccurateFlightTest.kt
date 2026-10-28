@@ -83,11 +83,11 @@ class AccurateFlightTest {
         val shortFit = FlightGoldens.render.simulate(short)
 
         assertThat(longFit.carryFit!!.dragScale).isEqualTo(BallFlightSimulator.DRAG_SCALE_MIN)
-        assertThat(longFit.carryFit!!.residualScale).isGreaterThan(1.0)
-        assertThat(longFit.carryFit!!.shapeEstimated).isTrue()
+        assertThat(longFit.carryFit.residualScale).isGreaterThan(1.0)
+        assertThat(longFit.carryFit.shapeEstimated).isTrue()
         assertThat(longFit.carryMeters).isCloseTo(long.targetCarryMeters, 1e-6)
         assertThat(shortFit.carryFit!!.dragScale).isEqualTo(BallFlightSimulator.DRAG_SCALE_MAX)
-        assertThat(shortFit.carryFit!!.residualScale).isLessThan(1.0)
+        assertThat(shortFit.carryFit.residualScale).isLessThan(1.0)
         assertThat(shortFit.carryMeters).isCloseTo(short.targetCarryMeters, 1e-6)
     }
 
