@@ -82,7 +82,11 @@ final class SessionLargeTextUITests: XCTestCase {
         SessionUITests.confirmDialog(app)
 
         let failed = app.descendants(matching: .any)["session.action.failed"]
-        XCTAssertTrue(SessionUITests.reveal(failed, in: app, scrollingUp: true))
+        // The banner sits above the list, which is scrolled down to Clear at this size, and a lazy
+        // list hasn't loaded it there. Scroll back to the top (the source card is always there),
+        // then wait out the Pi's 10 s confirmation window.
+        let source = app.descendants(matching: .any)["session.source"]
+        XCTAssertTrue(SessionUITests.reveal(source, in: app, scrollingUp: true), "can't scroll back to the top")
         XCTAssertTrue(failed.waitForExistence(timeout: 20), "the clear never failed")
         attachScreenshot(app, named: "session-failed-action-largest-text")
 
