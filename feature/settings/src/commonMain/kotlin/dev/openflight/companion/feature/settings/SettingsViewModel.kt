@@ -49,6 +49,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeout
 
 /**
@@ -182,6 +184,10 @@ class SettingsViewModel(
         )
 
     private val settingsEffects = Channel<SettingsEffect>(Channel.BUFFERED)
+
+    // Call-out field edits read-modify-write the list, so a quick second tap must wait for the first.
+    private val calloutFieldsLock = Mutex()
+
     val effects: Flow<SettingsEffect> = settingsEffects.receiveAsFlow()
 
     init {
@@ -330,24 +336,28 @@ class SettingsViewModel(
 
             is SettingsEvent.ToggleCalloutField -> {
                 viewModelScope.launch {
-                    val current = settings.calloutFields.first()
-                    val updated = if (event.field in current) current - event.field else current + event.field
-                    settings.setCalloutFields(updated)
+                    calloutFieldsLock.withLock {
+                        val current = settings.calloutFields.first()
+                        val updated = if (event.field in current) current - event.field else current + event.field
+                        settings.setCalloutFields(updated)
+                    }
                 }
             }
 
             is SettingsEvent.MoveCalloutField -> {
                 viewModelScope.launch {
-                    val current = settings.calloutFields.first()
-                    val index = current.indexOf(event.field)
-                    val target = if (event.up) index - 1 else index + 1
-                    if (index < 0 || target !in current.indices) return@launch
-                    settings.setCalloutFields(
-                        current.toMutableList().apply {
-                            val moved = removeAt(index)
-                            add(target, moved)
-                        },
-                    )
+                    calloutFieldsLock.withLock {
+                        val current = settings.calloutFields.first()
+                        val index = current.indexOf(event.field)
+                        val target = if (event.up) index - 1 else index + 1
+                        if (index < 0 || target !in current.indices) return@launch
+                        settings.setCalloutFields(
+                            current.toMutableList().apply {
+                                val moved = removeAt(index)
+                                add(target, moved)
+                            },
+                        )
+                    }
                 }
             }
 
