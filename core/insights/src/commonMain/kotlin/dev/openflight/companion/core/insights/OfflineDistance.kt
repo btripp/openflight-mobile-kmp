@@ -7,6 +7,7 @@ import dev.openflight.companion.core.flight.FlightInputResolver
 import dev.openflight.companion.core.flight.FlightMeasurements
 import dev.openflight.companion.core.flight.FlightParameter
 import dev.openflight.companion.core.flight.ShotShape
+import dev.openflight.companion.core.model.METERS_PER_YARD
 
 /**
  * Where a shot finished side to side.
@@ -52,9 +53,5 @@ class OfflineDistanceEstimator(
             shape = ShotShape.classify(input, trajectory),
             apexYards = trajectory.apexMeters / METERS_PER_YARD,
         )
-    }
-
-    private companion object {
-        const val METERS_PER_YARD = 0.9144
     }
 }

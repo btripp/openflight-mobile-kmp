@@ -40,7 +40,7 @@ class ShotHistoryDaoV2Test {
             dao.upsert(local("mine"), shot(2, T2))
             dao.insertSessionWithShots(imported("theirs"), listOf(shot(1, T1), shot(2, T2)))
 
-            dao.deleteByTimestamps(listOf(T1))
+            dao.deleteByTimestampsIn(listOf(T1), SessionEntity.SOURCE_LOCAL)
 
             assertThat(dao.observeShots("mine").first().map { it.timestamp }).containsExactly(T2)
             assertThat(dao.observeShots("theirs").first().map { it.timestamp }).containsExactly(T2, T1)
@@ -53,9 +53,13 @@ class ShotHistoryDaoV2Test {
             dao.insertSessionWithShots(imported("theirs"), listOf(shot(1, T1)))
 
             // `session_cleared` is mirrored as a delete of the cleared rows' timestamps.
-            dao.deleteByTimestamps(listOf(T1))
+            dao.deleteByTimestampsIn(listOf(T1), SessionEntity.SOURCE_LOCAL)
 
-            assertThat(dao.observeSessions(includeImported = true).first().map { it.id }).containsExactly("theirs")
+            assertThat(
+                dao.observeSessionsOf(SessionEntity.SOURCE_LOCAL, includeImported = true).first().map {
+                    it.id
+                },
+            ).containsExactly("theirs")
         }
 
     @Test
@@ -66,7 +70,11 @@ class ShotHistoryDaoV2Test {
 
             dao.clearAll()
 
-            assertThat(dao.observeSessions(includeImported = true).first().map { it.id }).containsExactly("theirs")
+            assertThat(
+                dao.observeSessionsOf(SessionEntity.SOURCE_LOCAL, includeImported = true).first().map {
+                    it.id
+                },
+            ).containsExactly("theirs")
             assertThat(dao.shotCount()).isEqualTo(1)
         }
 
@@ -78,7 +86,11 @@ class ShotHistoryDaoV2Test {
 
             dao.clearImported()
 
-            assertThat(dao.observeSessions(includeImported = true).first().map { it.id }).containsExactly("mine")
+            assertThat(
+                dao.observeSessionsOf(SessionEntity.SOURCE_LOCAL, includeImported = true).first().map {
+                    it.id
+                },
+            ).containsExactly("mine")
         }
 
     @Test
@@ -87,8 +99,12 @@ class ShotHistoryDaoV2Test {
             dao.upsert(local("mine"), shot(1, T1))
             dao.insertSessionWithShots(imported("theirs"), listOf(shot(1, T2)))
 
-            assertThat(dao.observeSessions().first().map { it.id }).containsExactly("mine")
-            val all = dao.observeSessions(includeImported = true).first()
+            assertThat(
+                dao.observeSessionsOf(SessionEntity.SOURCE_LOCAL, includeImported = false).first().map {
+                    it.id
+                },
+            ).containsExactly("mine")
+            val all = dao.observeSessionsOf(SessionEntity.SOURCE_LOCAL, includeImported = true).first()
             assertThat(all.map { it.id }).containsExactly("theirs", "mine")
             assertThat(all[0].source).isEqualTo(SessionEntity.SOURCE_IMPORTED)
             assertThat(all[0].ownerName).isEqualTo("Sam")
@@ -135,7 +151,7 @@ class ShotHistoryDaoV2Test {
             dao.setIncludeInStats("theirs", true)
             dao.setSessionNote("theirs", "range day")
 
-            val session = dao.observeSessions(includeImported = true).first().single()
+            val session = dao.observeSessionsOf(SessionEntity.SOURCE_LOCAL, includeImported = true).first().single()
             assertThat(session.includeInStats).isTrue()
             assertThat(session.note).isEqualTo("range day")
         }
@@ -149,11 +165,12 @@ class ShotHistoryDaoV2Test {
 
             val rows =
                 dao
-                    .observeShotsForClub(
+                    .observeShotsForClubIn(
                         "7-iron",
                         profileId = null,
                         sinceEpochMillis = Long.MIN_VALUE,
                         sessionLimit = -1,
+                        demo = false,
                     ).first()
 
             assertThat(rows.map { it.sessionId to it.timestamp }).containsExactly("new" to T3, "old" to T1)
@@ -165,11 +182,11 @@ class ShotHistoryDaoV2Test {
             dao.upsert(local("mine"), shot(1, T1, club = "7-iron"))
             dao.insertSessionWithShots(imported("theirs", startedAt = 5_000L), listOf(shot(1, T2, club = "7-iron")))
 
-            val before = dao.observeShotsForClub("7-iron", null, Long.MIN_VALUE, -1).first()
+            val before = dao.observeShotsForClubIn("7-iron", null, Long.MIN_VALUE, -1, demo = false).first()
             assertThat(before.map { it.sessionId }).containsExactly("mine")
 
             dao.setIncludeInStats("theirs", true)
-            val after = dao.observeShotsForClub("7-iron", null, Long.MIN_VALUE, -1).first()
+            val after = dao.observeShotsForClubIn("7-iron", null, Long.MIN_VALUE, -1, demo = false).first()
             assertThat(after.map { it.sessionId }).containsExactly("theirs", "mine")
         }
 
@@ -182,13 +199,29 @@ class ShotHistoryDaoV2Test {
             // A newer session without a PW doesn't use up the session limit.
             dao.upsert(local("s4", startedAt = 4_000L), shot(1, T4, club = "driver", profileId = "ann"))
 
-            val lastTwo = dao.observeShotsForClub("pw", null, Long.MIN_VALUE, sessionLimit = 2).first()
+            val lastTwo = dao.observeShotsForClubIn("pw", null, Long.MIN_VALUE, sessionLimit = 2, demo = false).first()
             assertThat(lastTwo.map { it.sessionId }).containsExactly("s3", "s2")
 
-            val since = dao.observeShotsForClub("pw", null, sinceEpochMillis = 2_000L, sessionLimit = -1).first()
+            val since =
+                dao
+                    .observeShotsForClubIn(
+                        "pw",
+                        null,
+                        sinceEpochMillis = 2_000L,
+                        sessionLimit = -1,
+                        demo = false,
+                    ).first()
             assertThat(since.map { it.sessionId }).containsExactly("s3", "s2")
 
-            val ann = dao.observeShotsForClub("pw", profileId = "ann", Long.MIN_VALUE, sessionLimit = 2).first()
+            val ann =
+                dao
+                    .observeShotsForClubIn(
+                        "pw",
+                        profileId = "ann",
+                        Long.MIN_VALUE,
+                        sessionLimit = 2,
+                        demo = false,
+                    ).first()
             assertThat(ann.map { it.sessionId }).containsExactly("s3", "s1")
         }
 
@@ -256,9 +289,13 @@ class ShotHistoryDaoV2Test {
             dao.insertSessionWithShots(imported("theirs"), listOf(shot(1, T2)))
             dao.upsert(demo("pretend"), shot(1, T3))
 
-            assertThat(dao.observeSessions().first().map { it.id }).containsExactly("mine")
             assertThat(
-                dao.observeSessions(includeImported = true).first().map { it.id },
+                dao.observeSessionsOf(SessionEntity.SOURCE_LOCAL, includeImported = false).first().map {
+                    it.id
+                },
+            ).containsExactly("mine")
+            assertThat(
+                dao.observeSessionsOf(SessionEntity.SOURCE_LOCAL, includeImported = true).first().map { it.id },
             ).containsExactly("theirs", "mine")
             val demo = dao.observeSessionsOf(SessionEntity.SOURCE_DEMO, includeImported = false).first()
             assertThat(demo.map { it.id }).containsExactly("pretend")
@@ -271,7 +308,7 @@ class ShotHistoryDaoV2Test {
             dao.upsert(local("mine"), shot(1, T1, club = "7-iron"))
             dao.upsert(demo("pretend", startedAt = 9_000L), shot(1, T2, club = "7-iron"))
 
-            val real = dao.observeShotsForClub("7-iron", null, Long.MIN_VALUE, -1).first()
+            val real = dao.observeShotsForClubIn("7-iron", null, Long.MIN_VALUE, -1, demo = false).first()
             assertThat(real.map { it.sessionId }).containsExactly("mine")
             val demo = dao.observeShotsForClubIn("7-iron", null, Long.MIN_VALUE, -1, demo = true).first()
             assertThat(demo.map { it.sessionId }).containsExactly("pretend")
@@ -283,7 +320,7 @@ class ShotHistoryDaoV2Test {
             dao.upsert(local("mine"), shot(1, T1))
             dao.upsert(demo("pretend"), shot(1, T1))
 
-            dao.deleteByTimestamps(listOf(T1))
+            dao.deleteByTimestampsIn(listOf(T1), SessionEntity.SOURCE_LOCAL)
             dao.clearAll()
 
             assertThat(dao.observeShots("pretend").first().map { it.timestamp }).containsExactly(T1)
@@ -303,7 +340,11 @@ class ShotHistoryDaoV2Test {
 
             dao.clearDemo()
             assertThat(dao.sessionCountOf(SessionEntity.SOURCE_DEMO)).isEqualTo(0)
-            assertThat(dao.observeSessions().first().map { it.id }).containsExactly("mine")
+            assertThat(
+                dao.observeSessionsOf(SessionEntity.SOURCE_LOCAL, includeImported = false).first().map {
+                    it.id
+                },
+            ).containsExactly("mine")
         }
 
     private companion object {

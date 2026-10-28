@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 package dev.openflight.companion.core.insights
 
-import dev.openflight.companion.core.model.pi.SessionStats
 import dev.openflight.companion.core.model.pi.ShotDetail
 
 /**
@@ -114,18 +113,5 @@ fun computeDetailClubChips(shots: List<ShotDetail>): List<ClubChip> {
     }
     return counts.map { (club, count) -> ClubChip(club, count) }
 }
-
-/** The server's session stats in the app's [ClubStats] shape (`null` averages become 0, like the web UI). */
-fun SessionStats.toClubStats(): ClubStats =
-    ClubStats(
-        shotCount = shotCount,
-        avgBallSpeedMph = avgBallSpeed ?: 0.0,
-        maxBallSpeedMph = maxBallSpeed ?: 0.0,
-        avgCarryYards = avgCarryEst ?: 0.0,
-        avgClubSpeedMph = avgClubSpeed,
-        avgSmashFactor = avgSmashFactor,
-        minBallSpeedMph = minBallSpeed ?: 0.0,
-        stdDevBallSpeedMph = stdDev ?: 0.0,
-    )
 
 private fun List<Double>.averageOrZero(): Double = if (isEmpty()) 0.0 else average()

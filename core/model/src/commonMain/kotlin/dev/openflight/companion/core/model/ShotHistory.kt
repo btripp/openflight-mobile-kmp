@@ -32,16 +32,6 @@ data class ShotHistory(
         return if (replaces) copy(shots = shots.toMutableList().also { it[index] = shot }) else this
     }
 
-    /** Returns this history without the shots whose [ShotEvent.timestamp] is [timestamp] (a v2 `shot_deleted`). */
-    fun removeTimestamp(timestamp: String): ShotHistory =
-        if (shots.none { it.timestamp == timestamp }) {
-            this
-        } else {
-            copy(
-                shots = shots.filterNot { it.timestamp == timestamp },
-            )
-        }
-
     companion object {
         const val DEFAULT_MAXIMUM_COUNT = 100
     }

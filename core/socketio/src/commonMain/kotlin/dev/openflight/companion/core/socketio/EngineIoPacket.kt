@@ -48,13 +48,8 @@ sealed interface EngineIoPacket {
     data object Noop : EngineIoPacket
 }
 
-/**
- * Engine.IO v4 text codec. Over a WebSocket each frame is one packet; over long-polling a body is
- * a payload of packets separated by the record separator `\u001e`.
- */
+/** Engine.IO v4 text codec. The transport is WebSocket-only, so each frame is one packet. */
 object EngineIoCodec {
-    const val RECORD_SEPARATOR: Char = '\u001e'
-
     private val json = Json { ignoreUnknownKeys = true }
 
     /** Decodes one packet, or returns `null` for an empty, unknown or malformed one. */
@@ -83,13 +78,6 @@ object EngineIoCodec {
             EngineIoPacket.Upgrade -> "5"
             EngineIoPacket.Noop -> "6"
         }
-
-    /** Decodes a long-polling payload, skipping packets that don't decode. */
-    fun decodePayload(payload: String): List<EngineIoPacket> =
-        payload.split(RECORD_SEPARATOR).mapNotNull(::decodePacket)
-
-    fun encodePayload(packets: List<EngineIoPacket>): String =
-        packets.joinToString(RECORD_SEPARATOR.toString(), transform = ::encodePacket)
 
     private fun decodeOpen(data: String): EngineIoPacket.Open? =
         try {

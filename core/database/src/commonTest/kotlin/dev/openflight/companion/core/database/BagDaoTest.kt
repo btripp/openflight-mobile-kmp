@@ -57,7 +57,7 @@ class BagDaoTest {
             assertThat(dao.seedIfEmpty(bag("seed", 1L), clubs("seed", "driver", "pw"))).isTrue()
             assertThat(dao.seedIfEmpty(bag("again", 2L), clubs("again", "driver"))).isFalse()
 
-            assertThat(dao.observeBags().first().map { it.id }).containsExactly("seed")
+            assertThat(dao.observeBagsWithClubs().first().map { it.bag.id }).containsExactly("seed")
             assertThat(activeIds()).containsExactly("seed")
             assertThat(dao.clubsOf("seed").map { it.club }).containsExactly("driver", "pw")
         }
@@ -80,9 +80,15 @@ class BagDaoTest {
 
             assertThat(dao.deleteBag("c")).isTrue()
 
-            assertThat(dao.observeBags().first().map { it.id }).containsExactly("a", "b")
+            assertThat(dao.observeBagsWithClubs().first().map { it.bag.id }).containsExactly("a", "b")
             assertThat(activeIds()).containsExactly("a")
-            assertThat(dao.observeClubs().first().map { it.bagId }).containsExactly("a", "b")
+            assertThat(
+                dao
+                    .observeBagsWithClubs()
+                    .first()
+                    .flatMap { it.clubs }
+                    .map { it.bagId },
+            ).containsExactly("a", "b")
             assertThat(dao.deleteBag("missing")).isFalse()
         }
 
@@ -133,9 +139,10 @@ class BagDaoTest {
 
             assertThat(
                 dao
-                    .observeBags()
+                    .observeBagsWithClubs()
                     .first()
                     .single()
+                    .bag
                     .name,
             ).isEqualTo("Winter bag")
             assertThat(dao.clubsOf("a").map { it.club }).containsExactly("pw")
@@ -143,8 +150,9 @@ class BagDaoTest {
 
     private suspend fun activeIds(): List<String> =
         dao
-            .observeBags()
+            .observeBagsWithClubs()
             .first()
+            .map { it.bag }
             .filter { it.isActive == true }
             .map { it.id }
 
