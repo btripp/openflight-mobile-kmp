@@ -186,7 +186,8 @@ interface PiSessionRepository {
     /**
      * `delete_shot` by [ShotDetail.timestamp] (not profile-scoped), tracked in [deletionState]:
      * [DeletionState.Pending] until a `session_state` without that timestamp
-     * ([DeletionState.Deleted]) or a `delete_shot_error` / a dropped link ([DeletionState.Failed]).
+     * ([DeletionState.Deleted]) or a `delete_shot_error`, a dropped link or no reply within
+     * [DeletionState.TIMEOUT_MILLIS] ([DeletionState.Failed]).
      * Nothing is removed locally before the server confirms. Ignored while another deletion is
      * pending, since neither reply names its shot.
      */

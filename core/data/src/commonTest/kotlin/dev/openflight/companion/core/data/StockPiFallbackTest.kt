@@ -26,6 +26,7 @@ import dev.openflight.companion.core.socketio.SocketConnectionState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
@@ -685,7 +686,9 @@ class StockPiFallbackTest {
             val socket = h.connect(fork)
             socket.serverFrame(PiFixtures.sessionStateFrame(PiFixtures.SHOT_FRAME, PiFixtures.SECOND_SHOT_FRAME))
             h.nowMillis = epochMillis("2026-09-25T12:30:00")
-            h.history.clearAll()
+            // Launched, like the History screen's ViewModel: awaited inline, the unconfined test would
+            // resume inside the write queue and run ahead of the next frame's backfill.
+            launch { h.history.clearAll() }
             // The Pi still holds both rows; a shot after the clear is stored as usual.
             val later = "2026-09-25T13:00:00.000001"
             socket.serverFrame(

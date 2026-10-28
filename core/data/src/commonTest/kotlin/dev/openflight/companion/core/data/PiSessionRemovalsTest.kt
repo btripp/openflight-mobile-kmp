@@ -95,8 +95,6 @@ class PiSessionRemovalsTest {
     ) : ShotHistoryRepository by inner {
         val deleted = mutableListOf<String>()
 
-        override fun deleteShot(timestamp: String) = deleteShots(listOf(timestamp))
-
         override fun deleteShots(timestamps: Collection<String>) {
             deleted += timestamps
             inner.deleteShots(timestamps)
