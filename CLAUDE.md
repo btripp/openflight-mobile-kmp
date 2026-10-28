@@ -154,7 +154,8 @@ that as the failure mode to avoid, not a one-off.
 
 `.claude/hooks/commit-gate.sh` (wired in `.claude/settings.json`) enforces this: it runs the
 chain before any `git commit` and blocks the commit on a non-zero exit. If it blocks, fix the
-cause. Don't bypass it. `/verify` runs the same chain on demand. Path-scoped conventions live in
+cause. Don't bypass it. `/verify` runs the same chain on demand, and `/new-feature-module <name>`
+scaffolds and wires a new `feature:<name>` + `:ui` end to end. Path-scoped conventions live in
 `.claude/rules/`: shared KMP code, coroutines, tests, Compose UI, design-system components,
 SwiftUI and games.
 
