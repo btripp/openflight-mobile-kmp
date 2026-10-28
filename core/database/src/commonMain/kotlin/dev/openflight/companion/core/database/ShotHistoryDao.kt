@@ -20,17 +20,10 @@ abstract class ShotHistoryDao {
     /**
      * Sessions that hold at least one shot, newest first (by their newest shot, then by start).
      * A session whose last shot was deleted drops out on its own, like Expo's `loadSessions`.
-     * Imported sessions are listed only with [includeImported]. Demo sessions (plan F14) never are:
-     * see [observeSessionsOf].
-     */
-    fun observeSessions(includeImported: Boolean): Flow<List<SessionSummaryRow>> =
-        observeSessionsOf(SessionEntity.SOURCE_LOCAL, includeImported)
-
-    /**
-     * [observeSessions] for one world (plan F14): the sessions whose `source` is [world]
-     * ([SessionEntity.SOURCE_LOCAL] for the phone's own, [SessionEntity.SOURCE_DEMO] for Demo mode's),
-     * plus imported ones with [includeImported]. So Demo mode never lists the player's sessions, and
-     * the player's history never lists a demo one.
+     * Only one world (plan F14): the sessions whose `source` is [world] ([SessionEntity.SOURCE_LOCAL]
+     * for the phone's own, [SessionEntity.SOURCE_DEMO] for Demo mode's), plus imported ones with
+     * [includeImported]. So Demo mode never lists the player's sessions, and the player's history
+     * never lists a demo one.
      */
     @Query(
         """
@@ -52,9 +45,6 @@ abstract class ShotHistoryDao {
         includeImported: Boolean,
     ): Flow<List<SessionSummaryRow>>
 
-    /** The phone's own sessions only (no imported ones): [observeSessions] for live history. */
-    fun observeSessions(): Flow<List<SessionSummaryRow>> = observeSessions(includeImported = false)
-
     /** One session's shots, newest first; `id` breaks timestamp ties (Expo `loadShots`). */
     @Query("SELECT * FROM shots WHERE session_id = :sessionId ORDER BY timestamp DESC, id DESC")
     abstract fun observeShots(sessionId: String): Flow<List<ShotEntity>>
@@ -75,19 +65,9 @@ abstract class ShotHistoryDao {
      * One club's shots across the sessions that count in stats (`include_in_stats`), newest session
      * first, then newest shot first. [club] is the wire value. Optionally only [profileId]'s shots,
      * only sessions started at or after [sinceEpochMillis], and only the [sessionLimit] most recent
-     * sessions holding such a shot (`-1`: no limit, SQLite's `LIMIT -1`). Demo sessions (plan F14)
-     * never count: see [observeShotsForClubIn].
-     */
-    fun observeShotsForClub(
-        club: String,
-        profileId: String?,
-        sinceEpochMillis: Long,
-        sessionLimit: Int,
-    ): Flow<List<ShotEntity>> = observeShotsForClubIn(club, profileId, sinceEpochMillis, sessionLimit, demo = false)
-
-    /**
-     * [observeShotsForClub] in one world (plan F14): only Demo mode's sessions with [demo], only the
-     * others without it, so demo shots never reach the player's bag stats and gapping.
+     * sessions holding such a shot (`-1`: no limit, SQLite's `LIMIT -1`). Only one world (plan F14):
+     * only Demo mode's sessions with [demo], only the others without it, so demo shots never reach
+     * the player's bag stats and gapping.
      */
     @Query(
         """
@@ -141,18 +121,12 @@ abstract class ShotHistoryDao {
     }
 
     /**
-     * Removes every stored copy of the shot the Pi keys by [timestamp] (a shot re-filed after a
+     * Removes every stored copy of the shots the Pi keys by [timestamps] (a shot re-filed after a
      * reconnect sits in two sessions; the Pi discarded the shot, not one filing of it), then the
-     * sessions left empty. An exact match: nothing with a nearby timestamp goes. Only the phone's
-     * own sessions: an imported session's shots may carry the same timestamps, and the Pi's
-     * deletes are not about them (plan F3, A8).
-     */
-    suspend fun deleteByTimestamps(timestamps: List<String>) =
-        deleteByTimestampsIn(timestamps, SessionEntity.SOURCE_LOCAL)
-
-    /**
-     * [deleteByTimestamps] within the sessions whose `source` is [world] (plan F14: Demo mode
-     * deletes its own demo shots, never the player's).
+     * sessions left empty. An exact match: nothing with a nearby timestamp goes. Only within the
+     * sessions whose `source` is [world], never imported ones: an imported session's shots may carry
+     * the same timestamps, and the Pi's deletes are not about them (plan F3, A8). Plan F14: Demo mode
+     * deletes its own demo shots, never the player's.
      */
     @Transaction
     open suspend fun deleteByTimestampsIn(
@@ -360,7 +334,7 @@ abstract class ShotHistoryDao {
     }
 }
 
-/** One row of [ShotHistoryDao.observeSessions]. */
+/** One row of [ShotHistoryDao.observeSessionsOf]. */
 data class SessionSummaryRow(
     val id: String,
     @ColumnInfo(name = "started_at") val startedAtEpochMillis: Long,

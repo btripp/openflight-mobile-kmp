@@ -47,14 +47,6 @@ data class ShotDistanceEstimate(
     /** [DistanceProvenance.SERVER] when the carry is the server's own number. */
     val carryProvenance: DistanceProvenance
         get() = if (isAdjusted) DistanceProvenance.ESTIMATED else DistanceProvenance.SERVER
-
-    val rollProvenance: DistanceProvenance get() = DistanceProvenance.ESTIMATED
-
-    val totalProvenance: DistanceProvenance get() = DistanceProvenance.ESTIMATED
-
-    /** The spin behind the roll (and the adjustment) came from the per-club defaults, not the radar. */
-    val spinEstimated: Boolean
-        get() = FlightParameter.SPIN_RATE in flightProvenance.estimatedParameters
 }
 
 /**

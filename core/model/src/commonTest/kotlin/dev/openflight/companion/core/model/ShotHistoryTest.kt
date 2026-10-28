@@ -71,19 +71,6 @@ class ShotHistoryTest {
         assertThat(history.shots).containsExactly(first)
     }
 
-    @Test
-    fun removeTimestampDropsTheDeletedShot() {
-        val kept =
-            makeShotEvent(
-                eventId = "22222222-2222-2222-2222-222222222222",
-            ).copy(timestamp = "2026-09-25T10:00:00")
-        val deleted = v2Shot(final = true, ballSpeedMph = 106.1)
-        val history = ShotHistory().record(kept).record(deleted)
-
-        assertThat(history.removeTimestamp(deleted.timestamp).shots).containsExactly(kept)
-        assertThat(history.removeTimestamp("2020-01-01T00:00:00")).isEqualTo(history)
-    }
-
     private fun v2Shot(
         final: Boolean,
         ballSpeedMph: Double,

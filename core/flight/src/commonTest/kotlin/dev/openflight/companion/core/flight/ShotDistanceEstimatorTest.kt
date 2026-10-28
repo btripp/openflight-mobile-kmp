@@ -2,6 +2,7 @@
 package dev.openflight.companion.core.flight
 
 import assertk.assertThat
+import assertk.assertions.contains
 import assertk.assertions.isCloseTo
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
@@ -28,7 +29,6 @@ class ShotDistanceEstimatorTest {
         assertThat(estimate.carryYards).isEqualTo(225.0)
         assertThat(estimate.isAdjusted).isFalse()
         assertThat(estimate.carryProvenance).isEqualTo(DistanceProvenance.SERVER)
-        assertThat(estimate.rollProvenance).isEqualTo(DistanceProvenance.ESTIMATED)
         assertThat(estimate.rollYards).isGreaterThan(0.0)
         assertThat(estimate.totalYards).isCloseTo(estimate.carryYards + estimate.rollYards, 1e-9)
     }
@@ -69,7 +69,7 @@ class ShotDistanceEstimatorTest {
 
         val estimate = assertNotNull(estimator.estimate(shot, Conditions.ISA, null))
 
-        assertThat(estimate.spinEstimated).isTrue()
+        assertThat(estimate.flightProvenance.estimatedParameters).contains(FlightParameter.SPIN_RATE)
     }
 
     @Test

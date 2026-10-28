@@ -168,9 +168,6 @@ private fun Double.tenths(): Double = round(this * TENTHS) / TENTHS
 
 private const val TENTHS = 10.0
 
-/** Builds the CSV document's full text for SSE/BLE shots only, including the header row, `\n`-joined. */
-fun buildShotsCsv(shots: List<ShotEvent>): String = buildExportCsv(shots.map { ExportShot.of(it, null) })
-
 /**
  * Builds the CSV document's full text, including the header row, `\n`-joined. When any row names
  * its [ExportShot.session] (a multi-session export), a leading `session` column is added and
