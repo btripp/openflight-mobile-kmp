@@ -73,11 +73,11 @@ object CalloutComposer {
             }
 
             CalloutField.LAUNCH -> {
-                input.launchAngleDegrees?.let { "${roundedInt(it)} degrees" }
+                input.launchAngleDegrees?.let { withUnit(roundedInt(it), "degree", "degrees") }
             }
 
             CalloutField.SPIN -> {
-                input.spinRpm?.let { "${roundedInt(it)} revolutions per minute" }
+                input.spinRpm?.let { withUnit(roundedInt(it), "revolution per minute", "revolutions per minute") }
             }
 
             CalloutField.CLUB -> {
@@ -124,12 +124,19 @@ object CalloutComposer {
     private fun distancePhrase(
         yards: Double,
         units: UnitSystem,
-    ): String = "${roundedInt(convertDistanceFromYards(yards, units))} ${spokenDistanceUnit(units)}"
+    ): String = spokenDistance(roundedInt(convertDistanceFromYards(yards, units)), units)
 
     private fun speedPhrase(
         mph: Double,
         units: UnitSystem,
-    ): String = "${roundedInt(convertSpeedFromMph(mph, units))} ${spokenSpeedUnit(units)}"
+    ): String {
+        val rounded = roundedInt(convertSpeedFromMph(mph, units))
+        return if (units == UnitSystem.METRIC) {
+            withUnit(rounded, "kilometer per hour", "kilometers per hour")
+        } else {
+            withUnit(rounded, "mile per hour", "miles per hour")
+        }
+    }
 
     /**
      * A rounded distance read as a direction word instead of a sign, e.g. `-8.0` with
@@ -146,15 +153,27 @@ object CalloutComposer {
         val rounded = roundedInt(convertDistanceFromYards(yards, units))
         return when {
             rounded == 0L -> zero
-            rounded > 0 -> "$rounded ${spokenDistanceUnit(units)} $positive"
-            else -> "${-rounded} ${spokenDistanceUnit(units)} $negative"
+            rounded > 0 -> "${spokenDistance(rounded, units)} $positive"
+            else -> "${spokenDistance(-rounded, units)} $negative"
         }
     }
 
-    private fun spokenDistanceUnit(units: UnitSystem): String = if (units == UnitSystem.METRIC) "meters" else "yards"
+    private fun spokenDistance(
+        rounded: Long,
+        units: UnitSystem,
+    ): String =
+        if (units == UnitSystem.METRIC) {
+            withUnit(rounded, "meter", "meters")
+        } else {
+            withUnit(rounded, "yard", "yards")
+        }
 
-    private fun spokenSpeedUnit(units: UnitSystem): String =
-        if (units == UnitSystem.METRIC) "kilometers per hour" else "miles per hour"
+    /** `"1 yard"`, `"-1 degree"`, but `"2 yards"`, `"0 degrees"`. */
+    private fun withUnit(
+        rounded: Long,
+        singular: String,
+        plural: String,
+    ): String = "$rounded ${if (abs(rounded) == 1L) singular else plural}"
 
     // Half-to-even, like ShotMetricFormatter, so the voice says the number the screen shows.
     private fun roundedInt(value: Double): Long = round(value).toLong()

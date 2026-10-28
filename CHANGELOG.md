@@ -32,6 +32,7 @@ tag. Plain `v0.1.0` waits on the hardware test matrix on a real Raspberry Pi.
 
 ### Fixed
 
+- Voice call-outs say "1 yard right" and "1 degree" instead of "1 yards" and "1 degrees" (#137).
 - If the Pi is updated to a backend with the live shot stream while the app is connected, the app
   now switches to that stream the next time it reconnects to the Pi, without a "Connecting" flash.
   Before, it kept using the older feed until you retried, changed host or restarted the app (#46).
