@@ -174,7 +174,7 @@ class SessionAccessibilityTest {
         assertNotClipped(text)
         composeRule.onAllNodes(hasText(text), useUnmergedTree = true).fetchSemanticsNodes().forEach { node ->
             val layouts = mutableListOf<TextLayoutResult>()
-            node.config[SemanticsActions.GetTextLayoutResult].action?.invoke(layouts)
+            val _ = node.config[SemanticsActions.GetTextLayoutResult].action?.invoke(layouts)
             assertEquals(1, layouts.single().lineCount, "\"$text\" breaks over lines at 200 % text")
         }
     }

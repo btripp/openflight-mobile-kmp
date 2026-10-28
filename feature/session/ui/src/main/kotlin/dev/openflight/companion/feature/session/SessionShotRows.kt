@@ -103,8 +103,9 @@ private fun ShotRowContent(
         if (LocalDensity.current.fontScale >= LARGE_FONT_SCALE) {
             Column(verticalArrangement = Arrangement.spacedBy(OfSpacing.Sm)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(OfSpacing.Md)) {
-                    ShotNumber(shot)
-                    ShotDetails(shot, maxLines = Int.MAX_VALUE, modifier = Modifier.weight(1f))
+                    // "#1" and the club share a baseline, as on iOS (`.firstTextBaseline`).
+                    ShotNumber(shot, modifier = Modifier.alignByBaseline())
+                    ShotDetails(shot, maxLines = Int.MAX_VALUE, modifier = Modifier.weight(1f).alignByBaseline())
                 }
                 Row(
                     verticalAlignment = Alignment.CenterVertically,

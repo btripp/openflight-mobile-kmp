@@ -22,8 +22,11 @@ import dev.openflight.companion.core.model.ShotMetricFormatter
 // The pieces of a shot row, laid out in one row or, at a large font scale, two (SessionShotRows.kt).
 
 @Composable
-internal fun ShotNumber(shot: SessionShotRow) {
-    OfText(text = "#${shot.shotNumber}", role = OfTextRole.Label, color = OfColorTokens.Gold)
+internal fun ShotNumber(
+    shot: SessionShotRow,
+    modifier: Modifier = Modifier,
+) {
+    OfText(text = "#${shot.shotNumber}", role = OfTextRole.Label, color = OfColorTokens.Gold, modifier = modifier)
 }
 
 @Composable
