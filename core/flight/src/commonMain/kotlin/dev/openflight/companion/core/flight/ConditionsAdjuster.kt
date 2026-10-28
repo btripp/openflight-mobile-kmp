@@ -2,6 +2,7 @@
 package dev.openflight.companion.core.flight
 
 import dev.openflight.companion.core.model.Conditions
+import dev.openflight.companion.core.model.METERS_PER_YARD
 import dev.openflight.companion.core.model.TargetBearing
 import kotlin.math.abs
 
@@ -89,7 +90,7 @@ class ConditionsAdjuster(
         val landing = adjusted.points.last()
         return AdjustedCarry(
             carryYards = anchorCarryYards * ratio,
-            lateralDriftYards = (adjusted.lateralMeters - baseline.lateralMeters) * METERS_TO_YARDS,
+            lateralDriftYards = (adjusted.lateralMeters - baseline.lateralMeters) / METERS_PER_YARD,
             carryRatio = ratio,
             airDensity = density,
             densityRatio = density / AirDensity.ISA_SEA_LEVEL,
@@ -104,6 +105,5 @@ class ConditionsAdjuster(
     private companion object {
         /** Densities this close to ISA give the same flight; skip the second run. */
         const val SAME_DENSITY_TOLERANCE = 1e-9
-        const val METERS_TO_YARDS = 1.0 / 0.9144
     }
 }

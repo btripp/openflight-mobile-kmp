@@ -56,6 +56,7 @@ class AndroidApplicationConventionPlugin : Plugin<Project> {
             }
 
             addJetpackComposeDependencies()
+            configureKotlinCompilerChecks()
         }
     }
 }

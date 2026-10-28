@@ -466,9 +466,7 @@ class DrivingRangeViewModel(
                 persist { settings.setViewingProfile(event.profile) }
             }
 
-            else -> {
-                Unit
-            }
+            else -> {}
         }
     }
 
@@ -831,9 +829,7 @@ class DrivingRangeViewModel(
                 browse.shots.getOrNull(browse.selectedIndex + delta)?.let { selectShot(it.id) }
             }
 
-            RangeMode.Live -> {
-                Unit
-            }
+            RangeMode.Live -> {}
         }
     }
 
@@ -1008,9 +1004,7 @@ class DrivingRangeViewModel(
                 refreshRollOut(shot)
             }
 
-            RangeMode.Live -> {
-                Unit
-            }
+            RangeMode.Live -> {}
         }
     }
 

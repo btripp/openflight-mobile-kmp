@@ -321,8 +321,9 @@ class SessionViewModel(
 
     /**
      * Without a Pi link the phone's history changes at once. With one, the shot goes only once the
-     * Pi confirms: [PiSessionRepository.deletionState] settles it, a drop fails it, and a Pi that
-     * never answers fails it after [ACTION_TIMEOUT_MILLIS] (freeing the one-at-a-time slot).
+     * Pi confirms: [PiSessionRepository.deletionState] settles it, and the repository fails it on a
+     * drop or after [DeletionState.TIMEOUT_MILLIS]. This ViewModel's own timeout is a little longer
+     * and only a safety net for a request that never left.
      */
     private fun runDelete(target: SessionAction.DeleteShot) {
         if (!piConnected()) {
@@ -339,9 +340,9 @@ class SessionViewModel(
             viewModelScope.launch {
                 val timeout =
                     launch {
-                        delay(ACTION_TIMEOUT_MILLIS)
+                        delay(DeletionState.TIMEOUT_MILLIS + ACTION_GRACE_MILLIS)
                         piSession.dismissDeletion()
-                        fail(target, SessionActionCopy.DELETE_NOT_CONFIRMED)
+                        fail(target, DeletionState.NO_CONFIRMATION)
                     }
                 val (outcome, _) =
                     combine(piSession.deletionState, piSession.linkState, ::Pair).first { (state, link) ->
@@ -378,7 +379,7 @@ class SessionViewModel(
             viewModelScope.launch {
                 val timeout =
                     launch {
-                        delay(ClearState.TIMEOUT_MILLIS + CLEAR_GRACE_MILLIS)
+                        delay(ClearState.TIMEOUT_MILLIS + ACTION_GRACE_MILLIS)
                         piSession.dismissClear()
                         fail(target, ClearState.NO_CONFIRMATION)
                     }
@@ -653,8 +654,7 @@ class SessionViewModel(
         const val SIMULATE_FAILED = "Couldn't simulate a shot."
 
         /** How long a Pi delete may go unanswered before it is reported as not confirmed. */
-        const val ACTION_TIMEOUT_MILLIS: Long = 10_000
-        private const val CLEAR_GRACE_MILLIS = 1_000L
+        private const val ACTION_GRACE_MILLIS = 1_000L
         private const val SWING_SPEED_MODE = "swing-speed"
         private const val STOP_TIMEOUT_MILLIS = 5_000L
     }

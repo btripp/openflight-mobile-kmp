@@ -14,6 +14,7 @@ import dev.openflight.companion.core.testing.FakePiSessionRepository
 import dev.openflight.companion.core.testing.FakeScreenReaderMonitor
 import dev.openflight.companion.core.testing.FakeSettingsRepository
 import dev.openflight.companion.core.testing.FakeSpeechEngine
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
@@ -24,6 +25,7 @@ import kotlin.test.Test
  * warrants a warning, and its wording, are [PiBatteryWarning]'s own tested job; the once-per-level
  * rule is [dev.openflight.companion.core.model.pi.PiBatteryAlertGate]'s.
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 class PiBatteryAlertCoordinatorTest {
     private class Harness(
         scope: TestScope,

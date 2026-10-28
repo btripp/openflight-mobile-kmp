@@ -241,6 +241,12 @@ internal class DefaultShotHistoryRepository(
         }
     }
 
+    override suspend fun deleteShot(timestamp: String): Boolean =
+        applied {
+            forget(listOf(timestamp))
+            it.deleteByTimestampsIn(listOf(timestamp), world)
+        }
+
     override fun clearProfile(profileId: String) {
         // shortcut: only the current session, so a clear after an app restart misses the Pi
         // session's earlier rows (they sit in the previous phone session); upgrade with #148.
@@ -249,12 +255,28 @@ internal class DefaultShotHistoryRepository(
         enqueue { dao -> dao.clearProfile((rolledOver[filed.session.id] ?: filed).session.id, profileId) }
     }
 
-    override fun clearAll() {
+    override suspend fun clearAll(): Boolean {
         val time = localTime(now())
-        enqueue {
+        return applied {
             clearedAt = time
             if (demoWorld) it.clearDemo() else it.clearAll()
         }
+    }
+
+    /** Queues [write] like [enqueue] and suspends until it ran: `false` without a database or when it failed. */
+    private suspend fun applied(write: suspend (ShotHistoryDao) -> Unit): Boolean {
+        val done = CompletableDeferred<Boolean>()
+        writes.trySend { dao ->
+            try {
+                if (dao != null) {
+                    write(dao)
+                    done.complete(true)
+                }
+            } finally {
+                done.complete(false)
+            }
+        }
+        return done.await()
     }
 
     private fun forget(timestamps: List<String>) {

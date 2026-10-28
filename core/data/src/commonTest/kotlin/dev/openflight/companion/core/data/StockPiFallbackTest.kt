@@ -24,8 +24,10 @@ import dev.openflight.companion.core.model.pi.PiUpdateNotice
 import dev.openflight.companion.core.network.OpenFlightHttpError
 import dev.openflight.companion.core.socketio.SocketConnectionState
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
@@ -42,6 +44,7 @@ import kotlin.test.Test
  * backend (both), through the real [DefaultShotRepository] and [DefaultPiSessionRepository] over a
  * fake Wi-Fi transport and a fake Socket.IO socket.
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 class StockPiFallbackTest {
     private class Harness(
         scope: CoroutineScope,
@@ -478,9 +481,50 @@ class StockPiFallbackTest {
                 assertThat(awaitItem()).isEqualTo(ConnectionState.Connected)
                 expectNoEvents()
             }
-            // The transport isn't asked to retry the missing stream on its own.
-            assertThat(h.wifi.retryCount).isEqualTo(0)
+            // #46: only the link's reconnect re-probes the missing stream, once.
+            assertThat(h.wifi.retryCount).isEqualTo(1)
             assertThat(h.wifi.startCount).isEqualTo(1)
+        }
+
+    @Test
+    fun aPiUpgradedToSseMidSessionIsPickedUpQuietlyOnASocketIoReconnect() =
+        runStockPiTest { h ->
+            h.connect(fork = false)
+            h.repository.connectionState.test {
+                assertThat(awaitItem()).isEqualTo(ConnectionState.Connected)
+                h.socket.state.value = SocketConnectionState.Reconnecting(1, 500, "Connection closed")
+                assertThat(awaitItem()).isEqualTo(ConnectionState.Error("Connection closed"))
+                h.socket.serverAcks()
+                assertThat(awaitItem()).isEqualTo(ConnectionState.Connected)
+                assertThat(h.wifi.retryCount).isEqualTo(1)
+
+                // The re-probe's Idle/Connecting don't flicker, and Socket.IO keeps the shots meanwhile.
+                h.wifi.state.value = ConnectionState.Idle
+                h.wifi.state.value = ConnectionState.Connecting
+                expectNoEvents()
+                assertThat(h.repository.liveShotSource.value).isEqualTo(LiveShotSource.SOCKET_IO)
+                assertThat(h.repository.piUpdateNotice.value).isNotNull()
+
+                h.wifi.state.value = ConnectionState.Connected
+                expectNoEvents()
+                assertThat(h.repository.liveShotSource.value).isEqualTo(LiveShotSource.SSE)
+            }
+        }
+
+    @Test
+    fun aStillStockPiStaysOnSocketIoAfterTheReprobe() =
+        runStockPiTest { h ->
+            h.connect(fork = false)
+            h.socket.state.value = SocketConnectionState.Reconnecting(1, 500, "Connection closed")
+            h.socket.serverAcks()
+            h.wifi.state.value = ConnectionState.Connecting
+            h.sseMissing()
+
+            assertThat(h.repository.connectionState.value).isEqualTo(ConnectionState.Connected)
+            assertThat(h.repository.liveShotSource.value).isEqualTo(LiveShotSource.SOCKET_IO)
+            // Later transport states show again once the probe settled.
+            h.wifi.state.value = ConnectionState.Connecting
+            assertThat(h.repository.liveShotSource.value).isEqualTo(LiveShotSource.NONE)
         }
 
     @Test
@@ -644,7 +688,9 @@ class StockPiFallbackTest {
             val socket = h.connect(fork)
             socket.serverFrame(PiFixtures.sessionStateFrame(PiFixtures.SHOT_FRAME, PiFixtures.SECOND_SHOT_FRAME))
             h.nowMillis = epochMillis("2026-09-25T12:30:00")
-            h.history.clearAll()
+            // Launched, like the History screen's ViewModel: awaited inline, the unconfined test would
+            // resume inside the write queue and run ahead of the next frame's backfill.
+            launch { h.history.clearAll() }
             // The Pi still holds both rows; a shot after the clear is stored as usual.
             val later = "2026-09-25T13:00:00.000001"
             socket.serverFrame(

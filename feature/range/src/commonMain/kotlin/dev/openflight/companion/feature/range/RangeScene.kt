@@ -4,6 +4,7 @@ package dev.openflight.companion.feature.range
 import dev.openflight.companion.core.flight.RangeSceneDescription
 import dev.openflight.companion.core.flight.RangeTreeDescription
 import dev.openflight.companion.core.flight.Vec3
+import dev.openflight.companion.core.model.METERS_PER_YARD
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
@@ -302,7 +303,7 @@ class RangeScene<P : PathSink>(
 
         /** The target line down the middle of the fairway, out to the last marker. */
         fun targetLine(description: RangeSceneDescription) {
-            val end = (description.markers.maxOfOrNull { it.yards } ?: 0) * RangeSceneDescription.YARDS_TO_METERS
+            val end = (description.markers.maxOfOrNull { it.yards } ?: 0) * METERS_PER_YARD
             ground +=
                 WorldPolygon(
                     rectangle(0.0, -end / 2, TARGET_LINE_HALF_WIDTH_METERS, end / 2, 0.0),

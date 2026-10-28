@@ -38,15 +38,22 @@ tag. Plain `v0.1.0` waits on the hardware test matrix on a real Raspberry Pi.
   clear shows "Try again" in full instead of "Try a…". Android's shot rows get the same layout at
   large font scales, so 200 % text no longer cuts the club, time and total ("Driv" / "er",
   "Total 29…") (#42).
+- Voice call-outs say "1 yard right" and "1 degree" instead of "1 yards" and "1 degrees" (#137).
+- If the Pi is updated to a backend with the live shot stream while the app is connected, the app
+  now switches to that stream the next time it reconnects to the Pi, without a "Connecting" flash.
+  Before, it kept using the older feed until you retried, changed host or restarted the app (#46).
 - Shots taken while the phone was locked or the app was in the background are now saved to History
   and counted in My Bag once the app reconnects, on any Pi. Before, they showed on the Session
   screen but were never stored. Shots you deleted stay deleted, and shots from an earlier day get a
   session of their own (#168).
 - When the Pi's two shot streams connect at the same moment, they now share one session, so the
   current-session view no longer comes up empty while shots are saved somewhere else (#135).
+- In Settings › Audio call-outs, quick repeated taps on a field's toggle or its move buttons now all
+  take effect. Before, a second tap could be lost (#136).
 - A broken or hostile device on the network can no longer run the app out of memory by streaming
   endless data on the shot stream: an oversized line or event drops the connection and reconnects
-  (#132).
+  (#132). The same now holds for the Pi's live-session socket: a message over 1 MB is refused
+  instead of buffered (#166).
 - The Session dispersion chart labels each club's ellipse with the club (e.g. "D", "7i"), so
   colour-blind golfers can tell the ellipses apart without relying on colour (#43).
 - A club change from the launch monitor no longer crashes the app when the phone can't save it

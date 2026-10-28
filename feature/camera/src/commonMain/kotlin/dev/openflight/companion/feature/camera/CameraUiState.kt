@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 package dev.openflight.companion.feature.camera
 
+import dev.openflight.companion.core.model.ShotMetricFormatter
 import dev.openflight.companion.core.model.pi.CameraCaptureSettings
 import dev.openflight.companion.core.model.pi.PiFeatureAvailability
 
@@ -37,7 +38,15 @@ data class ReplayRow(
     val club: String?,
     val ballSpeedMph: Double?,
     val mirrorHorizontal: Boolean,
-)
+) {
+    /** The row's text on both platforms: "#7 · Driver · 151.4 mph", skipping what's missing. */
+    val label: String =
+        listOfNotNull(
+            shotNumber?.let { "#$it" },
+            club,
+            ballSpeedMph?.let { "${ShotMetricFormatter.number(it, 1)} mph" },
+        ).joinToString(" · ")
+}
 
 /** The replay being prepared or played. */
 sealed interface CameraReplayState {

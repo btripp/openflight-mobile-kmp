@@ -11,6 +11,7 @@ import assertk.assertions.isFalse
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isTrue
 import dev.openflight.companion.core.network.LocalNetworkDenial
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.test.TestScope
@@ -21,6 +22,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlin.test.Test
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class SocketIoClientTest {
     private class FakeConnection : EngineIoConnection {
         private val channel = Channel<String>(Channel.UNLIMITED)

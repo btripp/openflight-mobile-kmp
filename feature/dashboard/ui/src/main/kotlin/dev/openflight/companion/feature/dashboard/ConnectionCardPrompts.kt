@@ -160,7 +160,7 @@ internal fun LocalNetworkDenied() {
                         Uri.fromParts("package", context.packageName, null),
                     ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 // Never let a device without the settings page break the dashboard.
-                runCatching { context.startActivity(intent) }
+                val _ = runCatching { context.startActivity(intent) }
             },
             modifier = Modifier.heightIn(min = 48.dp).testTag(DashboardTestTags.OPEN_SETTINGS),
         )
@@ -198,7 +198,7 @@ internal fun HelpLink(link: ConnectionHelpLink) {
     OfTextButton(
         text = link.label,
         // Never let a device without a browser break the dashboard.
-        onClick = { runCatching { uriHandler.openUri(link.url) } },
+        onClick = { val _ = runCatching { uriHandler.openUri(link.url) } },
         modifier = Modifier.testTag(DashboardTestTags.HELP_LINK),
     )
 }

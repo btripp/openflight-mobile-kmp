@@ -98,9 +98,7 @@ internal fun SessionActionPanel(
             }
         }
 
-        is SessionActionState.Confirming, SessionActionState.Idle -> {
-            Unit
-        }
+        is SessionActionState.Confirming, SessionActionState.Idle -> {}
     }
 }
 

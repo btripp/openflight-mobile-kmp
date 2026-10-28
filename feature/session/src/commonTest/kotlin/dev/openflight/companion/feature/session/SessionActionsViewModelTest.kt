@@ -250,7 +250,7 @@ class SessionActionsViewModelTest {
         }
 
     @Test
-    fun aPiDeleteThatIsNeverAnsweredFailsAfterTheTimeout() =
+    fun aPiDeleteThatNeverSettledFailsAfterTheSafetyTimeout() =
         runTest {
             connectAnn()
 
@@ -261,10 +261,10 @@ class SessionActionsViewModelTest {
                 awaitUntil { it.action is SessionActionState.Pending }
                 piSession.deletionState.value = DeletionState.Pending(timestamp(1))
 
-                testScheduler.advanceTimeBy(SessionViewModel.ACTION_TIMEOUT_MILLIS + 1)
+                testScheduler.advanceTimeBy(DeletionState.TIMEOUT_MILLIS + 1_001)
 
                 val failed = awaitUntil { it.action is SessionActionState.Failed }.action as SessionActionState.Failed
-                assertThat(failed.message).isEqualTo(SessionActionCopy.DELETE_NOT_CONFIRMED)
+                assertThat(failed.message).isEqualTo(DeletionState.NO_CONFIRMATION)
                 // The one-at-a-time slot is free again.
                 assertThat(piSession.deletionState.value).isEqualTo(DeletionState.Idle)
             }

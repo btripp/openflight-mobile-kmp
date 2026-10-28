@@ -60,9 +60,7 @@ class SseEventParser {
             }
 
             // `id` and `retry` are unused, and unknown fields must be ignored.
-            else -> {
-                Unit
-            }
+            else -> {}
         }
     }
 

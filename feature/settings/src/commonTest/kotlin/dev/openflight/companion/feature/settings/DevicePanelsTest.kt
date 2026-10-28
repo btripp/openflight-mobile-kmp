@@ -252,8 +252,8 @@ class DevicePanelsTest {
                 var state = awaitItem()
                 while (state.connectionProblem == null) state = awaitItem()
 
-                assertThat(state.connectionProblem?.kind).isEqualTo(ConnectionProblem.Kind.ADDRESS_REJECTED)
-                assertThat(state.connectionProblem?.detail).isEqualTo("Public addresses need HTTPS")
+                assertThat(state.connectionProblem.kind).isEqualTo(ConnectionProblem.Kind.ADDRESS_REJECTED)
+                assertThat(state.connectionProblem.detail).isEqualTo("Public addresses need HTTPS")
                 cancelAndIgnoreRemainingEvents()
             }
         }

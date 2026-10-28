@@ -7,11 +7,13 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isNotEqualTo
 import assertk.assertions.isNull
 import dev.openflight.companion.core.testing.FakeSettingsRepository
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 
 /** Plan F8b's range launch hooks: `--preview-live-shots` and `--preview-history-bulk`. */
+@OptIn(ExperimentalCoroutinesApi::class)
 class PreviewRangeHooksTest {
     private fun previewShots() = PreviewShotRepository(FakeSettingsRepository(), showPreviewShot = true)
 

@@ -16,6 +16,7 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
 import io.ktor.serialization.kotlinx.json.json
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
@@ -33,6 +34,7 @@ import kotlin.time.Duration.Companion.minutes
  * [OpenMeteoWeatherClient] against [WeatherFixtures] (plan F6). Each test builds its own
  * `MockEngine` client and a [GeodataCache] rooted in a fresh temp directory.
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 class OpenMeteoWeatherClientTest {
     private val directory: Path =
         FileSystem.SYSTEM_TEMPORARY_DIRECTORY / "openflight-geodata-${Random.nextLong().toULong()}"

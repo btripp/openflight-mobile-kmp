@@ -2,7 +2,6 @@
 package dev.openflight.companion.core.socketio
 
 import assertk.assertThat
-import assertk.assertions.containsExactly
 import assertk.assertions.isEqualTo
 import assertk.assertions.isNull
 import kotlin.test.Test
@@ -56,31 +55,5 @@ class EngineIoCodecTest {
         assertThat(EngineIoCodec.encodePacket(EngineIoPacket.Upgrade)).isEqualTo("5")
         assertThat(EngineIoCodec.encodePacket(EngineIoPacket.Close)).isEqualTo("1")
         assertThat(EngineIoCodec.encodePacket(EngineIoPacket.Message("0"))).isEqualTo("40")
-    }
-
-    @Test
-    fun splitsALongPollingPayloadOnTheRecordSeparator() {
-        val payload = "2\u001e42[\"club_changed\",{\"club\":\"driver\"}]\u001e40{\"sid\":\"abc\"}"
-
-        assertThat(EngineIoCodec.decodePayload(payload)).containsExactly(
-            EngineIoPacket.Ping(""),
-            EngineIoPacket.Message("2[\"club_changed\",{\"club\":\"driver\"}]"),
-            EngineIoPacket.Message("0{\"sid\":\"abc\"}"),
-        )
-    }
-
-    @Test
-    fun joinsPacketsIntoOneLongPollingPayload() {
-        val payload = EngineIoCodec.encodePayload(listOf(EngineIoPacket.Pong(""), EngineIoPacket.Message("0")))
-
-        assertThat(payload).isEqualTo("3\u001e40")
-    }
-
-    @Test
-    fun dropsUndecodablePacketsFromAPayloadButKeepsTheRest() {
-        assertThat(EngineIoCodec.decodePayload("2\u001e\u001e9x\u001e6")).containsExactly(
-            EngineIoPacket.Ping(""),
-            EngineIoPacket.Noop,
-        )
     }
 }

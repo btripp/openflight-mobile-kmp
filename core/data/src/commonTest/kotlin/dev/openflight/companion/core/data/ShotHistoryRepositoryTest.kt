@@ -18,6 +18,7 @@ import dev.openflight.companion.core.database.ShotHistoryDatabase
 import dev.openflight.companion.core.database.buildShotHistoryDatabase
 import dev.openflight.companion.core.database.inMemoryShotHistoryDatabaseBuilder
 import dev.openflight.companion.core.model.pi.ShotDetail
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -30,6 +31,7 @@ import kotlin.test.Test
  * cover what the repository adds: sessions per connect, the model mapping, and the
  * "unavailable database" contract.
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 class ShotHistoryRepositoryTest {
     private class Harness(
         scope: TestScope,
@@ -335,7 +337,7 @@ class ShotHistoryRepositoryTest {
         }
 
     @Test
-    fun deletesAndClearAllReachObservers() =
+    fun deletesAndClearAllSayTheyWereAppliedAndReachObservers() =
         runHistoryTest { h ->
             h.repository.startSession("pi.local", TransportType.WIFI)
             h.repository.shots("session-1").test {
@@ -346,10 +348,10 @@ class ShotHistoryRepositoryTest {
                 assertThat(awaitTimestamps { it.size == 2 })
                     .containsExactly("2026-09-14T10:05:00", "2026-09-14T10:00:00")
 
-                h.repository.deleteShot("2026-09-14T10:00:00")
+                assertThat(h.repository.deleteShot("2026-09-14T10:00:00")).isTrue()
                 assertThat(awaitTimestamps { it.size == 1 }).containsExactly("2026-09-14T10:05:00")
 
-                h.repository.clearAll()
+                assertThat(h.repository.clearAll()).isTrue()
                 assertThat(awaitTimestamps { it.isEmpty() }).isEmpty()
             }
         }
@@ -399,9 +401,8 @@ class ShotHistoryRepositoryTest {
         runHistoryTest(openDatabase = { error("disk I/O error") }, fallbackDatabase = { error("no memory") }) { h ->
             h.repository.startSession("pi.local", TransportType.WIFI)
             h.repository.record(liveShot(1, "2026-09-14T10:00:00"))
-            h.repository.deleteShot("2026-09-14T10:00:00")
-            h.repository.clearAll()
-            h.repository.awaitWrites()
+            assertThat(h.repository.deleteShot("2026-09-14T10:00:00")).isFalse()
+            assertThat(h.repository.clearAll()).isFalse()
 
             assertThat(h.repository.sessions().first()).isEmpty()
             assertThat(h.repository.shots("session-1").first()).isEmpty()

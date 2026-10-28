@@ -20,6 +20,7 @@ import dev.openflight.companion.core.testing.FakeFinalShotStream
 import dev.openflight.companion.core.testing.FakeScreenReaderMonitor
 import dev.openflight.companion.core.testing.FakeSettingsRepository
 import dev.openflight.companion.core.testing.FakeSpeechEngine
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
@@ -31,6 +32,7 @@ import kotlin.test.Test
  * [dev.openflight.companion.core.flight.ShotDistanceEstimator] and
  * [dev.openflight.companion.core.insights.CalloutComposer]'s own tested job.
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 class ShotCalloutCoordinatorTest {
     private class Harness(
         scope: TestScope,

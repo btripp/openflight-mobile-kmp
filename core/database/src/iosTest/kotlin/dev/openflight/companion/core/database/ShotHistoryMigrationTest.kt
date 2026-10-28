@@ -90,7 +90,7 @@ class ShotHistoryMigrationTest {
                 assertThat(shots.single().ballSpeedMph).isEqualTo(148.2)
                 assertThat(
                     dao
-                        .observeSessions()
+                        .observeSessionsOf(SessionEntity.SOURCE_LOCAL, includeImported = false)
                         .first()
                         .single()
                         .shotCount,
@@ -146,7 +146,7 @@ class ShotHistoryMigrationTest {
                 assertThat(shots.map { it.starred }).containsExactly(false, false)
                 assertThat(shots.map { it.note }).containsExactly(null, null)
 
-                val session = dao.observeSessions().first().single()
+                val session = dao.observeSessionsOf(SessionEntity.SOURCE_LOCAL, false).first().single()
                 assertThat(session.id).isEqualTo("s1")
                 assertThat(session.shotCount).isEqualTo(2)
                 assertThat(session.source).isEqualTo(SessionEntity.SOURCE_LOCAL)
@@ -156,11 +156,11 @@ class ShotHistoryMigrationTest {
                 assertThat(session.note).isNull()
 
                 assertThat(database.bagDao().bagCount()).isEqualTo(0)
-                assertThat(database.bagDao().observeClubs().first()).isEmpty()
+                assertThat(database.bagDao().clubsOf("any")).isEmpty()
                 assertThat(database.activityDao().observeActivities().first()).isEmpty()
 
                 // The migrated rows are the phone's own, so a Pi delete still reaches them.
-                dao.deleteByTimestamps(listOf("2026-09-14T10:00:00"))
+                dao.deleteByTimestampsIn(listOf("2026-09-14T10:00:00"), SessionEntity.SOURCE_LOCAL)
                 assertThat(dao.observeShots("s1").first().map { it.timestamp }).containsExactly("2026-09-14T10:05:00")
             } finally {
                 database.close()

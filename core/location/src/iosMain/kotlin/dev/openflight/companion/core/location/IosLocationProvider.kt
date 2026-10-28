@@ -92,9 +92,7 @@ private class OneShotDelegate(
                 finish(LocationResult.PermissionDenied)
             }
 
-            else -> {
-                Unit
-            } // still notDetermined; the user hasn't answered the prompt yet.
+            else -> {} // still notDetermined; the user hasn't answered the prompt yet.
         }
     }
 

@@ -64,6 +64,7 @@ class AndroidLibraryComposeConventionPlugin : Plugin<Project> {
             }
 
             addJetpackComposeDependencies()
+            configureKotlinCompilerChecks()
             dependencies {
                 add("testImplementation", libs.library("kotlin-test-junit"))
                 add("testImplementation", libs.library("assertk"))

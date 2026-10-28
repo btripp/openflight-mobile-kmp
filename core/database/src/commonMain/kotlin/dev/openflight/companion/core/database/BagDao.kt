@@ -23,18 +23,10 @@ data class BagWithClubs(
 @Dao
 @Suppress("TooManyFunctions") // One function per query, as Room wants them.
 abstract class BagDao {
-    /** Every bag, oldest first. */
-    @Query("SELECT * FROM bags ORDER BY created_at, id")
-    abstract fun observeBags(): Flow<List<BagEntity>>
-
     /** Every bag with its clubs, oldest bag first: one consistent snapshot per change. */
     @Transaction
     @Query("SELECT * FROM bags ORDER BY created_at, id")
     abstract fun observeBagsWithClubs(): Flow<List<BagWithClubs>>
-
-    /** Every bag's clubs, in bag order. */
-    @Query("SELECT * FROM bag_clubs ORDER BY bag_id, sort_order, id")
-    abstract fun observeClubs(): Flow<List<BagClubEntity>>
 
     /** Inserts [bag] with [clubs]; when [makeActive], it becomes the only active bag. */
     @Transaction

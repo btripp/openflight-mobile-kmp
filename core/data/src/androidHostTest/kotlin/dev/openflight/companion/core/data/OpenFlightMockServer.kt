@@ -64,7 +64,7 @@ internal class OpenFlightMockServer private constructor(
 
     override fun close() {
         kill()
-        runCatching { Runtime.getRuntime().removeShutdownHook(shutdownHook) }
+        val _ = runCatching { Runtime.getRuntime().removeShutdownHook(shutdownHook) }
     }
 
     private fun kill() {
