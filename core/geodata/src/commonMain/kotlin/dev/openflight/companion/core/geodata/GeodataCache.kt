@@ -10,7 +10,8 @@ import kotlin.time.ExperimentalTime
 /**
  * A tiny Okio disk cache keyed by a caller-chosen string, each entry stamped with its write time
  * so [read] can enforce [ttl] itself (plan F6 task 2: 15 minutes for weather). One file per key:
- * its first line is the write time in epoch millis, the rest is the cached body verbatim.
+ * its first line is the write time in epoch millis, the rest is the cached body verbatim. Only the
+ * latest key is kept: [write] deletes every other entry, so the cache can't grow without bound.
  */
 @OptIn(ExperimentalTime::class)
 internal class GeodataCache(
@@ -19,27 +20,36 @@ internal class GeodataCache(
     private val ttl: Duration,
     private val now: () -> Long = { Clock.System.now().toEpochMilliseconds() },
 ) {
-    /** The cached body for [key], or `null` if there's none, it's unreadable, or older than [ttl]. */
+    /**
+     * The cached body for [key], or `null` if there's none, it's unreadable, older than [ttl], or
+     * stamped in the future (the clock went backwards, so its age is unknown).
+     */
     fun read(key: String): String? =
         runCatching {
             fileSystem.read(pathFor(key)) {
                 val writtenAtEpochMillis = readUtf8Line()?.toLongOrNull() ?: return@read null
-                if (now() - writtenAtEpochMillis > ttl.inWholeMilliseconds) return@read null
+                val ageMillis = now() - writtenAtEpochMillis
+                if (ageMillis < 0 || ageMillis > ttl.inWholeMilliseconds) return@read null
                 readUtf8()
             }
         }.getOrNull()
 
-    /** Overwrites [key]'s entry with [body], stamped with the current time. */
+    /** Overwrites [key]'s entry with [body], stamped with the current time, and drops every other entry. */
     fun write(
         key: String,
         body: String,
     ) {
         runCatching {
             fileSystem.createDirectories(directory)
-            fileSystem.write(pathFor(key)) {
+            val path = pathFor(key)
+            fileSystem.write(path) {
                 writeUtf8("${now()}\n")
                 writeUtf8(body)
             }
+            fileSystem
+                .list(directory)
+                .filter { it != path && it.name.startsWith(FILE_PREFIX) }
+                .forEach { fileSystem.delete(it) }
         }
     }
 
