@@ -32,6 +32,9 @@ tag. Plain `v0.1.0` waits on the hardware test matrix on a real Raspberry Pi.
 
 ### Fixed
 
+- If the Pi is updated to a backend with the live shot stream while the app is connected, the app
+  now switches to that stream the next time it reconnects to the Pi, without a "Connecting" flash.
+  Before, it kept using the older feed until you retried, changed host or restarted the app (#46).
 - Shots taken while the phone was locked or the app was in the background are now saved to History
   and counted in My Bag once the app reconnects, on any Pi. Before, they showed on the Session
   screen but were never stored. Shots you deleted stay deleted, and shots from an earlier day get a
