@@ -33,6 +33,8 @@ internal val shotHistoryModule: Module =
             DefaultShotHistoryRepository(
                 database = get<HistoryDatabase>(),
                 scope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
+                // #148: the current session survives an app restart, in the settings DataStore.
+                savedSession = get(),
             )
         }
         // Plan F14: the default the app uses; `shared` binds its Demo-mode switch in its place.
