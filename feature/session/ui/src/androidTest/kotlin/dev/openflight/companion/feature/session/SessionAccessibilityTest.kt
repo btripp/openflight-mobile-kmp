@@ -39,11 +39,19 @@ class SessionAccessibilityTest {
     private fun show(
         state: SessionUiState,
         fontScale: Float = 1f,
+        onViewOnRange: ((String) -> Unit)? = null,
     ) {
         composeRule.setContent {
             val density = LocalDensity.current
             CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale)) {
-                OfTheme { SessionScreen(uiState = state, onEvent = { events += it }, onBack = {}) }
+                OfTheme {
+                    SessionScreen(
+                        uiState = state,
+                        onEvent = { events += it },
+                        onBack = {},
+                        onViewOnRange = onViewOnRange,
+                    )
+                }
             }
         }
     }
@@ -143,6 +151,32 @@ class SessionAccessibilityTest {
             "Min Ball (mph)",
             "7-Iron",
         ).forEach(::assertNotClipped)
+    }
+
+    @Test
+    fun given200PercentText_whenShown_thenShotRowsKeepTheClubTimeAndMetricsWhole() {
+        // As the app shows them: each row with its estimated total and a Range button.
+        val total = "Total 295 yds · Roll 31 yds (est.)"
+        show(
+            withChart.copy(shots = previewRows.map { it.copy(estimatedTotal = total) }),
+            fontScale = 2f,
+            onViewOnRange = {},
+        )
+
+        // The metrics and Range beside the club and time left them a sliver: "Driv" / "er",
+        // "11:00" / ":0…", "Total" / "29…".
+        listOf("Driver", "7-Iron").forEach(::assertOnOneLine)
+        listOf("19:42:11", "19:42:12", total, "151.4", "118.2", "264", "165").forEach(::assertNotClipped)
+    }
+
+    /** [assertNotClipped], and on one line: a single word wrapped mid-word isn't cut off but reads badly. */
+    private fun assertOnOneLine(text: String) {
+        assertNotClipped(text)
+        composeRule.onAllNodes(hasText(text), useUnmergedTree = true).fetchSemanticsNodes().forEach { node ->
+            val layouts = mutableListOf<TextLayoutResult>()
+            val _ = node.config[SemanticsActions.GetTextLayoutResult].action?.invoke(layouts)
+            assertEquals(1, layouts.single().lineCount, "\"$text\" breaks over lines at 200 % text")
+        }
     }
 
     /**

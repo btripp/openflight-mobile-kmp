@@ -73,6 +73,7 @@ struct SessionContent: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     /// Plan F8d-B: the rows' and the selected card's "View on range" (the live session's shots).
     @Environment(\.openRange) private var openRange
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private var units: UnitSystem { state.units }
     private var isPi: Bool { state.source == .pi }
@@ -361,39 +362,58 @@ struct SessionContent: View {
         }
     }
 
+    // Stacked at an accessibility text size: side by side, each got half the width and broke
+    // mid-word ("C" / "lear"). (ViewThatFits kept one row: the labels' infinite max width.)
     private var actionButtons: some View {
-        HStack(spacing: 12) {
-            Group {
-                if let export {
-                    ShareLink(item: export.url, preview: SharePreview(export.filename)) {
-                        Label("Export CSV", systemImage: "square.and.arrow.up")
-                            .frame(maxWidth: .infinity)
-                    }
-                } else {
-                    Button {} label: {
-                        Label("Export CSV", systemImage: "square.and.arrow.up")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .disabled(true)
-                }
-            }
-            .accessibilityIdentifier("session.export")
-
-            // The ViewModel asks for confirmation (plan R8f), shown by `sessionActionDialog`.
-            Button(role: .destructive) {
-                send(SessionEventClearHistory.shared)
-            } label: {
-                Label("Clear", systemImage: "trash")
-                    .frame(maxWidth: .infinity)
-            }
-            .tint(Theme.danger)
-            .disabled(!canEdit)
-            .accessibilityIdentifier("session.clear")
-        }
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(spacing: 12))
+            : AnyLayout(HStackLayout(spacing: 12))
+        return layout { actionButtonsContent }
         .font(.of(.body, weight: .semibold))
         .buttonStyle(.bordered)
         .tint(Theme.gold)
         .controlSize(.large)
+    }
+
+    @ViewBuilder
+    private var actionButtonsContent: some View {
+        Group {
+            if let export {
+                ShareLink(item: export.url, preview: SharePreview(export.filename)) {
+                    actionLabel("Export CSV", systemImage: "square.and.arrow.up")
+                        .frame(maxWidth: .infinity)
+                }
+            } else {
+                Button {} label: {
+                    actionLabel("Export CSV", systemImage: "square.and.arrow.up")
+                        .frame(maxWidth: .infinity)
+                }
+                .disabled(true)
+            }
+        }
+        .accessibilityIdentifier("session.export")
+
+        // The ViewModel asks for confirmation (plan R8f), shown by `sessionActionDialog`.
+        Button(role: .destructive) {
+            send(SessionEventClearHistory.shared)
+        } label: {
+            actionLabel("Clear", systemImage: "trash")
+                .frame(maxWidth: .infinity)
+        }
+        .tint(Theme.danger)
+        .disabled(!canEdit)
+        .accessibilityIdentifier("session.clear")
+    }
+
+    /// Title only at an accessibility text size: even at the full width the icon left "Export"
+    /// too little room, so it broke mid-word ("Exp" / "ort CSV").
+    @ViewBuilder
+    private func actionLabel(_ title: String, systemImage: String) -> some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            Label(title, systemImage: systemImage).labelStyle(.titleOnly)
+        } else {
+            Label(title, systemImage: systemImage)
+        }
     }
 }
 
@@ -476,41 +496,72 @@ struct SessionStatsGrid: View {
 struct SessionShotRowView: View {
     let row: SessionShotRow
     let units: UnitSystem
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
-        HStack(spacing: 12) {
-            Text("#\(row.shotNumber)")
-                .font(.of(.subheadline, weight: .bold).monospacedDigit())
-                .foregroundStyle(Theme.gold)
-                .frame(minWidth: 30, alignment: .leading)
-            VStack(alignment: .leading, spacing: 3) {
-                // Two lines, so large text wraps instead of cutting the club or the time off.
-                Text(row.implementLabel ?? Units.clubLabel(row.club))
-                    .font(.of(.headline, weight: .semibold))
-                    .lineLimit(2)
-                Text([Units.clockTime(row.timestamp), row.profileName, row.shapeLabel].compactMap { $0 }.joined(separator: " · "))
-                    .font(.of(.caption))
-                    .foregroundStyle(Theme.creamDim)
-                    .lineLimit(2)
-                // Plan F5b: the estimated total and roll, labelled "est.".
-                if let total = row.estimatedTotal {
-                    Text(total)
-                        .font(.of(.caption))
-                        .foregroundStyle(Theme.creamDim)
-                        .lineLimit(2)
+        Group {
+            // At an accessibility text size one row left the club and time a sliver between the
+            // number and the metrics ("Dri" / "ver", "11:0" / "0:…", the metrics "•••"), so the
+            // metrics move under them.
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(alignment: .firstTextBaseline, spacing: 12) {
+                        shotNumber
+                        details
+                    }
+                    HStack(spacing: 24) { metrics }
                 }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            if row.isSwingSpeed {
-                metric(Units.speed(row.swingSpeedMph, units), Units.speedUnit(units).uppercased())
             } else {
-                metric(Units.speed(row.ballSpeedMph, units), Units.speedUnit(units).uppercased())
-                metric(Units.distance(row.carryYards, units), Units.distanceUnit(units).uppercased())
+                HStack(spacing: 12) {
+                    shotNumber
+                    details
+                    metrics
+                }
             }
         }
         .padding(.vertical, 4)
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("session.shot.\(row.id)")
+    }
+
+    private var shotNumber: some View {
+        Text("#\(row.shotNumber)")
+            .font(.of(.subheadline, weight: .bold).monospacedDigit())
+            .foregroundStyle(Theme.gold)
+            .frame(minWidth: 30, alignment: .leading)
+    }
+
+    private var details: some View {
+        // Two lines, so large text wraps instead of cutting the club or the time off; as many as
+        // it needs at an accessibility size, where the row has the full width.
+        let lineLimit = dynamicTypeSize.isAccessibilitySize ? nil : 2
+        return VStack(alignment: .leading, spacing: 3) {
+            Text(row.implementLabel ?? Units.clubLabel(row.club))
+                .font(.of(.headline, weight: .semibold))
+                .lineLimit(lineLimit)
+            Text([Units.clockTime(row.timestamp), row.profileName, row.shapeLabel].compactMap { $0 }.joined(separator: " · "))
+                .font(.of(.caption))
+                .foregroundStyle(Theme.creamDim)
+                .lineLimit(lineLimit)
+            // Plan F5b: the estimated total and roll, labelled "est.".
+            if let total = row.estimatedTotal {
+                Text(total)
+                    .font(.of(.caption))
+                    .foregroundStyle(Theme.creamDim)
+                    .lineLimit(lineLimit)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private var metrics: some View {
+        if row.isSwingSpeed {
+            metric(Units.speed(row.swingSpeedMph, units), Units.speedUnit(units).uppercased())
+        } else {
+            metric(Units.speed(row.ballSpeedMph, units), Units.speedUnit(units).uppercased())
+            metric(Units.distance(row.carryYards, units), Units.distanceUnit(units).uppercased())
+        }
     }
 
     private func metric(_ value: String, _ unit: String) -> some View {

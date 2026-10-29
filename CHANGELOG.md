@@ -32,6 +32,12 @@ tag. Plain `v0.1.0` waits on the hardware test matrix on a real Raspberry Pi.
 
 ### Fixed
 
+- The iOS Session screen reads in whole words at the largest text sizes. Export CSV and Clear
+  stack instead of breaking mid-word ("C" / "lear"), each shot row puts its speed and carry under
+  the club and time instead of squeezing them to "Dri" / "ver" and "…", and a failed delete or
+  clear shows "Try again" in full instead of "Try a…". Android's shot rows get the same layout at
+  large font scales, so 200 % text no longer cuts the club, time and total ("Driv" / "er",
+  "Total 29…") (#42).
 - Clearing a profile's session on the Pi over Bluetooth now also removes its earlier shots from
   History and My Bag after the app was restarted. Reopening the app within 30 minutes and
   reconnecting to the same Pi the same way now continues the session instead of starting a new one
