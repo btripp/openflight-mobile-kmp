@@ -24,6 +24,11 @@ final class SessionPiActionsUITests: XCTestCase {
         let row = app.descendants(matching: .any)[Self.driver]
         XCTAssertTrue(SessionUITests.reveal(row, in: app))
         row.tap()
+        // The tap opens the shot's detail sheet over the selected card; close it to reach Delete.
+        let close = app.buttons["shotDetail.close"]
+        XCTAssertTrue(close.waitForExistence(timeout: 5))
+        close.tap()
+        XCTAssertTrue(close.waitForNonExistence(timeout: 5))
         let delete = app.buttons["session.selected.delete"]
         XCTAssertTrue(SessionUITests.reveal(delete, in: app, scrollingUp: true))
         delete.tap()
