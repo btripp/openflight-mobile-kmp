@@ -11,7 +11,7 @@
 #   iosArm64/iosSimulatorArm64). Versions checked on 2026-09-24 against Google Maven.
 # - detekt 2.x is still alpha, so we use 1.23.8 (latest stable).
 [versions]
-agp = "9.4.1"
+agp = "9.5.0"
 android-compileSdk = "37"
 android-minSdk = "26"
 android-targetSdk = "37"

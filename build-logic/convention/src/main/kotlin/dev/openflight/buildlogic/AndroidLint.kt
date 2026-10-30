@@ -16,4 +16,8 @@ internal fun Lint.configureOpenFlightLint() {
     disable += setOf("AndroidGradlePluginVersion", "GradleDependency", "NewerVersionAvailable")
     // minSdk 26 always uses the adaptive icon (mipmap-anydpi); the legacy PNGs are never shown.
     disable += "IconLauncherShape"
+    // AGP 9.5's lint rejects the checks bundled in lifecycle-runtime 2.11.0 (built against an
+    // older lint API) and only skips them, so the finding is the library's, not ours. Drop this
+    // once a stable lifecycle release passes under the AGP in use.
+    disable += "ObsoleteLintCustomCheck"
 }
