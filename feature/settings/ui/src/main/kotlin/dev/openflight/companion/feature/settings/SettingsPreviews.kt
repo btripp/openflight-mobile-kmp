@@ -59,6 +59,7 @@ internal fun previewSettingsState(
                             maxSpeed = 120,
                             minMagnitude = 400,
                             transmitPower = 0,
+                            leds = true,
                         )
                     } else {
                         null
@@ -104,6 +105,7 @@ internal fun previewSettingsState(
                         emptyList()
                     },
                 refresh = available,
+                leds = if (connected) RadarLeds(on = true, toggle = available) else null,
             ),
         debug =
             DebugSettings(

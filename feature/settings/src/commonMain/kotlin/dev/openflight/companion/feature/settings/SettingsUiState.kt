@@ -125,6 +125,7 @@ data class RadarSlider(
  * @property hint the text under the sliders.
  * @property diagnostics the last 20 trigger diagnostics, newest first.
  * @property refresh whether [SettingsEvent.RefreshRadarConfig] can run.
+ * @property leds the Radar LEDs switch, or `null` when the Pi can't control them (hidden).
  */
 data class RadarPanel(
     val config: RadarConfig?,
@@ -135,6 +136,17 @@ data class RadarPanel(
     val hint: String,
     val diagnostics: List<TriggerDiagnosticRow>,
     val refresh: PiFeatureAvailability,
+    val leds: RadarLeds? = null,
+)
+
+/**
+ * The radar board's LEDs (`radar_config`'s `leds`).
+ *
+ * @property toggle whether [SettingsEvent.SetRadarLeds] can run.
+ */
+data class RadarLeds(
+    val on: Boolean,
+    val toggle: PiFeatureAvailability,
 )
 
 /**

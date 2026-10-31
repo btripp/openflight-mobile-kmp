@@ -101,7 +101,7 @@ internal class PreviewDevicePiSessionRepository(
     override val cameraCaptureSettings: StateFlow<CameraCaptureSettings?> = MutableStateFlow(null)
     override val simState: StateFlow<SimState> = MutableStateFlow(SimState())
     override val radarConfig: StateFlow<RadarConfig?> =
-        MutableStateFlow(RadarConfig(minSpeed = 10, maxSpeed = 120, minMagnitude = 400, transmitPower = 0))
+        MutableStateFlow(RadarConfig(minSpeed = 10, maxSpeed = 120, minMagnitude = 400, transmitPower = 0, leds = true))
     override val debugState: StateFlow<DebugState> = MutableStateFlow(DebugState(enabled = false, loaded = true))
     override val cloudUploadStatus: StateFlow<CloudUploadStatus> = MutableStateFlow(CloudUploadStatus())
     override val mockMode: StateFlow<Boolean?> = MutableStateFlow(mockMode)

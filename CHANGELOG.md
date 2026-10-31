@@ -21,6 +21,9 @@ tag. Plain `v0.1.0` waits on the hardware test matrix on a real Raspberry Pi.
   temperature and wind from Open-Meteo weather for your coarse location, credited on the card. The
   location prompt appears only when you tap it; a denial or failed lookup says why and keeps your
   manual conditions (#31).
+- **Turn off the radar's LEDs.** Settings › Radar has a Radar LEDs switch that turns the radar
+  board's lights on or off over Wi-Fi. It appears only when the Pi runs an OpenFlight server with
+  LED control.
 
 ### Changed
 

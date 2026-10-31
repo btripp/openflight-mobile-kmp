@@ -188,6 +188,33 @@ class SettingsViewModelTest {
         }
 
     @Test
+    fun radarLedsSwitchShowsOnlyWhenThePiReportsLedsAndSendsJustLeds() =
+        runTest {
+            piSession.radarConfig.value = RadarConfig(minSpeed = 10, transmitPower = 2)
+
+            viewModel.uiState.testIgnoringRest {
+                // An older server sends no `leds`: no switch.
+                assertThat(awaitUntil { it.radar.config != null }.radar.leds).isNull()
+
+                piSession.radarConfig.value = RadarConfig(minSpeed = 10, transmitPower = 2, leds = true)
+                assertThat(awaitUntil { it.radar.leds != null }.radar.leds)
+                    .isEqualTo(RadarLeds(on = true, toggle = PiFeatureAvailability.Available))
+
+                piSession.mockMode.value = true
+                assertThat(
+                    awaitUntil { it.mockMode }
+                        .radar.leds
+                        ?.toggle
+                        ?.disabledReason,
+                ).isEqualTo("Disabled in mock mode")
+            }
+
+            viewModel.onEvent(SettingsEvent.SetRadarLeds(enabled = false))
+
+            assertThat(piSession.commands).containsExactly("set_radar_config:${RadarConfigUpdate(leds = false)}")
+        }
+
+    @Test
     fun releasingASliderSendsOnlyThatField() =
         runTest {
             viewModel.onEvent(SettingsEvent.SetRadarValue(RadarField.TRANSMIT_POWER, 5))

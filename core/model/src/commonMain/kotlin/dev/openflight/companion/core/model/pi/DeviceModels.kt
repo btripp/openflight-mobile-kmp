@@ -44,7 +44,8 @@ data class TriggerDiagnostic(
 
 /**
  * `radar_config` (server.py `radar_config`): speed filters in mph, the magnitude filter, and
- * transmit power (0 = max, 7 = min).
+ * transmit power (0 = max, 7 = min). [leds] is the radar board's lights; `null` when the server
+ * predates LED control (it sends no `leds` key).
  */
 @Serializable
 data class RadarConfig(
@@ -52,6 +53,7 @@ data class RadarConfig(
     @SerialName("max_speed") val maxSpeed: Int = 0,
     @SerialName("min_magnitude") val minMagnitude: Int = 0,
     @SerialName("transmit_power") val transmitPower: Int = 0,
+    val leds: Boolean? = null,
 )
 
 /**
@@ -63,6 +65,7 @@ data class RadarConfigUpdate(
     val maxSpeed: Int? = null,
     val minMagnitude: Int? = null,
     val transmitPower: Int? = null,
+    val leds: Boolean? = null,
 )
 
 /** `debug_reading`: one raw radar reading, sent only while debug mode is on. */

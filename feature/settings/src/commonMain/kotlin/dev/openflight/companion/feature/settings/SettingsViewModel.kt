@@ -215,6 +215,10 @@ class SettingsViewModel(
                 send { piSession.setRadarConfig(event.toUpdate()) }
             }
 
+            is SettingsEvent.SetRadarLeds -> {
+                send { piSession.setRadarConfig(RadarConfigUpdate(leds = event.enabled)) }
+            }
+
             SettingsEvent.RefreshRadarConfig -> {
                 send { piSession.refreshRadarConfig() }
             }

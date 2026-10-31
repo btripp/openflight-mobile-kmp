@@ -118,6 +118,17 @@ internal fun RadarCard(
         if (radar.sliders.isNotEmpty()) {
             OfText(text = radar.hint, role = OfTextRole.BodySmall, color = OfColorTokens.CreamDim)
         }
+        radar.leds?.let { leds ->
+            OfSwitchRow(
+                label = "Radar LEDs",
+                detail = "Turn off the radar board's lights",
+                checked = leds.on,
+                onCheckedChange = { onEvent(SettingsEvent.SetRadarLeds(it)) },
+                enabled = leds.toggle.isAvailable,
+                disabledReason = leds.toggle.disabledReason,
+                modifier = Modifier.testTag(SettingsTestTags.RADAR_LEDS),
+            )
+        }
         Diagnostics(radar.diagnostics)
     }
 }

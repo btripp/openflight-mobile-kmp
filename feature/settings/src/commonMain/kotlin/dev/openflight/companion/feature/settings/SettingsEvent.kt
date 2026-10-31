@@ -21,6 +21,11 @@ sealed interface SettingsEvent {
         val value: Int,
     ) : SettingsEvent
 
+    /** The Radar LEDs switch: `set_radar_config` with just `leds`. */
+    data class SetRadarLeds(
+        val enabled: Boolean,
+    ) : SettingsEvent
+
     /** `get_radar_config`. */
     data object RefreshRadarConfig : SettingsEvent
 
