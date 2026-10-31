@@ -15,6 +15,7 @@ import dev.openflight.companion.core.model.EnrichmentProgress
 import dev.openflight.companion.core.model.pi.CloudUploadState
 import dev.openflight.companion.core.model.pi.PiNotice
 import dev.openflight.companion.core.model.pi.PowerState
+import dev.openflight.companion.core.model.pi.RadarConfig
 import dev.openflight.companion.core.model.pi.SessionCleared
 import dev.openflight.companion.core.model.pi.SessionStats
 import dev.openflight.companion.core.model.pi.ShotDetail
@@ -331,6 +332,18 @@ class PiEventDecoderTest {
         assertThat(decode("shutdown_ack", """{"message":"Shutting down..."}""")).isEqualTo(
             PiEvent.Notice(PiNotice.ShuttingDown("Shutting down...")),
         )
+    }
+
+    @Test
+    fun radarConfigLedsIsNullWithoutTheKeyAndTheServersValueWithIt() {
+        val config = RadarConfig(minSpeed = 10, maxSpeed = 220, minMagnitude = 0, transmitPower = 0)
+        // An older server sends no `leds`: the switch stays hidden.
+        assertThat(decodePiEvent(PiFixtures.event(PiFixtures.RADAR_CONFIG_FRAME)))
+            .isEqualTo(PiEvent.Radar(config))
+        assertThat(decodePiEvent(PiFixtures.event(PiFixtures.RADAR_CONFIG_LEDS_OFF_FRAME)))
+            .isEqualTo(PiEvent.Radar(config.copy(leds = false)))
+        assertThat(decode("radar_config", """{"min_speed":10,"max_speed":220,"leds":true}"""))
+            .isEqualTo(PiEvent.Radar(RadarConfig(minSpeed = 10, maxSpeed = 220, leds = true)))
     }
 
     @Test

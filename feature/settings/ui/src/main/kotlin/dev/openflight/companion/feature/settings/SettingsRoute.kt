@@ -45,6 +45,7 @@ object SettingsTestTags {
     const val SIMULATORS = "settings.simulators"
     const val RADAR = "settings.radar"
     const val RADAR_REFRESH = "settings.radar.refresh"
+    const val RADAR_LEDS = "settings.radar.leds"
     const val DEBUG_TOGGLE = "settings.debug.toggle"
     const val DEBUG_LOG_PATH = "settings.debug.logPath"
     const val CLOUD_UPLOAD = "settings.cloud.upload"

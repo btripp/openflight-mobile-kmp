@@ -252,6 +252,7 @@ internal class DefaultPiSessionRepository(
                     update.maxSpeed?.let { put("max_speed", JsonPrimitive(it)) }
                     update.minMagnitude?.let { put("min_magnitude", JsonPrimitive(it)) }
                     update.transmitPower?.let { put("transmit_power", JsonPrimitive(it)) }
+                    update.leds?.let { put("leds", JsonPrimitive(it)) }
                 },
             )
         command("set_radar_config", payload)

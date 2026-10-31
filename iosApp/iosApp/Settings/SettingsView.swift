@@ -329,6 +329,15 @@ struct SettingsContent: View {
                     .font(.of(.footnote))
                     .foregroundStyle(Theme.creamDim)
             }
+            if let leds = radar.leds {
+                ToggleRow(
+                    label: "Radar LEDs",
+                    detail: "Turn off the radar board's lights",
+                    isOn: leds.on,
+                    availability: leds.toggle,
+                    identifier: "settings.radar.leds"
+                ) { send(SettingsEventSetRadarLeds(enabled: !leds.on)) }
+            }
             Button {
                 send(SettingsEventRefreshRadarConfig.shared)
             } label: {

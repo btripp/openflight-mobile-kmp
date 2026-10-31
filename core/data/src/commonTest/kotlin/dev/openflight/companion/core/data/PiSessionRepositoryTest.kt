@@ -584,6 +584,17 @@ class PiSessionRepositoryTest {
         }
 
     @Test
+    fun setRadarConfigSendsLedsAlone() =
+        runPiTest { h ->
+            val socket = h.connected()
+
+            h.repository.setRadarConfig(RadarConfigUpdate(leds = false))
+
+            assertThat(socket.emitted.single())
+                .isEqualTo("set_radar_config" to buildJsonObject { put("leds", JsonPrimitive(false)) })
+        }
+
+    @Test
     fun uploadCloudShowsRunningImmediatelyLikeTheWebUi() =
         runPiTest { h ->
             val socket = h.connected()

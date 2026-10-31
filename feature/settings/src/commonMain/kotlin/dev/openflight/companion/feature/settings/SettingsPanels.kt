@@ -106,6 +106,7 @@ internal object SettingsPanels {
             hint = if (isSwingSpeed) SWING_HINT else TX_POWER_HINT,
             diagnostics = diagnostics(debug),
             refresh = link,
+            leds = config?.leds?.let { RadarLeds(on = it, toggle = gate(link, mockMode)) },
         )
     }
 

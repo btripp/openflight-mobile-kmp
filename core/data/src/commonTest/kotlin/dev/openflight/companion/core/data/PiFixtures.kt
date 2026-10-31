@@ -51,6 +51,10 @@ internal object PiFixtures {
     const val RADAR_CONFIG_FRAME: String =
         """42["radar_config",{"min_speed":10,"max_speed":220,"min_magnitude":0,"transmit_power":0}]"""
 
+    /** `get_radar_config` from a server with LED control: the same payload plus `leds`. */
+    const val RADAR_CONFIG_LEDS_OFF_FRAME: String =
+        """42["radar_config",{"min_speed":10,"max_speed":220,"min_magnitude":0,"transmit_power":0,"leds":false}]"""
+
     /** `get_debug_status` (server.py:1996). */
     const val DEBUG_STATUS_FRAME: String =
         """42["debug_status",{"enabled":false,"log_path":null}]"""

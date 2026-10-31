@@ -237,6 +237,7 @@ internal class DemoPiSessionRepository(
                 maxSpeed = update.maxSpeed ?: current.maxSpeed,
                 minMagnitude = update.minMagnitude ?: current.minMagnitude,
                 transmitPower = update.transmitPower?.takeIf { it in 0..MAX_TRANSMIT_POWER } ?: current.transmitPower,
+                leds = update.leds ?: current.leds,
             )
         }
     }
