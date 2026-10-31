@@ -61,6 +61,11 @@ fi
 root="$(git -C "$root" rev-parse --show-toplevel 2>/dev/null || echo "$root")"
 echo "commit-gate: checking $root" >&2
 cd "$root" || exit 0
+# A checkout of another project (e.g. the Python server repo) isn't this Gradle build.
+if [ ! -x ./gradlew ]; then
+  echo "commit-gate: no ./gradlew in $root, not this project; skipping" >&2
+  exit 0
+fi
 
 # Staged, unstaged and untracked files: the hook runs before the command, so `git commit -a` and
 # `git add x.kt && git commit` haven't staged anything yet.
